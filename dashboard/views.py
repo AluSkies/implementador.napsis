@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_date
 
 from catalog.models import TipoLicencia, TipoNovedad
-from clients.models import Cliente, Implementacion, ImplementacionModulo, Modulo
+from clients.models import Cliente, Implementacion, Modulo
 from clients.services import (
     COLUMNAS_ORDENABLES,
     crear_o_resetear_acceso,
@@ -50,11 +50,11 @@ def home(request):
         cliente_id = request.POST.get("cliente_id")
         nombre_nuevo = request.POST.get("nombre", "").strip()
         cuits_nuevo = request.POST.get("cuits", "").strip()
-        modulo_ids = {int(v) for v in request.POST.getlist("modulos")}
+        modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
         editable = bool(request.POST.get("modulos_editables"))
 
         cliente = None
-        if cliente_id:
+        if cliente_id and cliente_id.isdigit():
             cliente = Cliente.objects.filter(pk=cliente_id).first()
         elif nombre_nuevo:
             cliente = Cliente.objects.create(nombre=nombre_nuevo, cuits=cuits_nuevo)
@@ -71,10 +71,7 @@ def home(request):
             implementacion = Implementacion.objects.create(
                 cliente=cliente, creado_por=request.user, modulos_editables_por_cliente=editable
             )
-            ImplementacionModulo.objects.bulk_create(
-                ImplementacionModulo(implementacion=implementacion, modulo=modulo, activo=modulo.id in modulo_ids)
-                for modulo in Modulo.objects.all()
-            )
+            onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username())
             return redirect("dashboard:implementacion_detalle", pk=implementacion.pk)
 
     clientes_existentes = Cliente.objects.order_by("nombre")
@@ -132,7 +129,7 @@ def _manejar_accion_implementacion(request, implementacion):
         return {"datos_form": form}
 
     if accion == "actualizar_modulos":
-        modulo_ids = {int(v) for v in request.POST.getlist("modulos")}
+        modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
         onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, editado_por)
         implementacion.modulos_editables_por_cliente = bool(request.POST.get("modulos_editables"))
         implementacion.save(update_fields=["modulos_editables_por_cliente"])

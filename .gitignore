@@ -6,3 +6,4 @@ media/
 staticfiles/
 .env
 *.xlsx
+.claude/scheduled_tasks.lock

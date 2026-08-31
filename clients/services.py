@@ -106,7 +106,7 @@ def resumen_implementacion(implementacion):
         "licencias_activas": implementacion.licencias.filter(activo=True).select_related("tipo_licencia"),
         "novedades_activas": implementacion.novedades.filter(activo=True).select_related("tipo_novedad"),
         "documentos_activos": implementacion.documentos_legajo.filter(activo=True).select_related("tipo_documento"),
-        "empleados": implementacion.empleados.all(),
+        "empleados": implementacion.empleados.select_related("sucursal", "reporta_a", "aprobador"),
         "versiones": implementacion.versiones.all()[:50],
     }
 

@@ -16,7 +16,7 @@ SECRET_KEY = os.environ.get(
     "django-insecure-x6mt2z(_v^vqqbzz=lsa&qvzy697f3oo_y%mwd$dwws^-y!uul",
 )
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 CSRF_TRUSTED_ORIGINS = [h for h in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if h]

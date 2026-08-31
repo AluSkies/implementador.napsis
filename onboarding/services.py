@@ -194,5 +194,7 @@ def agregar_empleado(implementacion, empleado_form, editado_por):
 
 
 def eliminar_empleado(implementacion, empleado_id, editado_por):
+    if not str(empleado_id).isdigit():
+        return
     guardar_version(implementacion, "empleados", editado_por)
     implementacion.empleados.filter(pk=empleado_id).delete()
