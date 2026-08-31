@@ -1,0 +1,25 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+<p class="muted">Revisá el resumen antes de enviar. Una vez enviado, el equipo de implementación de Napsis va a recibir toda esta información.</p>
+
+<table>
+    <tr><th>Razón Social</th><td>{{ cliente.nombre }}</td></tr>
+    <tr><th>CUIT(s)</th><td>{{ cliente.cuits }}</td></tr>
+    <tr><th>Mail de contacto</th><td>{{ implementacion.mail_contacto }}</td></tr>
+    <tr><th>Módulos</th><td>{% for m in implementacion.modulos.all %}{% if m.activo %}{{ m.modulo.nombre }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}</td></tr>
+    <tr><th>Roles cargados</th><td>{{ implementacion.roles.count }}</td></tr>
+    <tr><th>Sucursales</th><td>{{ implementacion.sucursales.count }}</td></tr>
+    <tr><th>Licencias activas</th><td>{{ resumen.licencias_activas }}</td></tr>
+    <tr><th>Novedades activas</th><td>{{ resumen.novedades_activas }}</td></tr>
+    <tr><th>Documentos de legajo activos</th><td>{{ resumen.documentos_activos }}</td></tr>
+    <tr><th>Empleados cargados</th><td>{{ implementacion.empleados.count }}</td></tr>
+</table>
+
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="enviar">
+    <div class="actions">
+        <button class="btn" type="submit">Enviar a Napsis</button>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <p><a href="{% url 'dashboard:home' %}">&larr; Volver al listado</a></p>
+    <h1>{{ cliente.nombre }}</h1>
+    <p><strong>CUIT(s):</strong> {{ cliente.cuits|default:"—" }}</p>
+    <p><strong>Usuario de acceso:</strong> {{ cliente.usuario.username|default:"— (sin acceso creado)" }}</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="regenerar_acceso">
+        {% if not cliente.usuario %}
+            <label for="username">Usuario</label>
+            <input type="text" name="username" id="username" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
+            <div class="actions"><button class="btn secondary" type="submit">Crear acceso</button></div>
+        {% else %}
+            <div class="actions"><button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button></div>
+        {% endif %}
+    </form>
+</div>
+
+<div class="card">
+    <h2>Implementaciones ({{ implementaciones.count }})</h2>
+    <table>
+        <thead><tr><th>Estado</th><th>Creado</th><th></th></tr></thead>
+        <tbody>
+        {% for imp in implementaciones %}
+            <tr>
+                <td>{{ imp.estado_visual_label }}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/9)</span>{% endif %}</td>
+                <td>{{ imp.creado|date:"d/m/Y" }}</td>
+                <td><a href="{% url 'dashboard:implementacion_detalle' pk=imp.pk %}">Ver detalle</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="3" class="muted">Este cliente todavía no tiene implementaciones.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+<form method="post">
+    {% csrf_token %}
+    <h3>Licencias</h3>
+    <table>
+        <thead><tr><th>Activar</th><th>Licencia</th></tr></thead>
+        <tbody>
+        {% for licencia, campo_activo in licencias_rows %}
+            <tr>
+                <td>{{ campo_activo }}</td>
+                <td>{{ licencia.nombre }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>Novedades</h3>
+    <table>
+        <thead><tr><th>Activar</th><th>Novedad</th></tr></thead>
+        <tbody>
+        {% for novedad, campo_activo in novedades_rows %}
+            <tr>
+                <td>{{ campo_activo }}</td>
+                <td>{{ novedad.nombre }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endblock %}

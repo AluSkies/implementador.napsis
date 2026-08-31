@@ -1,0 +1,10 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endblock %}

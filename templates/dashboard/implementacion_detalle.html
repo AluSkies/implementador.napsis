@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <p><a href="{% url 'dashboard:cliente_detalle' pk=cliente.pk %}">&larr; Volver a {{ cliente.nombre }}</a></p>
+    <h1>{{ cliente.nombre }}</h1>
+    <p>
+        <strong>Estado:</strong> {{ implementacion.estado_visual_label }}
+        {% if implementacion.estado_visual == "a_completar" %} · <span class="muted">paso {{ implementacion.paso_actual }}/9</span>
+        {% elif implementacion.estado_visual == "completado_cliente" %} · <span class="muted">enviado el {{ implementacion.enviado|date:"d/m/Y H:i" }}</span>
+        {% elif implementacion.estado_visual == "completo" %} · <span class="muted">terminada el {{ implementacion.cumplida_en|date:"d/m/Y H:i" }}</span>
+        {% endif %}
+    </p>
+
+    {% if implementacion.revision_solicitada and not implementacion.revision_atendida_en %}
+        <div class="messages"><li class="warning" style="list-style:none;padding:10px 14px;border-radius:6px;">
+            El cliente pidió que lo contacten ({{ implementacion.revision_solicitada_en|date:"d/m/Y H:i" }}){% if implementacion.revision_mensaje %}: "{{ implementacion.revision_mensaje }}"{% endif %}
+        </li></div>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="atender_revision">
+            <button class="btn secondary" type="submit">Marcar como atendida</button>
+        </form>
+    {% endif %}
+
+    <p><strong>Link de autoservicio:</strong> <a href="{{ link_url }}">{{ link_url }}</a></p>
+    <p><strong>Usuario de acceso:</strong> {{ cliente.usuario.username|default:"— (sin acceso creado)" }}</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="regenerar_acceso">
+        {% if not cliente.usuario %}
+            <label for="username_acceso">Usuario</label>
+            <input type="text" name="username" id="username_acceso" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
+            <div class="actions"><button class="btn secondary" type="submit">Crear acceso</button></div>
+        {% else %}
+            <div class="actions"><button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button></div>
+        {% endif %}
+    </form>
+
+    <div class="actions">
+        {% if implementacion.estado != "cancelada" %}
+        {% if implementacion.enviado and implementacion.estado == "pendiente" %}
+        <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="marcar_cumplida">
+            <button class="btn" type="submit">Marcar implementación como cumplida</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="regenerar_link">
+            <button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar el estado del link para que el cliente pueda completarlo de nuevo?')">Reiniciar link</button>
+        </form>
+        <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="anular">
+            <button class="btn danger" type="submit" onclick="return confirm('¿Anular esta implementación? El cliente ya no va a poder completarla.')">Anular implementación</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card section-readonly">
+    <h2>Datos de contacto</h2>
+    <dl>
+        <dt>Teléfono</dt><dd>{{ implementacion.telefono|default:"—" }}</dd>
+        <dt>Mail de contacto</dt><dd>{{ implementacion.mail_contacto|default:"—" }}</dd>
+        <dt>Tipo de firma</dt><dd>{{ implementacion.get_tipo_firma_display|default:"—" }}</dd>
+        <dt>Liquidador utilizado</dt><dd>{{ implementacion.liquidador_utilizado|default:"—" }}</dd>
+        <dt>Nomenclatura de PDFs</dt><dd>{{ implementacion.nomenclatura_pdf|default:"—" }}</dd>
+        <dt>Cantidad de capitas</dt><dd>{{ implementacion.cantidad_capitas|default:"—" }}</dd>
+        <dt>Segmentación liquidador</dt><dd>{{ implementacion.segmentacion_liquidador|default:"—" }}</dd>
+        <dt>Banner</dt><dd>{% if implementacion.banner %}<a href="{{ implementacion.banner.url }}">Descargar</a>{% else %}—{% endif %}</dd>
+        <dt>Modelo de recibo</dt><dd>{% if implementacion.modelo_recibo %}<a href="{{ implementacion.modelo_recibo.url }}">Descargar</a>{% else %}—{% endif %}</dd>
+    </dl>
+    <details class="section-edit" {% if datos_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_datos">
+            {{ datos_form.as_p }}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar datos de contacto</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card section-readonly">
+    <h2>Módulos contratados</h2>
+    <p>{% for im in modulos_activos %}{{ im.modulo.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguno activado</span>{% endfor %}</p>
+    <p class="muted">El cliente {% if implementacion.modulos_editables_por_cliente %}puede{% else %}no puede{% endif %} editar los módulos en el wizard.</p>
+    <details class="section-edit">
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_modulos">
+            {% for im in implementacion.modulos.all %}
+                <div class="checkbox-row">
+                    <input type="checkbox" name="modulos" value="{{ im.modulo_id }}" id="det_modulo_{{ im.modulo_id }}" {% if im.activo %}checked{% endif %}>
+                    <label for="det_modulo_{{ im.modulo_id }}">{{ im.modulo.nombre }}</label>
+                </div>
+            {% endfor %}
+            <div class="checkbox-row">
+                <input type="checkbox" name="modulos_editables" id="det_modulos_editables" {% if implementacion.modulos_editables_por_cliente %}checked{% endif %}>
+                <label for="det_modulos_editables">Permitir que el cliente edite los módulos en el wizard</label>
+            </div>
+            <div class="actions"><button class="btn secondary" type="submit">Guardar módulos</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card">
+    <h2>Roles</h2>
+    <table>
+        <thead><tr><th>Rol</th><th>Apellido y Nombre</th><th>CUIL</th><th>Mail</th></tr></thead>
+        <tbody>
+        {% for r in roles %}
+            <tr><td>{{ r.get_rol_display }}</td><td>{{ r.apellido_nombre }}</td><td>{{ r.cuil }}</td><td>{{ r.mail }}</td></tr>
+        {% empty %}<tr><td colspan="4" class="muted">Sin roles cargados</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    <details class="section-edit" {% if roles_formset.total_error_count %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_roles">
+            {{ roles_formset.management_form }}
+            {% for f in roles_formset %}
+                <fieldset>
+                    <legend>Persona {{ forloop.counter }}</legend>
+                    {{ f.as_p }}
+                </fieldset>
+            {% endfor %}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar roles</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card">
+    <h2>Sucursales ({{ sucursales.count }})</h2>
+    <table>
+        <thead><tr><th>Nombre</th><th>Dirección</th><th>Localidad</th></tr></thead>
+        <tbody>
+        {% for s in sucursales %}
+            <tr><td>{{ s.nombre }}</td><td>{{ s.calle }} {{ s.altura }} {{ s.piso_depto }}</td><td>{{ s.localidad }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="muted">Sin sucursales cargadas</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    <details class="section-edit" {% if sucursales_formset.total_error_count %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_sucursales">
+            {{ sucursales_formset.management_form }}
+            {% for f in sucursales_formset %}
+                <fieldset>
+                    <legend>Sucursal {{ forloop.counter }}</legend>
+                    {{ f.as_p }}
+                </fieldset>
+            {% endfor %}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar sucursales</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card section-readonly">
+    <h2>Licencias y Novedades</h2>
+    <dl>
+        <dt>Licencias activas</dt>
+        <dd>{% for l in licencias_activas %}{{ l.tipo_licencia.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguna</span>{% endfor %}</dd>
+        <dt>Novedades activas</dt>
+        <dd>{% for n in novedades_activas %}{{ n.tipo_novedad.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguna</span>{% endfor %}</dd>
+    </dl>
+    <details class="section-edit" {% if licencias_novedades_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_licencias_novedades">
+            <h3>Licencias</h3>
+            <table>
+                <thead><tr><th>Activar</th><th>Licencia</th></tr></thead>
+                <tbody>
+                {% for licencia, campo_activo in licencias_rows %}
+                    <tr><td>{{ campo_activo }}</td><td>{{ licencia.nombre }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <h3>Novedades</h3>
+            <table>
+                <thead><tr><th>Activar</th><th>Novedad</th></tr></thead>
+                <tbody>
+                {% for novedad, campo_activo in novedades_rows %}
+                    <tr><td>{{ campo_activo }}</td><td>{{ novedad.nombre }}</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <div class="actions"><button class="btn secondary" type="submit">Guardar licencias y novedades</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card section-readonly">
+    <h2>Documentos de Legajo Digital</h2>
+    <p>{% for d in documentos_activos %}{{ d.tipo_documento.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguno</span>{% endfor %}</p>
+    <details class="section-edit" {% if documentos_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_documentos">
+            <table>
+                <thead><tr><th>Incluir</th><th>Documento</th><th>Campos a Completar</th></tr></thead>
+                <tbody>
+                {% for tipo, campo_activo in documentos_rows %}
+                    <tr>
+                        <td>{{ campo_activo }}</td>
+                        <td>{{ tipo.nombre }}{% if tipo.es_custom %} <span class="muted">(agregado por el cliente)</span>{% endif %}</td>
+                        <td>{% for campo in tipo.campos.all %}<span class="field-tag">{{ campo.nombre }}{% if campo.obligatorio %}*{% endif %}</span>{% endfor %}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            <label for="id_otros_documentos">{{ documentos_form.otros_documentos.label }}</label>
+            {{ documentos_form.otros_documentos }}
+            <p class="muted">{{ documentos_form.otros_documentos.help_text }}</p>
+            <div class="actions"><button class="btn secondary" type="submit">Guardar documentos</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card section-readonly">
+    <h2>Fecha de implementación</h2>
+    {% if implementacion.estado_visual == "completo" %}
+        <p>La implementación quedó completa el <strong>{{ implementacion.cumplida_en|date:"d/m/Y" }}</strong>.</p>
+    {% else %}
+        <p>{% if implementacion.fecha_salida_productivo %}{{ implementacion.fecha_salida_productivo|date:"d/m/Y" }} <span class="muted">(estimado)</span>{% else %}<span class="muted">Sin definir</span>{% endif %}</p>
+        <details class="section-edit">
+            <summary class="btn secondary">Modificar sección</summary>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="actualizar_fecha_productivo">
+                <label for="fecha_salida_productivo">Fecha estimada de salida en productivo</label>
+                <input type="date" name="fecha_salida_productivo" id="fecha_salida_productivo" value="{{ implementacion.fecha_salida_productivo|date:'Y-m-d' }}">
+                <p class="muted">Se muestra al cliente como "(estimado)" hasta que la implementación se marque Cumplida — ahí pasa a ser automáticamente la fecha real.</p>
+                <div class="actions"><button class="btn secondary" type="submit">Guardar fecha estimada</button></div>
+            </form>
+        </details>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Empleados ({{ empleados.count }})</h2>
+    <table>
+        <thead><tr><th>CUIL</th><th>Apellido y Nombre</th><th>Legajo</th><th>Puesto</th><th></th></tr></thead>
+        <tbody>
+        {% for e in empleados %}
+            <tr>
+                <td>{{ e.cuil }}</td><td>{{ e.apellido }}, {{ e.nombre }}</td><td>{{ e.legajo }}</td><td>{{ e.puesto }}</td>
+                <td>
+                    <form method="post" style="display:inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="eliminar_empleado">
+                        <input type="hidden" name="empleado_id" value="{{ e.id }}">
+                        <button class="btn danger" type="submit" onclick="return confirm('¿Eliminar este empleado?')">Eliminar</button>
+                    </form>
+                </td>
+            </tr>
+        {% empty %}<tr><td colspan="5" class="muted">Sin empleados cargados</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    {% if empleados %}
+    <div class="actions">
+        <a class="btn secondary" href="{% url 'dashboard:descargar_nomina' pk=implementacion.pk %}">Descargar nómina (.xlsx)</a>
+    </div>
+    {% endif %}
+    <details class="section-edit" {% if empleado_form.errors or import_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <div class="upload-toggle">
+            <input type="radio" name="metodo_carga" id="metodo_manual" {% if not import_form.errors %}checked{% endif %}>
+            <input type="radio" name="metodo_carga" id="metodo_archivo" {% if import_form.errors %}checked{% endif %}>
+
+            <div class="upload-choice">
+                <label for="metodo_manual">Cargar manualmente<span class="muted">Empleado por empleado</span></label>
+                <label for="metodo_archivo">Subir archivo (CSV/XLSX)<span class="muted">Carga masiva de toda la nómina</span></label>
+            </div>
+
+            <div class="upload-panel panel-manual">
+                <fieldset>
+                    <legend>Agregar empleado manualmente</legend>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="agregar_empleado">
+                        {{ empleado_form.as_p }}
+                        <button class="btn secondary" type="submit">Agregar empleado</button>
+                    </form>
+                </fieldset>
+            </div>
+
+            <div class="upload-panel panel-archivo">
+                <fieldset>
+                    <legend>Subir archivo</legend>
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <input type="hidden" name="accion" value="importar_empleados">
+                        {{ import_form.as_p }}
+                        <button class="btn secondary" type="submit">Importar archivo</button>
+                    </form>
+                </fieldset>
+            </div>
+        </div>
+    </details>
+</div>
+
+{% include "clients/_historial_versiones.html" %}
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+<p class="muted">Activá los tipos de documento del legajo digital que necesitás. Los campos y su obligatoriedad ya vienen precargados desde el relevamiento estándar de Napsis.</p>
+<form method="post">
+    {% csrf_token %}
+    <table>
+        <thead><tr><th>Incluir</th><th>Documento</th><th>Campos a Completar</th></tr></thead>
+        <tbody>
+        {% for tipo, campo_activo in tipos_rows %}
+            <tr>
+                <td>{{ campo_activo }}</td>
+                <td>{{ tipo.nombre }}{% if tipo.es_custom %} <span class="muted">(agregado por vos)</span>{% endif %}</td>
+                <td>{% for campo in tipo.campos.all %}<span class="field-tag">{{ campo.nombre }}{% if campo.obligatorio %}*{% endif %}</span>{% endfor %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>¿Necesitás otro tipo de documento?</h3>
+    {{ form.otros_documentos.label_tag }}
+    {{ form.otros_documentos }}
+    <p class="muted">{{ form.otros_documentos.help_text }}</p>
+
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endblock %}

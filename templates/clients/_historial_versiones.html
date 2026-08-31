@@ -1,0 +1,22 @@
+{% load clients_extras %}
+<div class="card">
+    <h2>Historial de versiones anteriores</h2>
+    <p class="muted">Cómo estaba cada sección justo antes del último cambio.</p>
+    {% if versiones %}
+    <table>
+        <thead><tr><th>Fecha</th><th>Sección</th><th>Editado por</th><th>Estado anterior</th></tr></thead>
+        <tbody>
+        {% for v in versiones %}
+            <tr>
+                <td>{{ v.creado|date:"d/m/Y H:i" }}</td>
+                <td>{{ v.get_seccion_display }}</td>
+                <td>{{ v.editado_por }}</td>
+                <td>{{ v.datos|formato_snapshot }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Todavía no hay cambios registrados.</p>
+    {% endif %}
+</div>

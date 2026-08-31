@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Napsis · Portal de Implementación{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px;margin:60px auto;text-align:center;">
+    <h1>Portal de Implementación Napsis</h1>
+    <p class="muted">
+        Ingresá con el usuario y la contraseña de tu cuenta.
+    </p>
+    <div class="actions" style="justify-content:center;">
+        <a class="btn" href="{% url 'login' %}">Ingresar</a>
+    </div>
+</div>
+{% endblock %}

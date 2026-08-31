@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    {% if recien_enviado %}
+        <h1>¡Gracias! Ya recibimos tu implementación</h1>
+        <p>El equipo de implementación de Napsis fue notificado y va a ponerse en contacto para arrancar con {{ cliente.nombre }}. Más abajo podés revisar todo lo que enviaste.</p>
+    {% else %}
+        <h1>{{ cliente.nombre }}</h1>
+        <p>Esta implementación ya fue enviada al equipo de Napsis{% if implementacion.enviado %} el {{ implementacion.enviado|date:"d/m/Y H:i" }}{% endif %}. Acá podés consultar lo que se cargó.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>¿Necesitás que te contactemos?</h2>
+    {% if implementacion.revision_solicitada and not implementacion.revision_atendida_en %}
+        <p class="muted">Ya le avisamos al equipo de Napsis que necesitás que te contacten{% if implementacion.revision_solicitada_en %} (pedido el {{ implementacion.revision_solicitada_en|date:"d/m/Y H:i" }}){% endif %}. En breve se comunican con vos.</p>
+    {% else %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="pedir_revision">
+            {{ pedir_revision_form.as_p }}
+            <div class="actions"><button class="btn secondary" type="submit">Pedir que me contacten</button></div>
+        </form>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Datos de la implementación</h2>
+    <table>
+        <tr><th>CUIT(s)</th><td>{{ cliente.cuits|default:"—" }}</td></tr>
+        <tr><th>Teléfono</th><td>{{ implementacion.telefono|default:"—" }}</td></tr>
+        <tr><th>Mail de contacto</th><td>{{ implementacion.mail_contacto|default:"—" }}</td></tr>
+        <tr><th>Tipo de firma</th><td>{{ implementacion.get_tipo_firma_display|default:"—" }}</td></tr>
+        <tr><th>Liquidador utilizado</th><td>{{ implementacion.liquidador_utilizado|default:"—" }}</td></tr>
+        <tr><th>Cantidad de capitas</th><td>{{ implementacion.cantidad_capitas|default:"—" }}</td></tr>
+        <tr>
+            <th>Fecha de implementación</th>
+            <td>
+                {% if implementacion.estado_visual == "completo" %}
+                    {{ implementacion.cumplida_en|date:"d/m/Y" }}
+                {% elif implementacion.fecha_salida_productivo %}
+                    {{ implementacion.fecha_salida_productivo|date:"d/m/Y" }} (estimado)
+                {% else %}
+                    A definir por el equipo de Napsis
+                {% endif %}
+            </td>
+        </tr>
+        <tr><th>Banner</th><td>{% if implementacion.banner %}<a href="{{ implementacion.banner.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
+        <tr><th>Modelo de recibo</th><td>{% if implementacion.modelo_recibo %}<a href="{{ implementacion.modelo_recibo.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Módulos contratados</h2>
+    <ul>{% for m in modulos_activos %}<li>{{ m.modulo.nombre }}</li>{% empty %}<li class="muted">Ninguno activado</li>{% endfor %}</ul>
+</div>
+
+<div class="card">
+    <h2>Roles</h2>
+    <table>
+        <thead><tr><th>Rol</th><th>Apellido y Nombre</th><th>CUIL</th><th>Mail</th></tr></thead>
+        <tbody>
+        {% for r in roles %}
+            <tr><td>{{ r.get_rol_display }}</td><td>{{ r.apellido_nombre }}</td><td>{{ r.cuil }}</td><td>{{ r.mail }}</td></tr>
+        {% empty %}<tr><td colspan="4" class="muted">Sin roles cargados</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Sucursales ({{ sucursales.count }})</h2>
+    <table>
+        <thead><tr><th>Nombre</th><th>Dirección</th><th>Localidad</th></tr></thead>
+        <tbody>
+        {% for s in sucursales %}
+            <tr><td>{{ s.nombre }}</td><td>{{ s.calle }} {{ s.altura }} {{ s.piso_depto }}</td><td>{{ s.localidad }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="muted">Sin sucursales cargadas</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Licencias activas</h2>
+    <ul>{% for l in licencias_activas %}<li>{{ l.tipo_licencia.nombre }}</li>{% empty %}<li class="muted">Ninguna</li>{% endfor %}</ul>
+    <h2>Novedades activas</h2>
+    <ul>{% for n in novedades_activas %}<li>{{ n.tipo_novedad.nombre }}</li>{% empty %}<li class="muted">Ninguna</li>{% endfor %}</ul>
+</div>
+
+<div class="card">
+    <h2>Documentos de legajo activos</h2>
+    <ul>{% for d in documentos_activos %}<li>{{ d.tipo_documento.nombre }}</li>{% empty %}<li class="muted">Ninguno</li>{% endfor %}</ul>
+</div>
+
+<div class="card">
+    <h2>Empleados ({{ empleados.count }})</h2>
+    <table>
+        <thead><tr><th>CUIL</th><th>Apellido y Nombre</th><th>Legajo</th><th>Puesto</th></tr></thead>
+        <tbody>
+        {% for e in empleados %}
+            <tr><td>{{ e.cuil }}</td><td>{{ e.apellido }}, {{ e.nombre }}</td><td>{{ e.legajo }}</td><td>{{ e.puesto }}</td></tr>
+        {% empty %}<tr><td colspan="4" class="muted">Sin empleados cargados</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% include "clients/_historial_versiones.html" %}
+{% endblock %}

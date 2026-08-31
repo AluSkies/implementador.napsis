@@ -1,0 +1,7 @@
+El cliente {{ razon_social }} pidió que lo contacten para revisar su implementación.
+
+Mensaje del cliente:
+{{ mensaje|default:"(sin mensaje adicional)" }}
+
+Ver el detalle completo en el panel interno:
+{{ detalle_url }}

@@ -1,0 +1,17 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+<p class="muted">Cargá Apoderado/s (firman recibos), Liquidador (visualiza recibos) y Admin. de RRHH (gestiona documentos/solicitudes). Podés dejar filas vacías.</p>
+<form method="post">
+    {% csrf_token %}
+    {{ formset.management_form }}
+    {% for f in formset %}
+        <fieldset>
+            <legend>Persona {{ forloop.counter }}</legend>
+            {{ f.as_p }}
+        </fieldset>
+    {% endfor %}
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endblock %}

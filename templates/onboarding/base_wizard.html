@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h1>Relevamiento de implementación — {{ cliente.nombre|default:"Nuevo cliente" }}</h1>
+    <div class="steps">
+        {% for n, titulo in pasos %}
+            <span class="{% if n == paso %}current{% endif %}">{{ forloop.counter }}. {{ titulo }}</span>
+        {% endfor %}
+    </div>
+    <h2>{{ titulo_paso }}</h2>
+    {% if paso_anterior %}
+    <p class="muted"><a href="{% url 'onboarding:wizard_step' token=implementacion.token step=paso_anterior %}">&larr; Volver al paso anterior</a></p>
+    {% endif %}
+    {% block step_content %}{% endblock %}
+</div>
+{% endblock %}

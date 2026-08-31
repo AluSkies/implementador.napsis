@@ -1,0 +1,15 @@
+Se completó una nueva implementación en el portal de autoservicio.
+
+Cliente: {{ razon_social }} (CUIT {{ cuits }})
+Contacto: {{ mail_contacto }} / {{ telefono }}
+
+Módulos contratados: {{ modulos }}
+Roles cargados: {{ roles }}
+Sucursales: {{ cantidad_sucursales }}
+Licencias activadas: {{ licencias }}
+Novedades activadas: {{ novedades }}
+Documentos de legajo activados: {{ documentos_legajo }}
+Empleados cargados: {{ cantidad_empleados }}
+
+Ver el detalle completo (incluye adjuntos) en el panel interno:
+{{ detalle_url }}

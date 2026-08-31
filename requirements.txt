@@ -1,0 +1,9 @@
+Django>=5.0,<6.2
+pandas
+openpyxl
+python-dotenv
+requests
+Pillow
+gunicorn
+psycopg2-binary
+whitenoise

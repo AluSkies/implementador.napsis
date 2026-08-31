@@ -1,0 +1,17 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+{% if editable %}
+    <p class="muted">Marcá los módulos contratados por la empresa.</p>
+{% else %}
+    <p class="muted">Estos son los módulos contratados según lo coordinado con Napsis. Si algo no es correcto, contactate con tu implementador antes de continuar.</p>
+{% endif %}
+<form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+        <div class="checkbox-row">{{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+    {% endfor %}
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endblock %}

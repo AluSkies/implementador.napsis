@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:400px;margin:60px auto;">
+    <h1>Ingresar</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="actions"><button class="btn" type="submit">Ingresar</button></div>
+    </form>
+</div>
+{% endblock %}

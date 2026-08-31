@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+<div class="dashboard-layout">
+<div class="card dashboard-listado">
+    <h1>Implementaciones</h1>
+
+    <form method="get" class="filter-form">
+        <div class="filter-row">
+            <div>
+                <label for="cliente">Cliente</label>
+                <input type="text" name="cliente" id="cliente" value="{{ filtros_aplicados.cliente }}" placeholder="Buscar por nombre...">
+            </div>
+            <div>
+                <label for="estado">Estado</label>
+                <select name="estado" id="estado">
+                    <option value="">Todos</option>
+                    {% for clave, label in estados_choices %}
+                        <option value="{{ clave }}" {% if filtros_aplicados.estado == clave %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="filter-row">
+            <div>
+                <label>Fecha de carga</label>
+                <div class="date-range">
+                    <input type="date" name="creado_desde" value="{{ filtros_aplicados.creado_desde }}">
+                    <span class="muted">a</span>
+                    <input type="date" name="creado_hasta" value="{{ filtros_aplicados.creado_hasta }}">
+                </div>
+            </div>
+            <div>
+                <label>Fecha de implementación</label>
+                <div class="date-range">
+                    <input type="date" name="fecha_impl_desde" value="{{ filtros_aplicados.fecha_impl_desde }}">
+                    <span class="muted">a</span>
+                    <input type="date" name="fecha_impl_hasta" value="{{ filtros_aplicados.fecha_impl_hasta }}">
+                </div>
+            </div>
+        </div>
+        <div class="actions">
+            <button class="btn secondary" type="submit">Filtrar</button>
+            <a class="btn secondary" href="{% url 'dashboard:home' %}">Limpiar filtros</a>
+        </div>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th><a class="sort-link" href="{{ sort_links.cliente.url }}">Cliente{% if sort_links.cliente.activa %} {% if sort_links.cliente.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+                <th><a class="sort-link" href="{{ sort_links.estado.url }}">Estado{% if sort_links.estado.activa %} {% if sort_links.estado.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+                <th><a class="sort-link" href="{{ sort_links.fecha_implementacion.url }}">Fecha de implementación{% if sort_links.fecha_implementacion.activa %} {% if sort_links.fecha_implementacion.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+                <th><a class="sort-link" href="{{ sort_links.creado.url }}">Creado{% if sort_links.creado.activa %} {% if sort_links.creado.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for imp in implementaciones %}
+            <tr>
+                <td><a href="{% url 'dashboard:cliente_detalle' pk=imp.cliente_id %}">{{ imp.cliente.nombre }}</a></td>
+                <td>
+                    {{ imp.estado_visual_label }}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/9)</span>{% endif %}
+                    {% if imp.revision_solicitada and not imp.revision_atendida_en %}<span title="Pidió que lo contacten">⚠️</span>{% endif %}
+                </td>
+                <td>
+                    {% if imp.estado_visual == "completo" %}
+                        {{ imp.cumplida_en|date:"d/m/Y" }}
+                    {% elif imp.fecha_salida_productivo %}
+                        {{ imp.fecha_salida_productivo|date:"d/m/Y" }} <span class="muted">(estimado)</span>
+                    {% else %}
+                        <span class="muted">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ imp.creado|date:"d/m/Y" }}</td>
+                <td><a href="{% url 'dashboard:implementacion_detalle' pk=imp.pk %}">Ver detalle</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="5" class="muted">No hay implementaciones que coincidan con estos filtros.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card dashboard-alta">
+    <h2>Nueva implementación</h2>
+    <form method="post" class="alta-form">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="crear_implementacion">
+
+        <div class="alta-field">
+            <label for="cliente_id">Cliente existente</label>
+            <select name="cliente_id" id="cliente_id">
+                <option value="">-- Elegir cliente existente --</option>
+                {% for c in clientes_existentes %}
+                    <option value="{{ c.id }}">{{ c.nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <p class="muted">O, si es un cliente nuevo, completá estos datos (se ignoran si elegiste uno de arriba):</p>
+        <div class="alta-field">
+            <label for="nombre">Nombre / Razón Social</label>
+            <input type="text" name="nombre" id="nombre">
+        </div>
+        <div class="alta-field">
+            <label for="cuits">CUIT(s)</label>
+            <input type="text" name="cuits" id="cuits" placeholder="30-12345678-9, 30-98765432-1">
+        </div>
+        <div class="alta-field">
+            <label for="username">Usuario para que el cliente inicie sesión</label>
+            <input type="text" name="username" id="username" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
+            <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la implementación.</p>
+        </div>
+
+        <div class="alta-field">
+            <label>Módulos contratados</label>
+            <div class="modulos-grid">
+                {% for modulo in modulos %}
+                    <div class="checkbox-row">
+                        <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}">
+                        <label for="modulo_{{ modulo.id }}">{{ modulo.nombre }}</label>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="checkbox-row">
+            <input type="checkbox" name="modulos_editables" id="modulos_editables" checked>
+            <label for="modulos_editables">Permitir que el cliente edite los módulos en el wizard</label>
+        </div>
+        <p class="muted">Si lo destildás, el cliente ve los módulos precargados arriba de solo lectura en el paso 2.</p>
+
+        <div class="actions"><button class="btn" type="submit">Generar link de implementación</button></div>
+    </form>
+</div>
+</div>
+{% endblock %}

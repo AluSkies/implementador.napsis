@@ -1,0 +1,83 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+<h2>Elegí la manera en la que cargar tu nómina</h2>
+<p class="muted">
+    Empleado por empleado, o subiendo un archivo con todos de una vez.
+    <br><a href="{% url 'onboarding:plantilla_empleados' token=implementacion.token %}">Descargar plantilla vacía (.xlsx)</a>
+</p>
+
+<div class="upload-toggle">
+    <input type="radio" name="metodo_carga" id="metodo_manual" {% if not errores_import %}checked{% endif %}>
+    <input type="radio" name="metodo_carga" id="metodo_archivo" {% if errores_import %}checked{% endif %}>
+
+    <div class="upload-choice">
+        <label for="metodo_manual">Cargar manualmente<span class="muted">Empleado por empleado</span></label>
+        <label for="metodo_archivo">Subir archivo (CSV/XLSX)<span class="muted">Carga masiva de toda la nómina</span></label>
+    </div>
+
+    <div class="upload-panel panel-manual">
+        <fieldset>
+            <legend>Agregar empleado manualmente</legend>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="agregar_manual">
+                {{ empleado_form.as_p }}
+                <button class="btn secondary" type="submit">Agregar empleado</button>
+            </form>
+        </fieldset>
+    </div>
+
+    <div class="upload-panel panel-archivo">
+        <fieldset>
+            <legend>Subir archivo</legend>
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="importar">
+                {{ import_form.as_p }}
+                <button class="btn" type="submit">Importar archivo</button>
+            </form>
+            {% if errores_import %}
+                <table>
+                    <thead><tr><th>Fila</th><th>Error</th></tr></thead>
+                    <tbody>
+                    {% for e in errores_import %}<tr><td>{{ e.fila }}</td><td class="field-error">{{ e.mensaje }}</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </fieldset>
+    </div>
+</div>
+
+<h3>Empleados cargados ({{ empleados|length }})</h3>
+<table>
+    <thead><tr><th>CUIL</th><th>Apellido y Nombre</th><th>Legajo</th><th>Puesto</th><th></th></tr></thead>
+    <tbody>
+    {% for e in empleados %}
+        <tr>
+            <td>{{ e.cuil }}</td>
+            <td>{{ e.apellido }}, {{ e.nombre }}</td>
+            <td>{{ e.legajo }}</td>
+            <td>{{ e.puesto }}</td>
+            <td>
+                <form method="post" style="display:inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="accion" value="eliminar">
+                    <input type="hidden" name="empleado_id" value="{{ e.id }}">
+                    <button class="btn danger" type="submit" onclick="return confirm('¿Eliminar este empleado?')">Eliminar</button>
+                </form>
+            </td>
+        </tr>
+    {% empty %}
+        <tr><td colspan="5" class="muted">Todavía no cargaste empleados.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="continuar">
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endblock %}

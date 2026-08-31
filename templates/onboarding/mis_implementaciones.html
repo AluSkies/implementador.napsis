@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h1>{{ cliente.nombre }}</h1>
+    <p class="muted">Tus implementaciones con Napsis.</p>
+    <table>
+        <thead><tr><th>Estado</th><th>Fecha de implementación</th><th>Creado</th><th></th></tr></thead>
+        <tbody>
+        {% for imp in implementaciones %}
+            <tr>
+                <td>{{ imp.estado_visual_label }}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/9)</span>{% endif %}</td>
+                <td>
+                    {% if imp.estado_visual == "completo" %}
+                        {{ imp.cumplida_en|date:"d/m/Y" }}
+                    {% elif imp.fecha_salida_productivo %}
+                        {{ imp.fecha_salida_productivo|date:"d/m/Y" }} <span class="muted">(estimado)</span>
+                    {% else %}
+                        <span class="muted">—</span>
+                    {% endif %}
+                </td>
+                <td>{{ imp.creado|date:"d/m/Y" }}</td>
+                <td><a href="{{ imp.get_absolute_url }}">Ver</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="4" class="muted">Todavía no tenés implementaciones cargadas.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
