@@ -190,7 +190,7 @@ def registrar_snapshot_builder(seccion, builder):
 
 def guardar_version(implementacion, seccion, editado_por):
     """Guarda una foto del estado ACTUAL de una sección, antes de que se le aplique un cambio."""
-    ImplementacionVersion.objects.create(
+    return ImplementacionVersion.objects.create(
         implementacion=implementacion, seccion=seccion,
         datos=_SNAPSHOT_BUILDERS[seccion](implementacion), editado_por=editado_por,
     )
