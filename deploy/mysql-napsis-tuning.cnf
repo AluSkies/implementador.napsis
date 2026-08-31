@@ -1,0 +1,24 @@
+# Tuning para correr MySQL liviano en una máquina que ya tiene otras cosas
+# corriendo (ej. un server de juego). Pensado para una app interna con pocos
+# usuarios concurrentes, no para volumen alto.
+#
+# Instalar en /etc/mysql/mysql.conf.d/napsis-tuning.cnf y reiniciar mysql:
+#   sudo cp deploy/mysql-napsis-tuning.cnf /etc/mysql/mysql.conf.d/
+#   sudo systemctl restart mysql
+
+[mysqld]
+# El default de Ubuntu suele ser 50% de la RAM total — acá lo topeamos.
+innodb_buffer_pool_size = 128M
+innodb_buffer_pool_instances = 1
+innodb_log_file_size = 32M
+innodb_flush_log_at_trx_commit = 2
+
+# Ahorra bastante RAM y no lo necesitás para esta app.
+performance_schema = OFF
+
+max_connections = 50
+key_buffer_size = 8M
+table_open_cache = 200
+thread_cache_size = 8
+tmp_table_size = 16M
+max_heap_table_size = 16M

@@ -78,9 +78,20 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-# En producción, si Infra define POSTGRES_DB se usa Postgres en su lugar.
-# Sin esa variable, sigue funcionando con SQLite (como en desarrollo).
-if os.environ.get("POSTGRES_DB"):
+# En producción, si Infra define MYSQL_DB o POSTGRES_DB se usa esa base en
+# lugar de SQLite (MySQL es el motor real de Napsis; Postgres queda para
+# probar rápido en plataformas como Render, que no ofrecen MySQL gratis).
+if os.environ.get("MYSQL_DB"):
+    DATABASES["default"] = {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.environ["MYSQL_DB"],
+        "USER": os.environ.get("MYSQL_USER", "napsis"),
+        "PASSWORD": os.environ.get("MYSQL_PASSWORD", ""),
+        "HOST": os.environ.get("MYSQL_HOST", "localhost"),
+        "PORT": os.environ.get("MYSQL_PORT", "3306"),
+        "OPTIONS": {"charset": "utf8mb4"},
+    }
+elif os.environ.get("POSTGRES_DB"):
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ["POSTGRES_DB"],

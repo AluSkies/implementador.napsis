@@ -6,4 +6,5 @@ requests
 Pillow
 gunicorn
 psycopg2-binary
+PyMySQL
 whitenoise
