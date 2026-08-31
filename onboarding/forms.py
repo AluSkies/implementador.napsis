@@ -3,6 +3,20 @@ from django.forms import formset_factory
 
 from clients.models import Implementacion, PersonaRol, Sucursal
 
+# Campos de Implementacion que completa el cliente en distintos pasos del wizard.
+# Única fuente de verdad: ImplementacionDatosForm (edición completa desde el panel)
+# es la unión de los dos, en vez de repetir la lista a mano por tercera vez.
+CAMPOS_DATOS_CONTACTO = ["telefono", "mail_contacto"]
+CAMPOS_CONFIGURACION = [
+    "tipo_firma",
+    "liquidador_utilizado",
+    "nomenclatura_pdf",
+    "cantidad_capitas",
+    "segmentacion_liquidador",
+    "banner",
+    "modelo_recibo",
+]
+
 
 class EmpresaForm(forms.ModelForm):
     """Datos de contacto de esta implementación puntual (el nombre/CUIT del cliente
@@ -10,7 +24,7 @@ class EmpresaForm(forms.ModelForm):
 
     class Meta:
         model = Implementacion
-        fields = ["telefono", "mail_contacto"]
+        fields = CAMPOS_DATOS_CONTACTO
 
 
 class ImplementacionDatosForm(forms.ModelForm):
@@ -19,17 +33,7 @@ class ImplementacionDatosForm(forms.ModelForm):
 
     class Meta:
         model = Implementacion
-        fields = [
-            "telefono",
-            "mail_contacto",
-            "tipo_firma",
-            "liquidador_utilizado",
-            "nomenclatura_pdf",
-            "cantidad_capitas",
-            "segmentacion_liquidador",
-            "banner",
-            "modelo_recibo",
-        ]
+        fields = CAMPOS_DATOS_CONTACTO + CAMPOS_CONFIGURACION
 
 
 class ModulosForm(forms.Form):
@@ -62,15 +66,7 @@ RolFormSet = formset_factory(RolForm, extra=6, can_delete=True)
 class ConfiguracionForm(forms.ModelForm):
     class Meta:
         model = Implementacion
-        fields = [
-            "tipo_firma",
-            "liquidador_utilizado",
-            "nomenclatura_pdf",
-            "cantidad_capitas",
-            "segmentacion_liquidador",
-            "banner",
-            "modelo_recibo",
-        ]
+        fields = CAMPOS_CONFIGURACION
         help_texts = {
             "tipo_firma": "Digital requiere token físico ENCODE. Electrónica requiere adjuntar imagen de firma hológrafa.",
             "segmentacion_liquidador": "Por defecto 'AREA UNICA' si el liquidador ve todos los recibos sin segmentar.",
