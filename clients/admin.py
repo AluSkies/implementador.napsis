@@ -3,7 +3,10 @@ from django.contrib import admin
 from .models import (
     Cliente,
     Implementacion,
+    ImplementacionLicencia,
     ImplementacionModulo,
+    ImplementacionNovedad,
+    ImplementacionTipoDocumento,
     ImplementacionVersion,
     Modulo,
     PersonaRol,
@@ -50,6 +53,9 @@ class ImplementacionAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Modulo)
+admin.site.register(ImplementacionLicencia)
+admin.site.register(ImplementacionNovedad)
+admin.site.register(ImplementacionTipoDocumento)
 
 
 @admin.register(ImplementacionVersion)

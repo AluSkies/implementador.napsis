@@ -162,19 +162,14 @@ def _snapshot_documentos(implementacion):
     return {d.tipo_documento.nombre: d.activo for d in implementacion.documentos_legajo.select_related("tipo_documento")}
 
 
-def _snapshot_empleados(implementacion):
-    return [
-        {"CUIL": e.cuil, "Apellido y Nombre": f"{e.apellido}, {e.nombre}", "Legajo": e.legajo, "Puesto": e.puesto}
-        for e in implementacion.empleados.all()
-    ]
-
-
 def _snapshot_fecha_implementacion(implementacion):
     return {
         "Fecha estimada de salida en productivo": implementacion.fecha_salida_productivo,
     }
 
 
+# "empleados" no está acá: Empleado es un modelo de la app employees, así que es esa
+# app la que registra su propio snapshot builder (ver registrar_snapshot_builder).
 _SNAPSHOT_BUILDERS = {
     "datos_contacto": _snapshot_datos_contacto,
     "modulos": _snapshot_modulos,
@@ -182,9 +177,15 @@ _SNAPSHOT_BUILDERS = {
     "sucursales": _snapshot_sucursales,
     "licencias_novedades": _snapshot_licencias_novedades,
     "documentos": _snapshot_documentos,
-    "empleados": _snapshot_empleados,
     "fecha_implementacion": _snapshot_fecha_implementacion,
 }
+
+
+def registrar_snapshot_builder(seccion, builder):
+    """Permite que otra app registre cómo tomar la foto de una sección que ella
+    misma posee (ej. "empleados", dueño de employees), sin que este módulo tenga
+    que importar esa app y conocer la forma de sus modelos."""
+    _SNAPSHOT_BUILDERS[seccion] = builder
 
 
 def guardar_version(implementacion, seccion, editado_por):

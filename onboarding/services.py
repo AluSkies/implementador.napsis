@@ -6,12 +6,17 @@ con el estado previo de la sección, así el cliente y el equipo pueden consulta
 """
 
 from catalog.models import TipoDocumento
-from clients.models import Implementacion, PersonaRol, Sucursal
+from clients.models import (
+    Implementacion,
+    ImplementacionLicencia,
+    ImplementacionNovedad,
+    ImplementacionTipoDocumento,
+    PersonaRol,
+    Sucursal,
+)
 from clients.services import guardar_version
 from employees.models import Empleado, ImportBatch
 from employees.services import parse_archivo_empleados
-
-from .models import ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento
 
 TOTAL_PASOS = 9
 

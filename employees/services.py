@@ -190,3 +190,12 @@ def parse_archivo_empleados(django_file):
             filas_validas.append(datos)
 
     return filas_validas, errores
+
+
+def snapshot_empleados(implementacion):
+    """Foto de los empleados para el historial de versiones de clients.
+    Registrada en clients.services vía registrar_snapshot_builder (ver apps.py)."""
+    return [
+        {"CUIL": e.cuil, "Apellido y Nombre": f"{e.apellido}, {e.nombre}", "Legajo": e.legajo, "Puesto": e.puesto}
+        for e in implementacion.empleados.all()
+    ]
