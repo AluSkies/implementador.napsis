@@ -10,6 +10,8 @@ source venv/bin/activate
 pip install -r requirements.txt --quiet
 python manage.py collectstatic --no-input
 python manage.py migrate
+python manage.py seed_catalogos
+python manage.py seed_modulos
 
 deactivate
 sudo systemctl restart napsis-portal

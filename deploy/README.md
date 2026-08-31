@@ -56,6 +56,8 @@ venv/bin/python -c "from django.core.management.utils import get_random_secret_k
 
 ```bash
 sudo -u napsis venv/bin/python manage.py migrate
+sudo -u napsis venv/bin/python manage.py seed_catalogos
+sudo -u napsis venv/bin/python manage.py seed_modulos
 sudo -u napsis venv/bin/python manage.py collectstatic --no-input
 sudo -u napsis venv/bin/python manage.py createsuperuser
 ```

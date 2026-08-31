@@ -1,25 +1,11 @@
 from django.db import migrations
 
-MODULOS = [
-    "Recibo Digital",
-    "Autogestión",
-    "Comunicación",
-    "Legajo",
-    "Fichada",
-]
-
-
-def seed(apps, schema_editor):
-    Modulo = apps.get_model("clients", "Modulo")
-    for i, nombre in enumerate(MODULOS):
-        Modulo.objects.get_or_create(nombre=nombre, defaults={"orden": i})
-
-
-def unseed(apps, schema_editor):
-    Modulo = apps.get_model("clients", "Modulo")
-    Modulo.objects.filter(nombre__in=MODULOS).delete()
+# Sembraba el catálogo de módulos. Se pasó a un comando de management
+# (clients/management/commands/seed_modulos.py) — ver el mismo comentario en
+# catalog/migrations/0002_seed_catalogos.py. Se deja como no-op por la misma
+# razón: no tocar bases que ya la tienen aplicada.
 
 
 class Migration(migrations.Migration):
     dependencies = [("clients", "0001_initial")]
-    operations = [migrations.RunPython(seed, unseed)]
+    operations = [migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop)]

@@ -1,7 +1,20 @@
 from django.test import TestCase
 
 from catalog.models import CampoDocumento, TipoDocumento, TipoLicencia, TipoNovedad
-from clients.models import Cliente, Implementacion
+from clients.models import Cliente, Implementacion, Modulo
+
+
+class BaseDeTestSinCatalogoSembradoTests(TestCase):
+    """El catálogo real (16 licencias, 10 novedades, etc.) se carga con
+    `manage.py seed_catalogos`/`seed_modulos`, NO con una migración — si
+    volviera a vivir en una migración, este test empieza a fallar porque
+    `manage.py test` arma la base de test corriendo todas las migraciones."""
+
+    def test_no_hay_licencias_novedades_documentos_ni_modulos_sembrados(self):
+        self.assertEqual(TipoLicencia.objects.count(), 0)
+        self.assertEqual(TipoNovedad.objects.count(), 0)
+        self.assertEqual(TipoDocumento.objects.filter(implementacion=None).count(), 0)
+        self.assertEqual(Modulo.objects.count(), 0)
 
 
 class OrdenamientoDeCatalogosTests(TestCase):
