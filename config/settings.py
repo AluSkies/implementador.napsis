@@ -162,3 +162,25 @@ GOOGLE_SHEETS_WEBHOOK_URL = os.environ.get("GOOGLE_SHEETS_WEBHOOK_URL", "")
 SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://localhost:8000")
 
 MAX_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024  # 15MB por adjunto
+
+# Por default, con DEBUG=False Django manda los errores 500 a mail_admins
+# (que no configuramos) en vez de a la consola — quedan "mudos" en los logs
+# de Render/journalctl. Esto asegura que el traceback real se vea ahí.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
