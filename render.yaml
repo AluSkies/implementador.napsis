@@ -24,23 +24,13 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.12.0"
-      - key: POSTGRES_DB
+      - key: DATABASE_URL
         fromDatabase:
           name: napsis-portal-db
-          property: database
-      - key: POSTGRES_USER
-        fromDatabase:
-          name: napsis-portal-db
-          property: user
-      - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: napsis-portal-db
-          property: password
-      - key: POSTGRES_HOST
-        fromDatabase:
-          name: napsis-portal-db
-          property: host
-      - key: POSTGRES_PORT
-        fromDatabase:
-          name: napsis-portal-db
-          property: port
+          property: connectionString
+      - key: DJANGO_SUPERUSER_USERNAME
+        value: admin
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        generateValue: true
