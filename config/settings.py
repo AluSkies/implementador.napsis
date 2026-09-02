@@ -5,6 +5,7 @@ Django settings for the Portal de Implementación Napsis project.
 import os
 from pathlib import Path
 
+import dj_database_url
 import dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -91,6 +92,10 @@ if os.environ.get("MYSQL_DB"):
         "PORT": os.environ.get("MYSQL_PORT", "3306"),
         "OPTIONS": {"charset": "utf8mb4"},
     }
+elif os.environ.get("DATABASE_URL"):
+    # Render arma esta variable solo al conectar una Postgres al servicio —
+    # más simple que copiar host/user/password/db a mano.
+    DATABASES["default"] = dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=600)
 elif os.environ.get("POSTGRES_DB"):
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.postgresql",

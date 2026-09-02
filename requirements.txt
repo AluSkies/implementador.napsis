@@ -7,4 +7,5 @@ Pillow
 gunicorn
 psycopg2-binary
 PyMySQL
+dj-database-url
 whitenoise
