@@ -1,8 +1,11 @@
+import tempfile
+
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.core.files.base import ContentFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from clients.models import Cliente
+from clients.models import Cliente, Implementacion
 
 
 class PortalLoginViewTests(TestCase):
@@ -54,3 +57,47 @@ class PortalLoginViewTests(TestCase):
         response = self.client.get(reverse("dashboard:home"))
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("login"), response.url)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class MediaProtegidaTests(TestCase):
+    """Los adjuntos de un cliente (banner, modelo de recibo) no pueden ser públicos
+    ni visibles para otro cliente — la app los sirve con permisos en vez del proxy."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(username="admin_test", password="x", is_staff=True)
+        self.dueno = User.objects.create_user(username="dueno", password="x")
+        self.otro = User.objects.create_user(username="otro", password="x")
+        self.cliente = Cliente.objects.create(nombre="Dueño S.A.", usuario=self.dueno)
+        Cliente.objects.create(nombre="Otro S.A.", usuario=self.otro)
+        self.implementacion = Implementacion.objects.create(cliente=self.cliente)
+        self.implementacion.banner.save("banner.png", ContentFile(b"contenido-banner"))
+        self.url = self.implementacion.banner.url
+
+    def test_anonimo_es_redirigido_al_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_staff_puede_descargarlo(self):
+        self.client.force_login(self.staff)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), b"contenido-banner")
+
+    def test_el_cliente_dueno_puede_descargarlo(self):
+        self.client.force_login(self.dueno)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_otro_cliente_recibe_404(self):
+        self.client.force_login(self.otro)
+        self.assertEqual(self.client.get(self.url).status_code, 404)
+
+    def test_archivo_inexistente_es_404(self):
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get("/media/implementaciones/banners/no-existe.png").status_code, 404)
+
+    def test_no_se_puede_salir_de_media_con_dos_puntos(self):
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get("/media/../manage.py").status_code, 404)
+        self.assertEqual(self.client.get("/media/implementaciones/../../manage.py").status_code, 404)

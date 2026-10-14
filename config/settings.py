@@ -3,21 +3,31 @@ Django settings for the Portal de Implementación Napsis project.
 """
 
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
 import dotenv
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 dotenv.load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-x6mt2z(_v^vqqbzz=lsa&qvzy697f3oo_y%mwd$dwws^-y!uul",
-)
-
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
+
+# La clave firma las sesiones y los tokens: en producción es obligatoria. Antes caía a
+# una clave escrita acá (y el repo es público), con lo cual cualquiera podría falsificar
+# sesiones. Solo en desarrollo (DEBUG) y al correr los tests se tolera una de relleno.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG or sys.argv[1:2] == ["test"]:
+        SECRET_KEY = "django-insecure-solo-desarrollo-y-tests"
+    else:
+        raise ImproperlyConfigured(
+            "Falta la variable de entorno DJANGO_SECRET_KEY (obligatoria con DJANGO_DEBUG=false). "
+            "Generá una con: python -c \"import secrets; print(secrets.token_urlsafe(50))\""
+        )
 
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 CSRF_TRUSTED_ORIGINS = [h for h in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if h]
