@@ -16,7 +16,8 @@ class NotificarImplementacionCompletaTests(TestCase):
 
     @override_settings(IMPLEMENTATION_TEAM_EMAILS=["equipo@napsislatam.com"])
     def test_envia_mail_al_equipo_cuando_hay_destinatarios_configurados(self):
-        notificar_implementacion_completa(self.implementacion)
+        with self.assertLogs("notifications.services", level="INFO"):  # webhook sin configurar: loggea y sigue
+            notificar_implementacion_completa(self.implementacion)
 
         self.assertEqual(len(mail.outbox), 1)
         enviado = mail.outbox[0]
@@ -32,7 +33,8 @@ class NotificarImplementacionCompletaTests(TestCase):
     @override_settings(IMPLEMENTATION_TEAM_EMAILS=["equipo@napsislatam.com"], GOOGLE_SHEETS_WEBHOOK_URL="")
     def test_no_llama_al_webhook_si_no_esta_configurado(self):
         with patch("notifications.services.requests.post") as post_mock:
-            notificar_implementacion_completa(self.implementacion)
+            with self.assertLogs("notifications.services", level="INFO"):
+                notificar_implementacion_completa(self.implementacion)
         post_mock.assert_not_called()
 
     @override_settings(
