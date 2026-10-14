@@ -80,6 +80,17 @@ En ambos casos:
 - **Límite de intentos de login** (django-axes): 5 fallos seguidos con el mismo usuario desde la misma IP bloquean ese par por 30 minutos, en `/login/` y `/admin/login/`. Requiere que el proxy reenvíe `X-Forwarded-For` (ver `deploy/DOCKER.md`). Para desbloquear a alguien: `manage.py axes_reset_username <usuario>`.
 - SMTP real para los mails (en dev se usa el backend de consola).
 
+## Qué exige el wizard antes de poder enviar
+
+El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo que falta, con link a cada paso, y el botón queda deshabilitado; el servidor lo valida igual):
+
+- **Razón social y CUIT** de la empresa (paso 1). El implementador puede cargarlos al crear la implementación; si no, los completa el cliente. Los CUIT se validan con su dígito verificador (acepta varios, separados por coma).
+- **Roles** (si hay Recibo Digital o Legajos): al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
+- **Modelo de recibo** en PDF (si hay Recibo Digital).
+- **Nómina**: al menos un empleado.
+
+Cada implementación tiene un **implementador asignado** (por defecto quien la crea, se elige en el alta y se puede reasignar). Es quien lleva la implementación y, además de la lista `IMPLEMENTATION_TEAM_EMAILS`, recibe sus notificaciones.
+
 ## Cómo probar el flujo completo
 
 1. Entrar a `/panel/`, loguearse, crear una implementación (elegís un Cliente existente o cargás uno nuevo con Nombre + CUIT(s); esto genera el link único).

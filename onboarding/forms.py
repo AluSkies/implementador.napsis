@@ -1,7 +1,9 @@
 from django import forms
-from django.forms import formset_factory
+from django.core.validators import FileExtensionValidator
+from django.forms import BaseFormSet, formset_factory
 
 from clients.models import Implementacion, PersonaRol, Sucursal
+from clients.validators import normalizar_cuits
 
 # Campos de Implementacion que completa el cliente en distintos pasos del wizard.
 # Única fuente de verdad: ImplementacionDatosForm (edición completa desde el panel)
@@ -18,16 +20,54 @@ CAMPOS_CONFIGURACION = [
 ]
 
 
-class EmpresaForm(forms.ModelForm):
-    """Datos de contacto de esta implementación puntual (el nombre/CUIT del cliente
-    ya los definió el implementador al generar el link)."""
+class CamposEmpresaMixin:
+    """Suma razón social y CUIT(s) a un form de Implementacion. Esos datos viven en
+    Cliente (son de la empresa, no de una ronda puntual), pero se piden junto con los
+    de contacto: el implementador puede cargarlos al crear la implementación y, si no
+    lo hizo, el cliente los completa en el paso 1."""
+
+    empresa_requerida = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        cliente = getattr(self.instance, "cliente", None)
+        self.fields["razon_social"] = forms.CharField(
+            label="Razón social", max_length=255, required=self.empresa_requerida,
+            initial=cliente.razon_social if cliente else "",
+            help_text="Con la razón social identifica Napsis a la empresa.",
+        )
+        self.fields["cuits"] = forms.CharField(
+            label="CUIT(s)", max_length=255, required=self.empresa_requerida,
+            initial=cliente.cuits if cliente else "",
+            help_text="Uno o varios, separados por coma (ej: 30-12345678-9, 30-98765432-1).",
+        )
+        self.order_fields(["razon_social", "cuits"])
+
+    def clean_cuits(self):
+        valor = self.cleaned_data.get("cuits", "")
+        return normalizar_cuits(valor) if valor else ""
+
+    def save(self, commit=True):
+        implementacion = super().save(commit)
+        cliente = implementacion.cliente
+        cliente.razon_social = self.cleaned_data["razon_social"]
+        cliente.cuits = self.cleaned_data["cuits"]
+        cliente.save(update_fields=["razon_social", "cuits", "actualizado"])
+        return implementacion
+
+
+class EmpresaForm(CamposEmpresaMixin, forms.ModelForm):
+    """Paso 1 del cliente: datos de la empresa y de contacto. Razón social y CUIT son
+    obligatorios (pueden venir ya cargados por el implementador)."""
+
+    empresa_requerida = True
 
     class Meta:
         model = Implementacion
         fields = CAMPOS_DATOS_CONTACTO
 
 
-class ImplementacionDatosForm(forms.ModelForm):
+class ImplementacionDatosForm(CamposEmpresaMixin, forms.ModelForm):
     """Edición completa de los datos de contacto/configuración, para uso del
     equipo de implementación desde el panel (no del cliente vía el wizard)."""
 
@@ -63,14 +103,49 @@ class RolForm(forms.Form):
 RolFormSet = formset_factory(RolForm, extra=6, can_delete=True)
 
 
+class _RolesObligatoriosFormSet(BaseFormSet):
+    """Variante para el wizard del cliente: no se puede avanzar sin al menos un
+    Apoderado/Firmante, un Liquidador y un Admin. de RRHH (los tres son elementales).
+    El panel interno usa RolFormSet, sin esta exigencia."""
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+        presentes = {
+            f.cleaned_data["rol"] for f in self.forms
+            if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("apellido_nombre")
+        }
+        faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in presentes]
+        if faltan:
+            raise forms.ValidationError(
+                "Falta cargar al menos una persona para cada rol. Te falta: " + ", ".join(faltan) + "."
+            )
+
+
+RolFormSetObligatorio = formset_factory(
+    RolForm, formset=_RolesObligatoriosFormSet, extra=6, can_delete=True
+)
+
+
 class ConfiguracionForm(forms.ModelForm):
     class Meta:
         model = Implementacion
         fields = CAMPOS_CONFIGURACION
+        # Sin el checkbox de "borrar": el modelo de recibo es obligatorio, solo se reemplaza.
+        widgets = {"modelo_recibo": forms.FileInput}
         help_texts = {
             "tipo_firma": "Digital requiere token físico ENCODE. Electrónica requiere adjuntar imagen de firma hológrafa.",
             "segmentacion_liquidador": "Por defecto 'AREA UNICA' si el liquidador ve todos los recibos sin segmentar.",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        campo = self.fields["modelo_recibo"]
+        campo.validators.append(FileExtensionValidator(["pdf"]))
+        if not self.instance.modelo_recibo:
+            campo.required = True
+            campo.label = "Modelo de recibo (PDF, obligatorio)"
 
 
 class SucursalForm(forms.ModelForm):

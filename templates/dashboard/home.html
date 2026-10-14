@@ -51,6 +51,7 @@
                 <th><a class="sort-link" href="{{ sort_links.cliente.url }}">Cliente{% if sort_links.cliente.activa %} {% if sort_links.cliente.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
                 <th><a class="sort-link" href="{{ sort_links.estado.url }}">Estado{% if sort_links.estado.activa %} {% if sort_links.estado.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
                 <th><a class="sort-link" href="{{ sort_links.fecha_implementacion.url }}">Fecha de implementación{% if sort_links.fecha_implementacion.activa %} {% if sort_links.fecha_implementacion.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
+                <th>Asignado</th>
                 <th><a class="sort-link" href="{{ sort_links.creado.url }}">Creado{% if sort_links.creado.activa %} {% if sort_links.creado.direccion == "asc" %}▲{% else %}▼{% endif %}{% endif %}</a></th>
                 <th></th>
             </tr>
@@ -72,11 +73,12 @@
                         <span class="muted">—</span>
                     {% endif %}
                 </td>
+                <td>{{ imp.asignado_nombre|default:"—" }}</td>
                 <td>{{ imp.creado|date:"d/m/Y" }}</td>
                 <td><a href="{% url 'dashboard:implementacion_detalle' pk=imp.pk %}">Ver detalle</a></td>
             </tr>
         {% empty %}
-            <tr><td colspan="5" class="muted">No hay implementaciones que coincidan con estos filtros.</td></tr>
+            <tr><td colspan="6" class="muted">No hay implementaciones que coincidan con estos filtros.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -100,17 +102,32 @@
 
         <p class="muted">O, si es un cliente nuevo, completá estos datos (se ignoran si elegiste uno de arriba):</p>
         <div class="alta-field">
-            <label for="nombre">Nombre / Razón Social</label>
-            <input type="text" name="nombre" id="nombre">
+            <label for="nombre">Nombre de la empresa</label>
+            <input type="text" name="nombre" id="nombre" placeholder="Como se muestra en el portal (puede ser el nombre de fantasía)">
         </div>
         <div class="alta-field">
-            <label for="cuits">CUIT(s)</label>
+            <label for="razon_social">Razón social <span class="muted">(opcional)</span></label>
+            <input type="text" name="razon_social" id="razon_social">
+        </div>
+        <div class="alta-field">
+            <label for="cuits">CUIT(s) <span class="muted">(opcional)</span></label>
             <input type="text" name="cuits" id="cuits" placeholder="30-12345678-9, 30-98765432-1">
+            <p class="muted">Si no cargás razón social y CUIT acá, el cliente los completa (obligatorios) en el paso 1.</p>
         </div>
         <div class="alta-field">
             <label for="username">Usuario para que el cliente inicie sesión</label>
             <input type="text" name="username" id="username" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
             <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la implementación.</p>
+        </div>
+
+        <div class="alta-field">
+            <label for="implementador_id">Implementador asignado</label>
+            <select name="implementador_id" id="implementador_id">
+                {% for u in asignables %}
+                    <option value="{{ u.id }}" {% if u.id == request.user.id %}selected{% endif %}>{{ u.get_full_name|default:u.username }}{% if u.id == request.user.id %} (vos){% endif %}</option>
+                {% endfor %}
+            </select>
+            <p class="muted">Lleva la implementación y recibe sus notificaciones. Por defecto, quien la crea.</p>
         </div>
 
         <div class="alta-field">

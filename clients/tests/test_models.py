@@ -122,3 +122,19 @@ class ModelosMovidosDesdeOnboardingTests(TestCase):
     def test_sucursal_se_puede_crear_y_relacionar(self):
         sucursal = Sucursal.objects.create(implementacion=self.implementacion, nombre="Casa Central")
         self.assertIn(sucursal, self.implementacion.sucursales.all())
+
+
+class AsignadoNombreTests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create(nombre="Empresa de Prueba")
+
+    def test_sin_asignado_es_vacio(self):
+        self.assertEqual(Implementacion.objects.create(cliente=self.cliente).asignado_nombre, "")
+
+    def test_usa_el_nombre_completo_y_si_no_el_usuario(self):
+        from django.contrib.auth.models import User
+
+        con_nombre = User.objects.create_user(username="ana", first_name="Ana", last_name="Paz")
+        sin_nombre = User.objects.create_user(username="beto")
+        self.assertEqual(Implementacion.objects.create(cliente=self.cliente, implementador_asignado=con_nombre).asignado_nombre, "Ana Paz")
+        self.assertEqual(Implementacion.objects.create(cliente=self.cliente, implementador_asignado=sin_nombre).asignado_nombre, "beto")

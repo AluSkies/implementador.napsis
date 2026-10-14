@@ -3,6 +3,7 @@ from django.test import TestCase
 from catalog.models import TipoDocumento, TipoLicencia, TipoNovedad
 from clients.models import Cliente, Implementacion, ImplementacionModulo, Modulo, PersonaRol, Sucursal
 from employees.forms import EmpleadoForm
+from employees.models import Empleado
 from onboarding import services
 
 
@@ -56,7 +57,10 @@ class GuardarDatosContactoTests(TestCase):
         from onboarding.forms import EmpresaForm
 
         form = EmpresaForm(
-            {"telefono": "011-9999-9999", "mail_contacto": "nuevo@example.com"},
+            {
+                "razon_social": "Empresa de Prueba S.A.", "cuits": "30-50001091-2",
+                "telefono": "011-9999-9999", "mail_contacto": "nuevo@example.com",
+            },
             instance=self.implementacion,
         )
         self.assertTrue(form.is_valid())
@@ -245,3 +249,54 @@ class EmpleadosTests(TestCase):
     def test_eliminar_empleado_con_id_no_numerico_no_guarda_version(self):
         services.eliminar_empleado(self.implementacion, "abc", "Test")
         self.assertFalse(self.implementacion.versiones.filter(seccion="empleados").exists())
+
+
+class PendientesDeEnvioTests(TestCase):
+    """Qué falta para poder enviar depende de los módulos contratados: sin Recibo Digital
+    no se pide el modelo de recibo, y sin Recibo Digital ni Legajos no se piden roles."""
+
+    def setUp(self):
+        self.cliente = Cliente.objects.create(nombre="Empresa de Prueba")
+        self.implementacion = Implementacion.objects.create(cliente=self.cliente)
+
+    def _activar(self, *nombres):
+        for nombre in nombres:
+            modulo, _ = Modulo.objects.get_or_create(nombre=nombre)
+            ImplementacionModulo.objects.create(implementacion=self.implementacion, modulo=modulo, activo=True)
+
+    def _pasos(self):
+        return [p["paso"] for p in services.pendientes_de_envio(self.implementacion)]
+
+    def test_sin_modulos_solo_pide_empresa_y_nomina(self):
+        self.assertEqual(self._pasos(), [1, 8])
+
+    def test_con_recibo_digital_pide_tambien_roles_y_modelo_de_recibo(self):
+        self._activar("Recibo Digital")
+        self.assertEqual(self._pasos(), [1, 3, 4, 8])
+
+    def test_con_legajos_pide_roles_pero_no_modelo_de_recibo(self):
+        self._activar("Legajos")
+        self.assertEqual(self._pasos(), [1, 3, 8])
+
+    def test_con_fichada_no_pide_nada_extra(self):
+        self._activar("Fichada")
+        self.assertEqual(self._pasos(), [1, 8])
+
+    def test_la_razon_social_sola_no_alcanza_hace_falta_el_cuit(self):
+        self.cliente.razon_social = "Empresa S.A."
+        self.cliente.save()
+        self.assertIn(1, self._pasos())
+
+    def test_todo_completo_no_deja_pendientes(self):
+        self.cliente.razon_social = "Empresa S.A."
+        self.cliente.cuits = "30-50001091-2"
+        self.cliente.save()
+        Empleado.objects.create(implementacion=self.implementacion, cuil="20111111112", nombre="A", apellido="B")
+        self.assertEqual(services.pendientes_de_envio(self.implementacion), [])
+
+    def test_un_rol_sin_nombre_no_cuenta(self):
+        self._activar("Legajos")
+        for rol in (PersonaRol.ROL_APODERADO, PersonaRol.ROL_LIQUIDADOR):
+            PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre="X, Y")
+        PersonaRol.objects.create(implementacion=self.implementacion, rol=PersonaRol.ROL_ADMIN_RRHH, apellido_nombre="")
+        self.assertIn(3, self._pasos())

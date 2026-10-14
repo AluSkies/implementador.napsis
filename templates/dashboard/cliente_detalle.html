@@ -3,6 +3,7 @@
 <div class="card">
     <p><a href="{% url 'dashboard:home' %}">&larr; Volver al listado</a></p>
     <h1>{{ cliente.nombre }}</h1>
+    <p><strong>Razón social:</strong> {{ cliente.razon_social|default:"—" }}</p>
     <p><strong>CUIT(s):</strong> {{ cliente.cuits|default:"—" }}</p>
     <p><strong>Usuario de acceso:</strong> {{ cliente.usuario.username|default:"— (sin acceso creado)" }}</p>
     <form method="post">

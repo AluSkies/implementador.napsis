@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
@@ -21,10 +23,12 @@ from .forms import (
     LicenciasNovedadesForm,
     ModulosForm,
     PedirRevisionForm,
-    RolFormSet,
+    RolFormSetObligatorio,
     SucursalFormSet,
 )
 from .services import TOTAL_PASOS
+
+logger = logging.getLogger(__name__)
 
 EDITADO_POR_CLIENTE = "Cliente"
 
@@ -201,12 +205,12 @@ def _step_roles(request, implementacion, step):
     ]
 
     if request.method == "POST":
-        formset = RolFormSet(request.POST)
+        formset = RolFormSetObligatorio(request.POST)
         if formset.is_valid():
             services.guardar_roles(implementacion, formset, EDITADO_POR_CLIENTE)
             return _redirect_next(implementacion, step)
     else:
-        formset = RolFormSet(initial=initial)
+        formset = RolFormSetObligatorio(initial=initial)
     return render(request, "onboarding/step_roles.html", _wizard_context(implementacion, step, {"formset": formset}))
 
 
@@ -339,7 +343,9 @@ def _step_empleados(request, implementacion, step):
         services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), EDITADO_POR_CLIENTE)
         messages.info(request, "Empleado eliminado.")
     elif accion == "continuar":
-        return _redirect_next(implementacion, step)
+        if implementacion.empleados.exists():
+            return _redirect_next(implementacion, step)
+        messages.error(request, "Tenés que cargar la nómina (al menos un empleado) para poder continuar.")
 
     empleados = implementacion.empleados.all().order_by("apellido", "nombre")
     return render(
@@ -366,11 +372,22 @@ def descargar_plantilla_empleados(request, token):
 
 
 def _step_revision(request, implementacion, step):
+    pendientes = services.pendientes_de_envio(implementacion)
+
     if request.method == "POST" and request.POST.get("accion") == "enviar":
-        notificar_implementacion_completa(implementacion, request=request)
-        implementacion.enviado = timezone.now()
-        implementacion.save(update_fields=["enviado"])
-        return redirect("onboarding:enviado", token=implementacion.token)
+        if pendientes:
+            messages.error(request, "Todavía falta completar algunos datos obligatorios para poder enviar.")
+        else:
+            # Primero se registra el envío y recién después se avisa al equipo: si el mail
+            # falla (SMTP caído, etc.) el cliente no tiene por qué ver un error ni perder
+            # lo que ya terminó. La falla queda en el log.
+            implementacion.enviado = timezone.now()
+            implementacion.save(update_fields=["enviado"])
+            try:
+                notificar_implementacion_completa(implementacion, request=request)
+            except Exception:
+                logger.exception("No se pudo notificar al equipo la implementación %s", implementacion.pk)
+            return redirect("onboarding:enviado", token=implementacion.token)
 
     resumen = {
         "licencias_activas": implementacion.licencias.filter(activo=True).count(),
@@ -378,7 +395,8 @@ def _step_revision(request, implementacion, step):
         "documentos_activos": implementacion.documentos_legajo.filter(activo=True).count(),
     }
     return render(
-        request, "onboarding/step_revision.html", _wizard_context(implementacion, step, {"resumen": resumen})
+        request, "onboarding/step_revision.html",
+        _wizard_context(implementacion, step, {"resumen": resumen, "pendientes": pendientes}),
     )
 
 

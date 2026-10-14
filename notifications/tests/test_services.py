@@ -80,3 +80,47 @@ class NotificarRevisionSolicitadaTests(TestCase):
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Empresa de Prueba", mail.outbox[0].subject)
+
+
+class DestinatariosConImplementadorAsignadoTests(TestCase):
+    """Los mails van al equipo (lista fija) y, además, al implementador asignado."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.ana = User.objects.create_user(username="ana", password="x", email="ana@napsislatam.com")
+        cliente = Cliente.objects.create(nombre="Empresa de Prueba")
+        self.implementacion = Implementacion.objects.create(cliente=cliente, implementador_asignado=self.ana)
+
+    @override_settings(IMPLEMENTATION_TEAM_EMAILS=["equipo@napsislatam.com"])
+    def test_le_llega_al_equipo_y_al_asignado(self):
+        notificar_revision_solicitada(self.implementacion)
+        self.assertCountEqual(mail.outbox[0].to, ["equipo@napsislatam.com", "ana@napsislatam.com"])
+
+    @override_settings(IMPLEMENTATION_TEAM_EMAILS=[])
+    def test_si_no_hay_lista_fija_igual_le_llega_al_asignado(self):
+        notificar_revision_solicitada(self.implementacion)
+        self.assertEqual(mail.outbox[0].to, ["ana@napsislatam.com"])
+
+    @override_settings(IMPLEMENTATION_TEAM_EMAILS=["ana@napsislatam.com", "equipo@napsislatam.com"])
+    def test_no_repite_un_destinatario_que_ya_esta_en_la_lista(self):
+        notificar_revision_solicitada(self.implementacion)
+        self.assertEqual(sorted(mail.outbox[0].to), ["ana@napsislatam.com", "equipo@napsislatam.com"])
+
+    @override_settings(IMPLEMENTATION_TEAM_EMAILS=["equipo@napsislatam.com"])
+    def test_un_asignado_sin_mail_no_rompe(self):
+        self.ana.email = ""
+        self.ana.save()
+        notificar_revision_solicitada(self.implementacion)
+        self.assertEqual(mail.outbox[0].to, ["equipo@napsislatam.com"])
+
+    @override_settings(IMPLEMENTATION_TEAM_EMAILS=["equipo@napsislatam.com"])
+    def test_el_resumen_usa_la_razon_social_si_existe_y_nombra_al_implementador(self):
+        from notifications.services import _resumen_dict
+
+        cliente = self.implementacion.cliente
+        cliente.razon_social = "Empresa de Prueba S.A."
+        cliente.save()
+        resumen = _resumen_dict(self.implementacion)
+        self.assertEqual(resumen["razon_social"], "Empresa de Prueba S.A.")
+        self.assertEqual(resumen["implementador"], "ana")

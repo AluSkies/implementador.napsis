@@ -16,6 +16,12 @@ def implementadores():
     )
 
 
+def asignables():
+    """Cuentas a las que se puede asignar una implementación: todo el equipo activo
+    (implementadores y admins)."""
+    return User.objects.filter(is_staff=True, is_active=True).order_by("first_name", "username")
+
+
 def crear_implementador(username, first_name, last_name, email):
     """Crea la cuenta con una contraseña generada. Devuelve (usuario, password_en_claro):
     la contraseña solo se puede ver esta vez."""

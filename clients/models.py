@@ -20,7 +20,14 @@ class Cliente(models.Model):
     al sumar un módulo o volver a relevar algo).
     """
 
-    nombre = models.CharField("Nombre / Razón Social", max_length=255)
+    nombre = models.CharField(
+        "Nombre de la empresa", max_length=255,
+        help_text="Cómo se muestra en el portal (puede ser el nombre de fantasía). La razón social va aparte.",
+    )
+    razon_social = models.CharField(
+        "Razón social", max_length=255, blank=True,
+        help_text="Con esto identifica Napsis a la empresa. Si queda vacío, el cliente la completa en el paso 1.",
+    )
     cuits = models.CharField(
         "CUIT(s)", max_length=255, blank=True,
         help_text="Uno o varios CUIT, separados por coma (ej: 30-12345678-9, 30-98765432-1).",
@@ -168,6 +175,11 @@ class Implementacion(models.Model):
         "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="implementaciones_generadas",
     )
+    implementador_asignado = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="implementaciones_asignadas",
+        help_text="Quien lleva esta implementación. Por defecto, quien la creó; recibe las notificaciones.",
+    )
     creado = models.DateTimeField(auto_now_add=True)
     actualizado = models.DateTimeField(auto_now=True)
     enviado = models.DateTimeField(
@@ -185,6 +197,12 @@ class Implementacion(models.Model):
 
     def __str__(self):
         return f"{self.cliente} ({self.get_estado_display()})"
+
+    @property
+    def asignado_nombre(self):
+        """Nombre de quien lleva la implementación ("" si no tiene asignado)."""
+        asignado = self.implementador_asignado
+        return (asignado.get_full_name() or asignado.get_username()) if asignado else ""
 
     def get_absolute_url(self):
         return reverse("onboarding:wizard_step", kwargs={"token": self.token, "step": 1})
@@ -244,7 +262,7 @@ class PersonaRol(models.Model):
     ROL_LIQUIDADOR = "liquidador"
     ROL_ADMIN_RRHH = "admin_rrhh"
     ROL_CHOICES = [
-        (ROL_APODERADO, "Apoderado"),
+        (ROL_APODERADO, "Apoderado / Firmante"),
         (ROL_LIQUIDADOR, "Liquidador"),
         (ROL_ADMIN_RRHH, "Admin. de RRHH"),
     ]

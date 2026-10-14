@@ -3,6 +3,20 @@
 <div class="card">
     <p><a href="{% url 'dashboard:cliente_detalle' pk=cliente.pk %}">&larr; Volver a {{ cliente.nombre }}</a></p>
     <h1>{{ cliente.nombre }}</h1>
+    <p class="muted">Razón social: {{ cliente.razon_social|default:"— (la completa el cliente)" }} · CUIT(s): {{ cliente.cuits|default:"—" }}</p>
+    <p>
+        <strong>Implementador asignado:</strong> {{ implementacion.asignado_nombre|default:"— (sin asignar)" }}
+    </p>
+    <form method="post" style="margin-bottom:12px;">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="reasignar">
+        <select name="implementador_id">
+            {% for u in asignables %}
+                <option value="{{ u.id }}" {% if u.id == implementacion.implementador_asignado_id %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn secondary" type="submit">Reasignar</button>
+    </form>
     <p>
         <strong>Estado:</strong> {{ implementacion.estado_visual_label }}
         {% if implementacion.estado_visual == "a_completar" %} · <span class="muted">paso {{ implementacion.paso_actual }}/9</span>
@@ -62,6 +76,8 @@
 <div class="card section-readonly">
     <h2>Datos de contacto</h2>
     <dl>
+        <dt>Razón social</dt><dd>{{ cliente.razon_social|default:"—" }}</dd>
+        <dt>CUIT(s)</dt><dd>{{ cliente.cuits|default:"—" }}</dd>
         <dt>Teléfono</dt><dd>{{ implementacion.telefono|default:"—" }}</dd>
         <dt>Mail de contacto</dt><dd>{{ implementacion.mail_contacto|default:"—" }}</dd>
         <dt>Tipo de firma</dt><dd>{{ implementacion.get_tipo_firma_display|default:"—" }}</dd>

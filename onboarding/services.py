@@ -45,6 +45,35 @@ def pasos_activos(implementacion):
     return activos
 
 
+def pendientes_de_envio(implementacion):
+    """Lo que todavía falta para poder enviar el relevamiento, como lista de
+    {"paso": N, "mensaje": ...} (vacía = listo). Los pasos no son secuenciales (el cliente
+    puede saltar de uno a otro por la URL), así que esta es la validación que de verdad
+    protege el envío; cada paso valida además lo suyo para avisar a tiempo."""
+    activos = pasos_activos(implementacion)
+    pendientes = []
+
+    cliente = implementacion.cliente
+    if not (cliente.razon_social and cliente.cuits):
+        pendientes.append({"paso": 1, "mensaje": "Completar la razón social y el CUIT de la empresa."})
+
+    if 3 in activos:
+        presentes = set(implementacion.roles.exclude(apellido_nombre="").values_list("rol", flat=True))
+        faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in presentes]
+        if faltan:
+            pendientes.append({
+                "paso": 3, "mensaje": "Cargar al menos una persona para cada rol. Falta: " + ", ".join(faltan) + ".",
+            })
+
+    if 4 in activos and not implementacion.modelo_recibo:
+        pendientes.append({"paso": 4, "mensaje": "Subir el modelo de recibo (PDF)."})
+
+    if not implementacion.empleados.exists():
+        pendientes.append({"paso": 8, "mensaje": "Cargar la nómina de empleados (al menos una persona)."})
+
+    return pendientes
+
+
 def tipos_documento_disponibles(implementacion):
     """Catálogo global de documentos + los tipos 'Otros' que esta implementación agregó."""
     tipos_qs = TipoDocumento.objects.filter(implementacion=None).prefetch_related("campos")

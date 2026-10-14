@@ -10,6 +10,9 @@ from onboarding.forms import (
 )
 
 
+CAMPOS_EMPRESA = ["razon_social", "cuits"]  # viven en Cliente; se piden junto con los de contacto
+
+
 class CamposCompartidosTests(TestCase):
     """ImplementacionDatosForm (panel de staff) tiene que ser exactamente la unión
     de EmpresaForm + ConfiguracionForm (los dos pasos del wizard de cliente) — si
@@ -19,11 +22,11 @@ class CamposCompartidosTests(TestCase):
     def test_implementacion_datos_form_es_la_union_de_los_otros_dos(self):
         self.assertEqual(
             list(ImplementacionDatosForm().fields.keys()),
-            CAMPOS_DATOS_CONTACTO + CAMPOS_CONFIGURACION,
+            CAMPOS_EMPRESA + CAMPOS_DATOS_CONTACTO + CAMPOS_CONFIGURACION,
         )
 
     def test_empresa_form_expone_exactamente_sus_campos(self):
-        self.assertEqual(list(EmpresaForm().fields.keys()), CAMPOS_DATOS_CONTACTO)
+        self.assertEqual(list(EmpresaForm().fields.keys()), CAMPOS_EMPRESA + CAMPOS_DATOS_CONTACTO)
 
     def test_configuracion_form_expone_exactamente_sus_campos(self):
         self.assertEqual(list(ConfiguracionForm().fields.keys()), CAMPOS_CONFIGURACION)

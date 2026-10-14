@@ -117,6 +117,8 @@ def resumen_implementacion(implementacion):
 
 def _snapshot_datos_contacto(implementacion):
     return {
+        "Razón social": implementacion.cliente.razon_social,
+        "CUIT(s)": implementacion.cliente.cuits,
         "Teléfono": implementacion.telefono,
         "Mail de contacto": implementacion.mail_contacto,
         "Tipo de firma": implementacion.get_tipo_firma_display(),

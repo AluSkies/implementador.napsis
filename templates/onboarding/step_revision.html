@@ -3,7 +3,8 @@
 <p class="muted">Revisá el resumen antes de enviar. Una vez enviado, el equipo de implementación de Napsis va a recibir toda esta información.</p>
 
 <table>
-    <tr><th>Razón Social</th><td>{{ cliente.nombre }}</td></tr>
+    <tr><th>Empresa</th><td>{{ cliente.nombre }}</td></tr>
+    <tr><th>Razón social</th><td>{{ cliente.razon_social|default:"—" }}</td></tr>
     <tr><th>CUIT(s)</th><td>{{ cliente.cuits }}</td></tr>
     <tr><th>Mail de contacto</th><td>{{ implementacion.mail_contacto }}</td></tr>
     <tr><th>Módulos</th><td>{% for m in implementacion.modulos.all %}{% if m.activo %}{{ m.modulo.nombre }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}</td></tr>
@@ -15,11 +16,22 @@
     <tr><th>Empleados cargados</th><td>{{ implementacion.empleados.count }}</td></tr>
 </table>
 
+{% if pendientes %}
+    <div class="card" style="border-left:4px solid #d92b6b;">
+        <h3>Antes de enviar, falta completar:</h3>
+        <ul>
+            {% for p in pendientes %}
+                <li>{{ p.mensaje }} <a href="{% url 'onboarding:wizard_step' token=implementacion.token step=p.paso %}">Ir al paso</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endif %}
+
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="accion" value="enviar">
     <div class="actions">
-        <button class="btn" type="submit">Enviar a Napsis</button>
+        <button class="btn" type="submit" {% if pendientes %}disabled title="Completá los datos que faltan"{% endif %}>Enviar a Napsis</button>
     </div>
 </form>
 {% endblock %}

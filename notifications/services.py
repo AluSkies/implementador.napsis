@@ -28,8 +28,10 @@ def _resumen_dict(implementacion):
         for implementacion_documento in implementacion.documentos_legajo.filter(activo=True)
     ]
     return {
-        "razon_social": cliente.nombre,
+        "razon_social": cliente.razon_social or cliente.nombre,
+        "nombre": cliente.nombre,
         "cuits": cliente.cuits,
+        "implementador": implementacion.asignado_nombre,
         "mail_contacto": implementacion.mail_contacto,
         "telefono": implementacion.telefono,
         "modulos": ", ".join(modulos_activos),
@@ -44,6 +46,13 @@ def _resumen_dict(implementacion):
     }
 
 
+def _destinatarios(implementacion):
+    """El equipo (lista fija) más el implementador asignado, sin repetir."""
+    asignado = implementacion.implementador_asignado
+    extra = [asignado.email] if asignado and asignado.email else []
+    return list(dict.fromkeys([*settings.IMPLEMENTATION_TEAM_EMAILS, *extra]))
+
+
 def _detalle_url(implementacion, request=None):
     try:
         path = reverse("dashboard:implementacion_detalle", kwargs={"pk": implementacion.pk})
@@ -53,17 +62,17 @@ def _detalle_url(implementacion, request=None):
         return settings.SITE_BASE_URL
 
 
-def _enviar_mail_equipo(asunto, template, contexto):
-    """Envía un mail al equipo de implementación, o lo omite si no hay destinatarios configurados."""
-    if not settings.IMPLEMENTATION_TEAM_EMAILS:
-        logger.warning("IMPLEMENTATION_TEAM_EMAILS no configurado; se omite el envío de mail.")
+def _enviar_mail_equipo(asunto, template, contexto, destinatarios):
+    """Envía un mail al equipo de implementación, o lo omite si no hay destinatarios."""
+    if not destinatarios:
+        logger.warning("Sin destinatarios (IMPLEMENTATION_TEAM_EMAILS vacío y sin implementador asignado); se omite el mail.")
         return
 
     send_mail(
         subject=asunto,
         message=render_to_string(template, contexto),
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=settings.IMPLEMENTATION_TEAM_EMAILS,
+        recipient_list=destinatarios,
         fail_silently=False,
     )
 
@@ -73,7 +82,7 @@ def notificar_implementacion_completa(implementacion, request=None):
     contexto = {"detalle_url": _detalle_url(implementacion, request), **_resumen_dict(implementacion)}
     _enviar_mail_equipo(
         f"Nueva implementación completada: {implementacion.cliente.nombre}",
-        "notifications/mail_resumen.txt", contexto,
+        "notifications/mail_resumen.txt", contexto, _destinatarios(implementacion),
     )
     _enviar_a_google_sheets(implementacion)
 
@@ -87,7 +96,7 @@ def notificar_revision_solicitada(implementacion, request=None):
     }
     _enviar_mail_equipo(
         f"Pedido de contacto: {implementacion.cliente.nombre}",
-        "notifications/mail_revision_solicitada.txt", contexto,
+        "notifications/mail_revision_solicitada.txt", contexto, _destinatarios(implementacion),
     )
 
 

@@ -1,11 +1,13 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import ValidationError
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_date
 
 from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Cliente, Implementacion, Modulo
+from clients.validators import normalizar_cuits
 from clients.services import (
     COLUMNAS_ORDENABLES,
     crear_o_resetear_acceso,
@@ -37,6 +39,17 @@ def _avisar_credenciales(request, titulo, username, password):
     )
 
 
+def _implementador_elegido(request):
+    """El implementador elegido en el formulario (campo implementador_id). Si no vino, o no
+    es una cuenta activa del equipo, queda asignada a quien la está creando."""
+    elegido = request.POST.get("implementador_id", "")
+    if elegido.isdigit():
+        encontrado = cuentas.asignables().filter(pk=elegido).first()
+        if encontrado:
+            return encontrado
+    return request.user
+
+
 def _sort_links(request):
     """Arma, para cada columna ordenable, la URL que alterna asc/desc conservando los demás filtros."""
     ordenar_actual = request.GET.get("ordenar", "creado")
@@ -61,7 +74,9 @@ def home(request):
     if request.method == "POST" and request.POST.get("accion") == "crear_implementacion":
         cliente_id = request.POST.get("cliente_id")
         nombre_nuevo = request.POST.get("nombre", "").strip()
+        razon_social_nueva = request.POST.get("razon_social", "").strip()
         cuits_nuevo = request.POST.get("cuits", "").strip()
+        asignado = _implementador_elegido(request)
         modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
         editable = bool(request.POST.get("modulos_editables"))
 
@@ -69,7 +84,16 @@ def home(request):
         if cliente_id and cliente_id.isdigit():
             cliente = Cliente.objects.filter(pk=cliente_id).first()
         elif nombre_nuevo:
-            cliente = Cliente.objects.create(nombre=nombre_nuevo, cuits=cuits_nuevo)
+            # Razón social y CUIT son opcionales acá: si no se cargan, el cliente los
+            # completa (obligatorios) en el paso 1 del wizard.
+            try:
+                cuits_nuevo = normalizar_cuits(cuits_nuevo) if cuits_nuevo else ""
+            except ValidationError as error:
+                messages.error(request, error.messages[0])
+            else:
+                cliente = Cliente.objects.create(
+                    nombre=nombre_nuevo, razon_social=razon_social_nueva, cuits=cuits_nuevo,
+                )
 
         if cliente:
             if not cliente.usuario:
@@ -77,14 +101,15 @@ def home(request):
                 username, password = crear_o_resetear_acceso(cliente, username_deseado)
                 _avisar_credenciales(request, "Acceso creado para el cliente", username, password)
             implementacion = Implementacion.objects.create(
-                cliente=cliente, creado_por=request.user, modulos_editables_por_cliente=editable
+                cliente=cliente, creado_por=request.user, implementador_asignado=asignado,
+                modulos_editables_por_cliente=editable,
             )
             onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username())
             return redirect("dashboard:implementacion_detalle", pk=implementacion.pk)
 
     clientes_existentes = Cliente.objects.order_by("nombre")
     implementaciones = filtrar_y_ordenar_implementaciones(
-        Implementacion.objects.select_related("cliente"), request.GET
+        Implementacion.objects.select_related("cliente", "implementador_asignado"), request.GET
     )
 
     return render(
@@ -92,6 +117,7 @@ def home(request):
         {
             "implementaciones": implementaciones,
             "clientes_existentes": clientes_existentes,
+            "asignables": cuentas.asignables(),
             "modulos": Modulo.objects.all(),
             "estados_choices": Implementacion.VISUAL_LABELS.items(),
             "filtros_aplicados": request.GET,
@@ -209,6 +235,15 @@ def _manejar_accion_implementacion(request, implementacion):
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"import_form": import_form}
 
+    if accion == "reasignar":
+        elegido = request.POST.get("implementador_id", "")
+        nuevo = cuentas.asignables().filter(pk=elegido).first() if elegido.isdigit() else None
+        if nuevo:
+            implementacion.implementador_asignado = nuevo
+            implementacion.save(update_fields=["implementador_asignado"])
+            messages.success(request, f"Implementación asignada a {nuevo.get_full_name() or nuevo.username}.")
+        return redirect("dashboard:implementacion_detalle", pk=pk)
+
     if accion == "regenerar_link":
         implementacion.estado = Implementacion.ESTADO_PENDIENTE
         implementacion.paso_actual = 1
@@ -292,6 +327,7 @@ def implementacion_detalle(request, pk):
     contexto = resumen_implementacion(implementacion)
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
+        "asignables": cuentas.asignables(),
         "datos_form": formularios_con_error.get("datos_form") or ImplementacionDatosForm(instance=implementacion),
         "roles_formset": formularios_con_error.get("roles_formset") or RolFormSet(initial=roles_iniciales, prefix="roles"),
         "sucursales_formset": formularios_con_error.get("sucursales_formset") or SucursalFormSet(initial=sucursales_iniciales, prefix="sucursales"),
