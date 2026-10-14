@@ -7,3 +7,8 @@ staticfiles/
 .env
 *.xlsx
 .claude/scheduled_tasks.lock
+.env.docker
+
+# Demo local (datos ficticios): no viaja al repo
+dashboard/management/
+dashboard/tests/test_seed_demo.py

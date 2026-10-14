@@ -8,7 +8,7 @@ Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis.
   - `Cliente`: la empresa (Nombre, CUIT(s) separados por coma). Persistente: un mismo Cliente puede tener varias Implementaciones a lo largo del tiempo.
   - `Implementacion`: un proceso puntual de relevamiento para un Cliente — tiene su propio token/link único, estado (`Pendiente` / `Cumplida` / `Cancelada`), todos los datos de contacto y configuración relevados en el wizard, y el pedido de revisión del cliente (`revision_solicitada`, `pedir_revision()`, `anular()`).
   - Además: `PersonaRol`, `Sucursal`, `Modulo`, `ImplementacionModulo` (todos FK a `Implementacion`, no a `Cliente`).
-- `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Poblados por una migración de datos (`catalog/migrations/0002_seed_catalogos.py`) a partir del relevamiento original.
+- `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Se cargan con `manage.py seed_catalogos` (a partir del relevamiento original), no con una migración.
 - `onboarding/` — el wizard público (9 pasos) y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
 - `employees/` — Empleado, ImportBatch (ambos FK a Implementacion), parser/validador de la plantilla masiva (`employees/services.py`) y generador de la plantilla vacía descargable.
 - `notifications/` — envío del mail de resumen y del mail de "pedido de contacto" al equipo de implementación, y el POST a un webhook de Google Apps Script para el dump a Sheets.
@@ -22,11 +22,13 @@ Todos los datos que se completan en el wizard (roles, sucursales, módulos, lice
 python -m venv venv
 venv/Scripts/pip install -r requirements.txt
 venv/Scripts/python manage.py migrate
+venv/Scripts/python manage.py seed_catalogos
+venv/Scripts/python manage.py seed_modulos
 venv/Scripts/python manage.py createsuperuser
 venv/Scripts/python manage.py runserver
 ```
 
-Copiá `.env.example` a `.env` y completá los valores. Los catálogos (licencias, novedades, tipos de documento) se cargan solos al correr `migrate`.
+Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulos se cargan con `seed_catalogos` / `seed_modulos` (idempotentes; también los corre `build.sh` en cada deploy).
 
 - Panel interno: `http://localhost:8000/panel/` (requiere login).
 - Wizard de cliente: se accede vía el link único que genera el panel (`/r/<token>/`), no tiene login.

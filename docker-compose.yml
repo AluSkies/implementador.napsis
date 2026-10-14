@@ -1,0 +1,26 @@
+# Una sola instancia de la app. La base MySQL es la que ya tiene Napsis (no se
+# levanta una acá): se configura por MYSQL_* en .env.docker.
+services:
+  app:
+    build: .
+    image: ${NAPSIS_IMAGE:-ghcr.io/aluskies/implementador-napsis:latest}
+    env_file: .env.docker
+    # Solo accesible desde el propio host: el proxy reverso de Napsis es quien
+    # recibe el tráfico público (80/443) y lo reenvía acá. Cambialo si el proxy
+    # corre en otra máquina o red de Docker.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - media:/app/media
+    restart: unless-stopped
+    healthcheck:
+      # Chequeo por TCP: un GET desde adentro llegaría con Host=127.0.0.1 y
+      # Django lo rechazaría (400) por ALLOWED_HOSTS aunque la app esté sana.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  media:

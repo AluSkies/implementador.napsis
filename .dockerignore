@@ -1,0 +1,18 @@
+# Nada de esto tiene que terminar dentro de la imagen.
+.git
+.github
+.claude
+venv
+__pycache__
+*.pyc
+.env
+.env.*
+db.sqlite3*
+media
+staticfiles
+# Planillas de relevamiento originales: contienen CUIL/DNI/nombres reales.
+*.xlsx
+# Archivos de Docker (no hacen falta adentro)
+Dockerfile
+docker-compose.yml
+.dockerignore
