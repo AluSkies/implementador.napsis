@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:60px auto;">
+    <h1>Recuperar contraseña</h1>
+    <p class="muted">Ingresá el mail con el que te registraron y te mandamos un link para crear una contraseña nueva.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="actions">
+            <button class="btn" type="submit">Enviar link</button>
+            <a class="btn secondary" href="{% url 'login' %}">Volver</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

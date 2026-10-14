@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:60px auto;">
+    <h1>Contraseña guardada</h1>
+    <p>Ya podés ingresar con tu usuario y tu contraseña nueva.</p>
+    <div class="actions"><a class="btn" href="{% url 'login' %}">Ingresar</a></div>
+</div>
+{% endblock %}

@@ -130,7 +130,11 @@
             <div class="alta-field">
                 <label for="username">Usuario para que el cliente inicie sesión</label>
                 <input type="text" name="username" id="username" value="{{ alta.valores.username|default:'' }}" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
-                <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la implementación.</p>
+            </div>
+            <div class="alta-field">
+                <label for="mail_cliente">Mail del cliente <span class="muted">(opcional)</span></label>
+                <input type="email" name="mail_cliente" id="mail_cliente" value="{{ alta.valores.mail_cliente|default:'' }}" placeholder="contacto@empresa.com">
+                <p class="muted">Con mail, el cliente recibe un link para crear su propia contraseña. Sin mail, la contraseña se genera sola y se muestra una única vez después de crear la implementación.</p>
             </div>
 
             <div class="alta-field">

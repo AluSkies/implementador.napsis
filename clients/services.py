@@ -13,10 +13,14 @@ def generar_password():
     return get_random_string(10, allowed_chars="abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789")
 
 
-def crear_o_resetear_acceso(cliente, username=None):
+def crear_o_resetear_acceso(cliente, username=None, email=""):
     """Crea (o resetea la contraseña de) la cuenta con la que el cliente inicia sesión.
-    Devuelve (username, password_en_claro) — la contraseña solo se puede ver esta vez."""
-    password = generar_password()
+    Devuelve (username, password_en_claro) — la contraseña solo se puede ver esta vez.
+
+    Si es una cuenta nueva y se da un `email`, queda sin contraseña (no hay nada que pasar a
+    mano): el cliente la crea con el link de la invitación y la password devuelta es None."""
+    invitar = bool(email) and not cliente.usuario
+    password = None if invitar else generar_password()
 
     if cliente.usuario:
         cliente.usuario.set_password(password)
@@ -31,7 +35,9 @@ def crear_o_resetear_acceso(cliente, username=None):
         sufijo += 1
         candidato = f"{base}{sufijo}"
 
-    usuario = User.objects.create_user(username=candidato, password=password, is_staff=False)
+    usuario = User.objects.create_user(
+        username=candidato, password=password, email=email if invitar else "", is_staff=False,
+    )
     cliente.usuario = usuario
     cliente.save(update_fields=["usuario"])
     return usuario.username, password

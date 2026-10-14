@@ -6,6 +6,7 @@
         {% csrf_token %}
         {{ form.as_p }}
         <input type="hidden" name="next" value="{{ next }}">
+        <p class="muted"><a href="{% url 'clave_recuperar' %}">¿Olvidaste tu contraseña?</a></p>
         <div class="actions"><button class="btn" type="submit">Ingresar</button></div>
     </form>
 </div>

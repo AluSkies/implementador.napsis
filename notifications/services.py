@@ -2,9 +2,12 @@ import logging
 
 import requests
 from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +93,72 @@ def notificar_implementacion_completa(implementacion, request=None):
 def notificar_revision_solicitada(implementacion, request=None):
     """El cliente pidió que lo contacten: avisa por mail al equipo de implementación."""
     contexto = {
-        "razon_social": implementacion.cliente.nombre,
+        "razon_social": implementacion.cliente.razon_social or implementacion.cliente.nombre,
         "mensaje": implementacion.revision_mensaje,
         "detalle_url": _detalle_url(implementacion, request),
     }
     _enviar_mail_equipo(
         f"Pedido de contacto: {implementacion.cliente.nombre}",
         "notifications/mail_revision_solicitada.txt", contexto, _destinatarios(implementacion),
+    )
+
+
+def _base_url(request=None):
+    return (request.build_absolute_uri("/") if request else settings.SITE_BASE_URL).rstrip("/")
+
+
+def mail_del_cliente(implementacion):
+    """A dónde escribirle al cliente: el mail de contacto de la implementación o, si no, el de
+    su cuenta. Vacío si no hay ninguno (en ese caso no se le manda nada)."""
+    usuario = implementacion.cliente.usuario
+    return implementacion.mail_contacto or (usuario.email if usuario else "")
+
+
+def _enviar_mail_cliente(asunto, template, contexto, destinatario):
+    if not destinatario:
+        logger.info("El cliente no tiene mail cargado; se omite: %s", asunto)
+        return
+    send_mail(
+        subject=asunto, message=render_to_string(template, contexto),
+        from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[destinatario], fail_silently=False,
+    )
+
+
+def enviar_invitacion(usuario, request=None):
+    """Le manda al cliente un link para crear (o cambiar) su contraseña. El link vence a los
+    `PASSWORD_RESET_TIMEOUT` segundos y se anula al usarlo. No toca la contraseña actual."""
+    base = _base_url(request)
+    link = base + reverse("clave_confirmar", kwargs={
+        "uidb64": urlsafe_base64_encode(force_bytes(usuario.pk)),
+        "token": default_token_generator.make_token(usuario),
+    })
+    _enviar_mail_cliente(
+        "Tu acceso al Portal de Implementación de Napsis", "notifications/mail_invitacion.txt",
+        {"usuario": usuario, "link": link, "login_url": base + reverse("login"),
+         "dias": settings.PASSWORD_RESET_TIMEOUT // 86400},
+        usuario.email,
+    )
+
+
+def notificar_cliente_relevamiento_recibido(implementacion, request=None):
+    """Confirma al cliente que Napsis recibió su relevamiento."""
+    cliente = implementacion.cliente
+    _enviar_mail_cliente(
+        "Recibimos tu información", "notifications/mail_cliente_recibido.txt",
+        {"razon_social": cliente.razon_social or cliente.nombre, "implementador": implementacion.asignado_nombre,
+         "link": _base_url(request) + reverse("login")},
+        mail_del_cliente(implementacion),
+    )
+
+
+def notificar_cliente_implementacion_cumplida(implementacion, request=None):
+    """Le avisa al cliente que su implementación está lista."""
+    cliente = implementacion.cliente
+    _enviar_mail_cliente(
+        "Tu implementación está lista", "notifications/mail_cliente_cumplida.txt",
+        {"razon_social": cliente.razon_social or cliente.nombre, "implementador": implementacion.asignado_nombre,
+         "link": _base_url(request) + reverse("login")},
+        mail_del_cliente(implementacion),
     )
 
 

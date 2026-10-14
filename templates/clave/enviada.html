@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:60px auto;">
+    <h1>Revisá tu mail</h1>
+    <p>Si el mail corresponde a una cuenta, te mandamos un link para crear tu contraseña. Puede tardar unos minutos; fijate también en spam.</p>
+    <div class="actions"><a class="btn secondary" href="{% url 'login' %}">Volver al ingreso</a></div>
+</div>
+{% endblock %}

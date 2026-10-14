@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:60px auto;">
+    {% if validlink %}
+        <h1>Creá tu contraseña</h1>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <div class="actions"><button class="btn" type="submit">Guardar contraseña</button></div>
+        </form>
+    {% else %}
+        <h1>El link no es válido</h1>
+        <p>Venció o ya se usó. Pedí uno nuevo y te lo mandamos por mail.</p>
+        <div class="actions"><a class="btn" href="{% url 'clave_recuperar' %}">Pedir un link nuevo</a></div>
+    {% endif %}
+</div>
+{% endblock %}

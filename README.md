@@ -11,7 +11,7 @@ Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis.
 - `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Se cargan con `manage.py seed_catalogos` (a partir del relevamiento original), no con una migración.
 - `onboarding/` — el wizard público (9 pasos) y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
 - `employees/` — Empleado, ImportBatch (ambos FK a Implementacion), parser/validador de la plantilla masiva (`employees/services.py`) y generador de la plantilla vacía descargable.
-- `notifications/` — envío del mail de resumen y del mail de "pedido de contacto" al equipo de implementación, y el POST a un webhook de Google Apps Script para el dump a Sheets.
+- `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones), y el POST a un webhook de Google Apps Script para el dump a Sheets.
 - `dashboard/` — panel interno con login: listado de implementaciones, ficha de cliente con su historial, generación de links, anular/reiniciar una implementación, atender pedidos de revisión.
 
 Todos los datos que se completan en el wizard (roles, sucursales, módulos, licencias, novedades, documentos de legajo, empleados) cuelgan de `Implementacion`, no de `Cliente` — así una misma empresa puede repetir el proceso en el futuro sin arrastrar datos de una ronda anterior.
@@ -112,6 +112,17 @@ En el alta del panel estas condiciones están plegadas bajo **Opciones avanzadas
 **Fecha de implementación.** En el paso 9 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
 
 Cada implementación tiene un **implementador asignado** (por defecto quien la crea, se elige en el alta y se puede reasignar). Es quien lleva la implementación y, además de la lista `IMPLEMENTATION_TEAM_EMAILS`, recibe sus notificaciones.
+
+## Mails
+
+**Al equipo** (`IMPLEMENTATION_TEAM_EMAILS` + el implementador asignado): resumen cuando el cliente envía su relevamiento, y pedido de contacto.
+
+**Al cliente:**
+- *Invitación*: si en el alta se carga el **mail del cliente**, la cuenta nace sin contraseña y le llega un link para crearla (vale 7 días, se usa una sola vez). Sin mail, la contraseña se genera y el implementador la ve una única vez, como antes. Desde la ficha se puede reenviar el link ("Enviar mail para crear contraseña"); no cambia la contraseña actual hasta que el cliente lo use.
+- *Olvidé mi contraseña*: en el login, `/clave/olvide/`. Funciona con el mail guardado en la cuenta.
+- *Confirmaciones*: "Recibimos tu información" al enviar el relevamiento y "Tu implementación está lista" al marcarla cumplida. Van al mail de contacto de la implementación o, si no tiene, al de la cuenta; si no hay ninguno, no se manda nada.
+
+Un mail que falla (SMTP caído) nunca rompe el flujo: queda en el log y, en el panel, se avisa para reenviarlo a mano.
 
 ## Cómo probar el flujo completo
 

@@ -1,0 +1,13 @@
+Hola,
+
+Te damos la bienvenida al Portal de Implementación de Napsis.
+
+Para empezar, creá tu contraseña desde este link (vale {{ dias }} días y se puede usar una sola vez):
+{{ link }}
+
+Tu usuario es: {{ usuario.username }}
+Después vas a poder ingresar siempre desde: {{ login_url }}
+
+Si no esperabas este mail, podés ignorarlo.
+
+Equipo de Implementación Napsis

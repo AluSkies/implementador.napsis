@@ -1,6 +1,9 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+import logging
+
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_date
@@ -26,6 +29,8 @@ from onboarding.forms import (
     SucursalFormSet,
 )
 
+from notifications.services import enviar_invitacion, notificar_cliente_implementacion_cumplida
+
 from . import services as cuentas
 from .forms import ImplementadorAltaForm, ImplementadorEdicionForm
 from .permisos import admin_requerido
@@ -37,6 +42,68 @@ def _avisar_credenciales(request, titulo, username, password):
         request,
         f"{titulo} — usuario: {username} / contraseña: {password} (anotala ahora, no se vuelve a mostrar).",
     )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _entregar_acceso(request, cliente, username_deseado, mail=""):
+    """Crea o reinicia el acceso del cliente. Con un mail (y cuenta nueva) lo invita a crear
+    su propia contraseña; si no, genera una y se la muestra al equipo una única vez."""
+    era_nueva = not cliente.usuario
+    username, password = crear_o_resetear_acceso(cliente, username_deseado, email=mail)
+    if password:
+        _avisar_credenciales(
+            request, "Acceso creado para el cliente" if era_nueva else "Nueva contraseña generada", username, password,
+        )
+    else:
+        _enviar_invitacion(request, cliente.usuario)
+
+
+def _enviar_invitacion(request, usuario):
+    """Manda el link para crear/cambiar la contraseña. Si el mail falla no se pierde nada:
+    el aviso lo dice y se puede reenviar desde la ficha."""
+    try:
+        enviar_invitacion(usuario, request=request)
+    except Exception:
+        logger.exception("No se pudo enviar la invitación al usuario %s", usuario.pk)
+        messages.warning(
+            request,
+            f"No se pudo enviar el mail a {usuario.email}. Usuario: {usuario.username}. "
+            "Probá de nuevo desde la ficha con «Enviar mail para crear contraseña».",
+        )
+    else:
+        messages.success(
+            request, f"Le mandamos a {usuario.email} un mail para que cree su contraseña (usuario: {usuario.username}).",
+        )
+
+
+def _mail_valido(request):
+    """El mail opcional del formulario de acceso: "" si no vino, None (y avisa) si es inválido."""
+    mail = request.POST.get("mail_cliente", "").strip()
+    if mail:
+        try:
+            validate_email(mail)
+        except ValidationError:
+            messages.error(request, "El mail no es válido.")
+            return None
+    return mail
+
+
+def _invitar_desde_panel(request, cliente, implementacion=None):
+    """Reenvía el link para crear/cambiar la contraseña al mail de la cuenta (o, si la cuenta
+    no tiene, al de contacto de la implementación, que queda guardado en la cuenta)."""
+    usuario = cliente.usuario
+    if not usuario:
+        messages.error(request, "El cliente todavía no tiene acceso creado.")
+        return
+    if not usuario.email and implementacion and implementacion.mail_contacto:
+        usuario.email = implementacion.mail_contacto
+        usuario.save(update_fields=["email"])
+    if not usuario.email:
+        messages.error(request, "No hay un mail cargado para este cliente: completalo en los datos de contacto.")
+        return
+    _enviar_invitacion(request, usuario)
 
 
 def _implementador_elegido(request):
@@ -84,6 +151,13 @@ def _alta_de_implementacion(request, condiciones_form):
         detalle = " ".join(e for lista in condiciones_form.errors.values() for e in lista)
         return None, [f"Revisá las condiciones del proceso: {detalle}"]
 
+    mail_cliente = request.POST.get("mail_cliente", "").strip()
+    if mail_cliente:
+        try:
+            validate_email(mail_cliente)
+        except ValidationError:
+            return None, ["El mail del cliente no es válido."]
+
     cliente = None
     if cliente_id and cliente_id.isdigit():
         cliente = Cliente.objects.filter(pk=cliente_id).first()
@@ -102,12 +176,11 @@ def _alta_de_implementacion(request, condiciones_form):
         return None, errores or ["Elegí un cliente existente o completá el nombre de la empresa."]
 
     if not cliente.usuario:
-        username_deseado = request.POST.get("username", "").strip()
-        username, password = crear_o_resetear_acceso(cliente, username_deseado)
-        _avisar_credenciales(request, "Acceso creado para el cliente", username, password)
+        _entregar_acceso(request, cliente, request.POST.get("username", "").strip(), mail_cliente)
 
     implementacion = Implementacion(
         cliente=cliente, creado_por=request.user, implementador_asignado=_implementador_elegido(request),
+        mail_contacto=mail_cliente,  # el paso 1 del cliente ya lo trae cargado
         modulos_editables_por_cliente=bool(request.POST.get("modulos_editables")),
     )
     condiciones_form.aplicar(implementacion)
@@ -164,9 +237,13 @@ def cliente_detalle(request, pk):
     cliente = get_object_or_404(Cliente, pk=pk)
 
     if request.method == "POST" and request.POST.get("accion") == "regenerar_acceso":
-        username_deseado = request.POST.get("username", "").strip()
-        username, password = crear_o_resetear_acceso(cliente, username_deseado)
-        _avisar_credenciales(request, "Nueva contraseña generada", username, password)
+        mail = _mail_valido(request)
+        if mail is not None:
+            _entregar_acceso(request, cliente, request.POST.get("username", "").strip(), mail)
+        return redirect("dashboard:cliente_detalle", pk=pk)
+
+    if request.method == "POST" and request.POST.get("accion") == "enviar_invitacion":
+        _invitar_desde_panel(request, cliente)
         return redirect("dashboard:cliente_detalle", pk=pk)
 
     implementaciones = cliente.implementaciones.order_by("-creado")
@@ -300,6 +377,11 @@ def _manejar_accion_implementacion(request, implementacion):
 
     if accion == "marcar_cumplida":
         implementacion.marcar_cumplida()
+        try:
+            notificar_cliente_implementacion_cumplida(implementacion, request=request)
+        except Exception:
+            logger.exception("No se pudo avisar al cliente que la implementación %s está lista", pk)
+            messages.warning(request, "Quedó cumplida, pero no se pudo avisarle al cliente por mail.")
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     if accion == "atender_revision":
@@ -314,9 +396,13 @@ def _manejar_accion_implementacion(request, implementacion):
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     if accion == "regenerar_acceso":
-        username_deseado = request.POST.get("username", "").strip()
-        username, password = crear_o_resetear_acceso(implementacion.cliente, username_deseado)
-        _avisar_credenciales(request, "Nueva contraseña generada", username, password)
+        mail = _mail_valido(request)
+        if mail is not None:
+            _entregar_acceso(request, implementacion.cliente, request.POST.get("username", "").strip(), mail)
+        return redirect("dashboard:implementacion_detalle", pk=pk)
+
+    if accion == "enviar_invitacion":
+        _invitar_desde_panel(request, implementacion.cliente, implementacion)
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     return None

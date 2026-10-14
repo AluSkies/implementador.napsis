@@ -1,0 +1,8 @@
+Hola,
+
+La implementación de {{ razon_social }} ya está lista.
+
+Cualquier duda, escribinos{% if implementador %} o consultale a {{ implementador }}{% endif %}.
+Podés ingresar al portal desde: {{ link }}
+
+Equipo de Implementación Napsis

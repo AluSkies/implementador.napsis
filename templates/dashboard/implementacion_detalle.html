@@ -44,11 +44,21 @@
         {% if not cliente.usuario %}
             <label for="username_acceso">Usuario</label>
             <input type="text" name="username" id="username_acceso" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
+            <label for="mail_username_acceso">Mail del cliente <span class="muted">(opcional)</span></label>
+            <input type="email" name="mail_cliente" id="mail_username_acceso" placeholder="Si lo cargás, le llega un mail para crear su contraseña">
             <div class="actions"><button class="btn secondary" type="submit">Crear acceso</button></div>
         {% else %}
             <div class="actions"><button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button></div>
         {% endif %}
     </form>
+    {% if cliente.usuario %}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="enviar_invitacion">
+        <div class="actions"><button class="btn secondary" type="submit">Enviar mail para crear contraseña</button></div>
+        <p class="muted">Va a {% if cliente.usuario.email %}{{ cliente.usuario.email }}{% else %}el mail de contacto de la implementación{% endif %}. No cambia la contraseña actual hasta que el cliente use el link.</p>
+    </form>
+    {% endif %}
 
     <div class="actions">
         {% if implementacion.estado != "cancelada" %}

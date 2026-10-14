@@ -13,7 +13,11 @@ from clients.models import Implementacion, Modulo
 from clients.services import resumen_implementacion
 from employees.forms import EmpleadoForm, ImportarArchivoForm
 from employees.services import generar_plantilla_xlsx
-from notifications.services import notificar_implementacion_completa, notificar_revision_solicitada
+from notifications.services import (
+    notificar_cliente_relevamiento_recibido,
+    notificar_implementacion_completa,
+    notificar_revision_solicitada,
+)
 
 from . import services
 from .forms import (
@@ -130,7 +134,10 @@ def _vista_solo_lectura(request, implementacion, recien_enviado=False):
         form = PedirRevisionForm(request.POST)
         if form.is_valid():
             implementacion.pedir_revision(form.cleaned_data.get("mensaje", ""))
-            notificar_revision_solicitada(implementacion, request=request)
+            try:
+                notificar_revision_solicitada(implementacion, request=request)
+            except Exception:
+                logger.exception("No se pudo avisar al equipo el pedido de contacto de %s", implementacion.pk)
             messages.success(request, "Le avisamos al equipo de Napsis que necesitás que te contacten.")
             return redirect("onboarding:wizard_step", token=implementacion.token, step=1)
     else:
@@ -400,6 +407,10 @@ def _step_revision(request, implementacion, step):
                 notificar_implementacion_completa(implementacion, request=request)
             except Exception:
                 logger.exception("No se pudo notificar al equipo la implementación %s", implementacion.pk)
+            try:
+                notificar_cliente_relevamiento_recibido(implementacion, request=request)
+            except Exception:
+                logger.exception("No se pudo confirmar al cliente la implementación %s", implementacion.pk)
             return redirect("onboarding:enviado", token=implementacion.token)
 
     resumen = {

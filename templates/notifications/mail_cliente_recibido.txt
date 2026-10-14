@@ -1,0 +1,9 @@
+Hola,
+
+Recibimos la información de {{ razon_social }}. ¡Gracias por completarla!
+
+El equipo de Napsis la va a revisar{% if implementador %} y {{ implementador }} se va a poner en contacto con vos para los próximos pasos{% endif %}.
+
+Podés volver a ver lo que enviaste cuando quieras: {{ link }}
+
+Equipo de Implementación Napsis

@@ -4,11 +4,15 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView, PasswordChangeView
+from django.contrib.auth.views import (
+    LoginView, PasswordChangeView, PasswordResetCompleteView, PasswordResetConfirmView,
+    PasswordResetDoneView, PasswordResetView,
+)
 from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.urls import reverse_lazy
 
+from .forms import RecuperarClaveForm
 from .models import Implementacion
 
 
@@ -22,6 +26,32 @@ class PerfilView(LoginRequiredMixin, PasswordChangeView):
     def form_valid(self, form):
         messages.success(self.request, "Tu contraseña se cambió correctamente.")
         return super().form_valid(form)
+
+
+class RecuperarClaveView(PasswordResetView):
+    """"Olvidé mi contraseña": manda un link por mail (vale lo mismo que el de la invitación)."""
+
+    template_name = "clave/recuperar.html"
+    email_template_name = "clave/mail_recuperar.txt"
+    subject_template_name = "clave/mail_recuperar_asunto.txt"
+    form_class = RecuperarClaveForm
+    success_url = reverse_lazy("clave_enviada")
+
+
+class ClaveEnviadaView(PasswordResetDoneView):
+    template_name = "clave/enviada.html"
+
+
+class ClaveConfirmarView(PasswordResetConfirmView):
+    """Donde cae el link del mail: sirve tanto para crear la contraseña (invitación) como
+    para cambiarla. Al terminar manda al login."""
+
+    template_name = "clave/confirmar.html"
+    success_url = reverse_lazy("clave_lista")
+
+
+class ClaveListaView(PasswordResetCompleteView):
+    template_name = "clave/lista.html"
 
 
 class PortalLoginView(LoginView):
