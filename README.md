@@ -28,19 +28,21 @@ venv/Scripts/python manage.py createsuperuser
 venv/Scripts/python manage.py runserver
 ```
 
-Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulos se cargan con `seed_catalogos` / `seed_modulos` (idempotentes; también los corre `build.sh` en cada deploy).
+Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulos se cargan con `seed_catalogos` / `seed_modulos` (idempotentes; el entrypoint de Docker y `deploy/deploy.sh` los corren en cada arranque/deploy).
 
 - Panel interno: `http://localhost:8000/panel/` (requiere login).
 - Wizard de cliente: se accede vía el link único que genera el panel (`/r/<token>/`), no tiene login.
 
 ## Variables de entorno (`.env`)
 
-- `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`
+- `DJANGO_SECRET_KEY` — **obligatoria con `DJANGO_DEBUG=false`** (sin ella la app no arranca). `DJANGO_DEBUG` (default `false`; en dev ya viene en `true` por el `.env`).
+- `DJANGO_ALLOWED_HOSTS` y `DJANGO_CSRF_TRUSTED_ORIGINS` (con `https://`) — el dominio real; sin ellos hay 400/403.
 - `DJANGO_EMAIL_BACKEND` (usa el backend de consola en dev; en producción configurar SMTP con `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, etc.)
 - `IMPLEMENTATION_TEAM_EMAILS` — lista separada por comas que recibe el mail de resumen al completarse una implementación.
 - `GOOGLE_SHEETS_WEBHOOK_URL` — URL del Google Apps Script Web App que appendea la fila al Sheet de seguimiento (ver abajo). Si queda vacío, ese paso se omite (se loggea, no rompe el flujo).
 - `SITE_BASE_URL` — usado para armar links absolutos en los mails cuando no hay `request` disponible.
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT` — opcionales. Si `POSTGRES_DB` está seteado, la app usa Postgres en vez de SQLite (ver "Producción / self-hosting").
+- `MYSQL_DB`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`, `MYSQL_PORT` — la base en producción. Si `MYSQL_DB` no está seteado, la app usa SQLite (desarrollo y tests).
+- `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`, `DJANGO_SUPERUSER_EMAIL` — opcionales; `manage.py ensure_superuser` crea ese superusuario si no existe (útil donde no hay shell).
 
 ## Integración con Google Sheets
 
@@ -50,24 +52,27 @@ El envío final hace un `POST` con JSON al `GOOGLE_SHEETS_WEBHOOK_URL`. Para arm
 2. Extensiones → Apps Script, y publicar un `doPost(e)` que parsee `e.postData.contents` (JSON) y haga `sheet.appendRow([...])` con los campos que se necesiten (el payload incluye: razón social, CUIT, mail/teléfono de contacto, módulos, licencias, novedades, documentos activos, cantidad de empleados/sucursales, roles).
 3. Implementar como aplicación web (acceso "Cualquier usuario"), copiar la URL del deployment y pegarla en `GOOGLE_SHEETS_WEBHOOK_URL`.
 
-## Producción / self-hosting
+## Producción
 
-Corre directo sobre el hardware/VM que asigne Infra, sin Docker — si más adelante deciden containerizarlo igual pueden, pero no es un requisito de la app.
+Motor de base de datos: **MySQL 8+** (`utf8mb4`, driver PyMySQL). Hay dos formas de desplegarlo, con la misma app:
 
-- `DEBUG=false`, `DJANGO_ALLOWED_HOSTS` con el dominio/IP real.
-- Base de datos: seteando `POSTGRES_DB` (+ `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST`, `POSTGRES_PORT`) en el entorno, la app usa Postgres automáticamente en vez de SQLite — no hace falta tocar código. `psycopg2-binary` ya está en `requirements.txt`.
-- Server WSGI: `gunicorn` ya está en `requirements.txt`. Se levanta con `gunicorn config.wsgi:application --bind 127.0.0.1:8000` (puerto interno — no expuesto directo a internet).
-- Reverse proxy: como ese server ya sirve el dominio y el portal Napsis, la forma esperada de integrarlo es que el webserver que ya está corriendo (IIS/nginx/Apache, lo que usen) haga de reverse proxy hacia `127.0.0.1:8000` (por subdominio o path), igual que cualquier otro servicio que ya convivan ahí. La app no necesita ni intenta pelear por el puerto 80/443.
-- Estáticos: correr `python manage.py collectstatic` antes de arrancar, y servir `STATIC_ROOT` (`staticfiles/`) desde el mismo reverse proxy.
-- `MEDIA_ROOT` (`media/`) necesita un volumen/carpeta persistente — ahí quedan los adjuntos (banners, modelos de recibo, documentos de legajo, archivos de importación).
-- Proceso persistente: en Linux, un servicio `systemd` corriendo gunicorn (con `--workers` según CPU) es lo estándar; en Windows Server, la alternativa más simple a gunicorn es `waitress` (`pip install waitress`, `waitress-serve --port=8000 config.wsgi:application`) corriendo como servicio de Windows (NSSM o similar).
-- SMTP real para el envío de mails (hoy usa el backend de consola en dev).
+- **Docker** (`deploy/DOCKER.md`): un contenedor con Gunicorn contra el MySQL existente. El CI (`.github/workflows/docker.yml`) corre los tests y publica la imagen en `ghcr.io`.
+- **Directo sobre Ubuntu** (`deploy/README.md`): systemd + nginx + MySQL, con el tuning de recursos incluido.
+
+En ambos casos:
+
+- `DJANGO_DEBUG=false` y las variables obligatorias de arriba (el contenedor valida que estén todas y avisa cuáles faltan).
+- El proxy reverso (que pone el TLS) reenvía el dominio a Gunicorn conservando `Host` y `X-Forwarded-Proto`. Se pide un subdominio propio, separado del portal WordPress.
+- Estáticos: los sirve la propia app (WhiteNoise, tras `collectstatic`); no hace falta configurarlos en el proxy.
+- Adjuntos subidos (`MEDIA_ROOT`, `media/`): requieren un volumen/carpeta persistente y entrar en el backup. Los sirve la app con login (`/media/`): el equipo ve cualquiera y un cliente solo los suyos. **No publicar `/media/` desde el proxy.**
+- Después de cada `migrate` hay que correr `seed_catalogos` y `seed_modulos` (idempotentes).
+- SMTP real para los mails (en dev se usa el backend de consola).
 
 ## Cómo probar el flujo completo
 
 1. Entrar a `/panel/`, loguearse, crear una implementación (elegís un Cliente existente o cargás uno nuevo con Nombre + CUIT(s); esto genera el link único).
 2. Abrir el link generado en una pestaña sin sesión (simula al cliente) y completar los 9 pasos.
 3. En el paso de empleados, se puede descargar la plantilla vacía, completarla y subirla, o cargar empleados a mano.
-4. Al enviar el paso 9, la implementación pasa a estado "Cumplida", se dispara el mail (visible en consola en dev) y el POST a Sheets si está configurado.
+4. Al enviar el paso 9, la implementación queda "Pendiente - Completo por cliente" (el cliente ya cargó todo; sigue pendiente porque el trabajo de implementar es del equipo), se dispara el mail (visible en consola en dev) y el POST a Sheets si está configurado. Pasa a "Cumplida" recién cuando el equipo la marca como cumplida desde el panel.
 5. Con el mismo link, el cliente puede volver a entrar y ver todo en solo lectura, y pedir que lo contacten ("Pedir que me contacten") — eso también manda un mail al equipo.
 6. Desde `/panel/`, en la ficha de la implementación, se puede reiniciar el link, anular la implementación (pasa a "Cancelada" y el cliente ya no puede completarla), y marcar como atendido un pedido de contacto.

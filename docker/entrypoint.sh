@@ -14,16 +14,12 @@ for var in DJANGO_SECRET_KEY DJANGO_ALLOWED_HOSTS DJANGO_CSRF_TRUSTED_ORIGINS SI
     [ -n "$valor" ] || faltan="$faltan $var"
 done
 
-# Base de datos: sin ninguna, Django caería en silencio a un SQLite DENTRO del
+# Base de datos: sin MYSQL_*, Django caería en silencio a un SQLite DENTRO del
 # contenedor y los datos se perderían en cada reinicio.
-if [ -n "${MYSQL_DB:-}" ]; then
-    for var in MYSQL_USER MYSQL_PASSWORD MYSQL_HOST; do
-        eval "valor=\${$var:-}"
-        [ -n "$valor" ] || faltan="$faltan $var"
-    done
-elif [ -z "${DATABASE_URL:-}" ] && [ -z "${POSTGRES_DB:-}" ]; then
-    faltan="$faltan MYSQL_DB MYSQL_USER MYSQL_PASSWORD MYSQL_HOST"
-fi
+for var in MYSQL_DB MYSQL_USER MYSQL_PASSWORD MYSQL_HOST; do
+    eval "valor=\${$var:-}"
+    [ -n "$valor" ] || faltan="$faltan $var"
+done
 
 if [ -n "$faltan" ]; then
     echo "ERROR: faltan variables de entorno obligatorias:$faltan" >&2

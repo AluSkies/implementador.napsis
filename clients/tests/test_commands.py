@@ -21,7 +21,7 @@ class SeedModulosCommandTests(TestCase):
 
 class EnsureSuperuserCommandTests(TestCase):
     """Reemplaza a `createsuperuser` interactivo en plataformas sin shell
-    (ej. Render free) — se corre en cada deploy, así que tiene que ser
+    (ej. un contenedor) — se corre en cada deploy, así que tiene que ser
     idempotente y no pisar una contraseña ya cambiada desde el admin."""
 
     def _run(self, **env):

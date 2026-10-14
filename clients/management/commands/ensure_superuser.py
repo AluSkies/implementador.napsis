@@ -1,6 +1,6 @@
 """Crea el superusuario inicial del panel a partir de variables de entorno.
 
-Pensado para plataformas sin shell interactivo (ej. Render free) donde
+Pensado para entornos sin shell interactivo (ej. un contenedor) donde
 `manage.py createsuperuser` no se puede correr a mano. Es seguro correrlo en
 cada deploy: si el usuario ya existe, no lo toca (no pisa una contraseña que
 ya se haya cambiado desde el admin).

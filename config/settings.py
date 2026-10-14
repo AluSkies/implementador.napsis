@@ -6,7 +6,6 @@ import os
 import sys
 from pathlib import Path
 
-import dj_database_url
 import dotenv
 from django.core.exceptions import ImproperlyConfigured
 
@@ -32,8 +31,8 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 CSRF_TRUSTED_ORIGINS = [h for h in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if h]
 
-# Render (y cualquier proxy) termina TLS y reenvía la petición a Django por HTTP
-# plano, indicando el esquema original en este header.
+# El proxy reverso termina TLS y reenvía la petición a Django por HTTP plano,
+# indicando el esquema original en este header.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
@@ -89,9 +88,8 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
-# En producción, si Infra define MYSQL_DB o POSTGRES_DB se usa esa base en
-# lugar de SQLite (MySQL es el motor real de Napsis; Postgres queda para
-# probar rápido en plataformas como Render, que no ofrecen MySQL gratis).
+# En producción se define MYSQL_DB (MySQL es el motor de Napsis) y se usa esa base.
+# Sin esa variable cae a SQLite, que es lo que se usa en desarrollo y en los tests.
 if os.environ.get("MYSQL_DB"):
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.mysql",
@@ -101,19 +99,6 @@ if os.environ.get("MYSQL_DB"):
         "HOST": os.environ.get("MYSQL_HOST", "localhost"),
         "PORT": os.environ.get("MYSQL_PORT", "3306"),
         "OPTIONS": {"charset": "utf8mb4"},
-    }
-elif os.environ.get("DATABASE_URL"):
-    # Render arma esta variable solo al conectar una Postgres al servicio —
-    # más simple que copiar host/user/password/db a mano.
-    DATABASES["default"] = dj_database_url.parse(os.environ["DATABASE_URL"], conn_max_age=600)
-elif os.environ.get("POSTGRES_DB"):
-    DATABASES["default"] = {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ["POSTGRES_DB"],
-        "USER": os.environ.get("POSTGRES_USER", "napsis"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", ""),
-        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 
 
@@ -175,7 +160,7 @@ MAX_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024  # 15MB por adjunto
 
 # Por default, con DEBUG=False Django manda los errores 500 a mail_admins
 # (que no configuramos) en vez de a la consola — quedan "mudos" en los logs
-# de Render/journalctl. Esto asegura que el traceback real se vea ahí.
+# de `docker logs`/journalctl. Esto asegura que el traceback real se vea ahí.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
