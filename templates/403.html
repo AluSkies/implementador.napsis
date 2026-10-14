@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Sin permiso{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px;margin:60px auto;text-align:center;">
+    <h1>No tenés permiso para ver esto</h1>
+    <p class="muted">Esta sección es solo para el rol Admin. Si la necesitás, pedísela al equipo de administración de Napsis.</p>
+    <div class="actions" style="justify-content:center;">
+        <a class="btn" href="{% url 'dashboard:home' %}">Volver al panel</a>
+    </div>
+</div>
+{% endblock %}

@@ -16,6 +16,16 @@ Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis.
 
 Todos los datos que se completan en el wizard (roles, sucursales, módulos, licencias, novedades, documentos de legajo, empleados) cuelgan de `Implementacion`, no de `Cliente` — así una misma empresa puede repetir el proceso en el futuro sin arrastrar datos de una ronda anterior.
 
+## Roles
+
+| Rol | Cuenta | Qué puede |
+|---|---|---|
+| **Admin** | superusuario | Todo lo del implementador, más alta, modificación y baja de implementadores (en el panel, `/panel/implementadores/`). |
+| **Implementador** | staff, sin ser superusuario | Trabajar el panel: implementaciones, clientes, nómina, historial. |
+| **Cliente** | sin `is_staff` | Solo el wizard y la consulta de sus propias implementaciones. |
+
+El primer Admin se crea con `createsuperuser` (o con `ensure_superuser` y `DJANGO_SUPERUSER_*` donde no hay shell). Los implementadores los crea después un Admin desde el panel: la contraseña se genera sola y se muestra una única vez. La baja es lógica (la cuenta no puede ingresar pero se conserva, así no se pierde a quién se atribuyen las implementaciones que creó). Un implementador que entra a una sección de Admin recibe un 403.
+
 ## Puesta en marcha (desarrollo)
 
 ```bash

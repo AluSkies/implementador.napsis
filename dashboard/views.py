@@ -24,6 +24,18 @@ from onboarding.forms import (
     SucursalFormSet,
 )
 
+from . import services as cuentas
+from .forms import ImplementadorAltaForm, ImplementadorEdicionForm
+from .permisos import admin_requerido
+
+
+def _avisar_credenciales(request, titulo, username, password):
+    """Muestra una única vez las credenciales recién generadas (no se vuelven a ver)."""
+    messages.success(
+        request,
+        f"{titulo} — usuario: {username} / contraseña: {password} (anotala ahora, no se vuelve a mostrar).",
+    )
+
 
 def _sort_links(request):
     """Arma, para cada columna ordenable, la URL que alterna asc/desc conservando los demás filtros."""
@@ -63,11 +75,7 @@ def home(request):
             if not cliente.usuario:
                 username_deseado = request.POST.get("username", "").strip()
                 username, password = crear_o_resetear_acceso(cliente, username_deseado)
-                messages.success(
-                    request,
-                    f"Acceso creado para el cliente — usuario: {username} / contraseña: {password} "
-                    "(anotala ahora, no se vuelve a mostrar).",
-                )
+                _avisar_credenciales(request, "Acceso creado para el cliente", username, password)
             implementacion = Implementacion.objects.create(
                 cliente=cliente, creado_por=request.user, modulos_editables_por_cliente=editable
             )
@@ -99,11 +107,7 @@ def cliente_detalle(request, pk):
     if request.method == "POST" and request.POST.get("accion") == "regenerar_acceso":
         username_deseado = request.POST.get("username", "").strip()
         username, password = crear_o_resetear_acceso(cliente, username_deseado)
-        messages.success(
-            request,
-            f"Nueva contraseña generada — usuario: {username} / contraseña: {password} "
-            "(anotala ahora, no se vuelve a mostrar).",
-        )
+        _avisar_credenciales(request, "Nueva contraseña generada", username, password)
         return redirect("dashboard:cliente_detalle", pk=pk)
 
     implementaciones = cliente.implementaciones.order_by("-creado")
@@ -235,11 +239,7 @@ def _manejar_accion_implementacion(request, implementacion):
     if accion == "regenerar_acceso":
         username_deseado = request.POST.get("username", "").strip()
         username, password = crear_o_resetear_acceso(implementacion.cliente, username_deseado)
-        messages.success(
-            request,
-            f"Nueva contraseña generada — usuario: {username} / contraseña: {password} "
-            "(anotala ahora, no se vuelve a mostrar).",
-        )
+        _avisar_credenciales(request, "Nueva contraseña generada", username, password)
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     return None
@@ -316,3 +316,48 @@ def descargar_nomina(request, pk):
         buffer, as_attachment=True, filename=nombre_archivo,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+# --- Rol Admin: gestión de implementadores -------------------------------------
+
+
+@admin_requerido
+def implementadores_lista(request):
+    form = ImplementadorAltaForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        usuario, password = cuentas.crear_implementador(**form.cleaned_data)
+        _avisar_credenciales(request, "Implementador creado", usuario.username, password)
+        return redirect("dashboard:implementadores")
+    return render(
+        request, "dashboard/implementadores.html",
+        {"implementadores": cuentas.implementadores(), "form": form},
+    )
+
+
+@admin_requerido
+def implementador_detalle(request, pk):
+    usuario = get_object_or_404(cuentas.implementadores(), pk=pk)
+    form = ImplementadorEdicionForm(instance=usuario)
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "guardar":
+            form = ImplementadorEdicionForm(request.POST, instance=usuario)
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Datos actualizados.")
+                return redirect("dashboard:implementador_detalle", pk=pk)
+        elif accion == "resetear_password":
+            password = cuentas.resetear_password(usuario)
+            _avisar_credenciales(request, "Nueva contraseña generada", usuario.username, password)
+            return redirect("dashboard:implementador_detalle", pk=pk)
+        elif accion == "dar_de_baja":
+            cuentas.dar_de_baja(usuario)
+            messages.info(request, f"{usuario.username} quedó dado de baja: ya no puede ingresar.")
+            return redirect("dashboard:implementador_detalle", pk=pk)
+        elif accion == "reactivar":
+            cuentas.reactivar(usuario)
+            messages.success(request, f"{usuario.username} volvió a estar activo.")
+            return redirect("dashboard:implementador_detalle", pk=pk)
+
+    return render(request, "dashboard/implementador_detalle.html", {"usuario": usuario, "form": form})

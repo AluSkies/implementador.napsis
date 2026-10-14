@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <p><a href="{% url 'dashboard:implementadores' %}">&larr; Volver a implementadores</a></p>
+    <h1>{{ usuario.username }}</h1>
+    <p>
+        <strong>Estado:</strong> {% if usuario.is_active %}Activo{% else %}Dado de baja (no puede ingresar){% endif %}
+        &nbsp;·&nbsp; <strong>Último ingreso:</strong> {{ usuario.last_login|date:"d/m/Y H:i"|default:"Nunca" }}
+        &nbsp;·&nbsp; <strong>Implementaciones creadas:</strong> {{ usuario.creadas }}
+    </p>
+</div>
+
+<div class="card">
+    <h2>Datos</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="guardar">
+        {{ form.as_p }}
+        <div class="actions"><button class="btn" type="submit">Guardar cambios</button></div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>Acceso</h2>
+    <div class="actions">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="resetear_password">
+            <button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button>
+        </form>
+        <form method="post">
+            {% csrf_token %}
+            {% if usuario.is_active %}
+                <input type="hidden" name="accion" value="dar_de_baja">
+                <button class="btn danger" type="submit" onclick="return confirm('¿Dar de baja a {{ usuario.username }}? Ya no va a poder ingresar (se conserva la cuenta y su historial).')">Dar de baja</button>
+            {% else %}
+                <input type="hidden" name="accion" value="reactivar">
+                <button class="btn" type="submit">Reactivar</button>
+            {% endif %}
+        </form>
+    </div>
+</div>
+{% endblock %}

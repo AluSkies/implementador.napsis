@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <p><a href="{% url 'dashboard:home' %}">&larr; Volver al panel</a></p>
+    <h1>Implementadores</h1>
+    <p class="muted">
+        Cuentas del equipo que trabajan el panel. Un implementador puede hacer todo lo que hace el equipo hoy
+        (implementaciones, clientes, nómina); solo el rol Admin puede administrar estas cuentas.
+    </p>
+    <table>
+        <thead><tr><th>Usuario</th><th>Nombre</th><th>Mail</th><th>Estado</th><th>Último ingreso</th><th>Implementaciones creadas</th><th></th></tr></thead>
+        <tbody>
+        {% for u in implementadores %}
+            <tr>
+                <td>{{ u.username }}</td>
+                <td>{{ u.get_full_name|default:"—" }}</td>
+                <td>{{ u.email|default:"—" }}</td>
+                <td>{% if u.is_active %}Activo{% else %}<span class="muted">Dado de baja</span>{% endif %}</td>
+                <td>{{ u.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</td>
+                <td>{{ u.creadas }}</td>
+                <td><a href="{% url 'dashboard:implementador_detalle' pk=u.pk %}">Ver</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7" class="muted">Todavía no hay implementadores. Creá el primero abajo.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Nuevo implementador</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la cuenta.</p>
+        <div class="actions"><button class="btn" type="submit">Crear implementador</button></div>
+    </form>
+</div>
+{% endblock %}
