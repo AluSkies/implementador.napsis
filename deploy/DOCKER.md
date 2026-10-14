@@ -29,7 +29,8 @@ el superusuario inicial (`DJANGO_SUPERUSER_*`). Los tres pasos son idempotentes.
 
 **Opcionales:** `DJANGO_SUPERUSER_USERNAME/PASSWORD/EMAIL` (superusuario inicial), `MYSQL_PORT`
 (3306 por defecto), las `EMAIL_*` y `DEFAULT_FROM_EMAIL` (sin SMTP no salen mails),
-`IMPLEMENTATION_TEAM_EMAILS` y `GOOGLE_SHEETS_WEBHOOK_URL`. `DJANGO_DEBUG` debe quedar en `false`.
+`IMPLEMENTATION_TEAM_EMAILS` y `GOOGLE_SHEETS_WEBHOOK_URL`, y `TRUSTED_PROXY_COUNT` (ver abajo).
+`DJANGO_DEBUG` debe quedar en `false`.
 
 ## Proxy reverso
 
@@ -49,6 +50,22 @@ location / {
 No hace falta servir `/static/` ni `/media/` aparte: los estáticos los sirve la app (WhiteNoise)
 y los adjuntos también, **con login** — un cliente solo ve los suyos. No publicar `/media/`
 desde el proxy.
+
+## Límite de intentos de login
+
+`/login/` y `/admin/login/` están expuestos a internet, así que la app bloquea la fuerza bruta
+(django-axes): **5 intentos fallidos** con el mismo usuario desde la misma IP bloquean ese par
+por **30 minutos** (un ingreso correcto reinicia la cuenta). Ver `AXES_*` en `config/settings.py`.
+
+- **Necesita la IP real del cliente.** Detrás de un proxy, la app solo ve la IP del proxy: tiene que
+  reenviar `X-Forwarded-For` (el ejemplo de nginx de arriba ya lo hace). `TRUSTED_PROXY_COUNT` es
+  cuántos proxies *propios* hay delante de la app (default `1`; `2` si hay, por ejemplo, un CDN y
+  después nginx). Se toma la entrada N-ésima desde la derecha, así que un `X-Forwarded-For`
+  inventado por el cliente no sirve para evadir el límite. Si el valor no coincide con la
+  realidad, el límite sigue funcionando pero por usuario (no por IP).
+- **Desbloquear a alguien** antes de que pasen los 30 minutos:
+  `docker compose exec app python manage.py axes_reset_username <usuario>`
+  (o `axes_reset` para limpiar todos los bloqueos). También se ven y borran desde `/admin/`.
 
 ## Actualizar a una versión nueva
 

@@ -4,6 +4,7 @@ Django settings for the Portal de Implementación Napsis project.
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import dotenv
@@ -43,6 +44,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "axes",
     "clients",
     "catalog",
     "onboarding",
@@ -60,6 +62,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "axes.middleware.AxesMiddleware",  # siempre al final
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -100,6 +103,26 @@ if os.environ.get("MYSQL_DB"):
         "PORT": os.environ.get("MYSQL_PORT", "3306"),
         "OPTIONS": {"charset": "utf8mb4"},
     }
+
+
+# --- Límite de intentos de login (django-axes) --------------------------------
+# Cubre /login/ y /admin/login/. 5 fallos seguidos con el mismo usuario desde la misma
+# IP bloquean ESE par por 30 minutos; un ingreso correcto reinicia la cuenta. Se cuenta
+# por (IP, usuario) y no por usuario solo para que alguien no pueda dejar afuera a un
+# cliente ajeno mandando intentos con su nombre desde otra IP.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = timedelta(minutes=30)
+AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]
+AXES_RESET_ON_SUCCESS = True
+AXES_LOCKOUT_TEMPLATE = "lockout.html"
+AXES_CLIENT_IP_CALLABLE = "clients.security.ip_del_cliente"
+# Cuántos proxies reverso propios hay delante de la app (ver clients/security.py). En
+# producción siempre hay al menos uno; en desarrollo se corre sin proxy.
+TRUSTED_PROXY_COUNT = int(os.environ.get("TRUSTED_PROXY_COUNT", "0" if DEBUG else "1"))
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -175,6 +198,13 @@ LOGGING = {
         "django.request": {
             "handlers": ["console"],
             "level": "ERROR",
+            "propagate": False,
+        },
+        # Solo avisos: los bloqueos por exceso de intentos quedan en el log, pero no
+        # cada login normal.
+        "axes": {
+            "handlers": ["console"],
+            "level": "WARNING",
             "propagate": False,
         },
     },

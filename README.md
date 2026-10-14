@@ -39,6 +39,7 @@ Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulo
 - `DJANGO_ALLOWED_HOSTS` y `DJANGO_CSRF_TRUSTED_ORIGINS` (con `https://`) — el dominio real; sin ellos hay 400/403.
 - `DJANGO_EMAIL_BACKEND` (usa el backend de consola en dev; en producción configurar SMTP con `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, etc.)
 - `IMPLEMENTATION_TEAM_EMAILS` — lista separada por comas que recibe el mail de resumen al completarse una implementación.
+- `TRUSTED_PROXY_COUNT` — cuántos proxies reverso propios hay delante de la app (default `1` en producción, `0` en desarrollo). Lo usa el límite de intentos de login para saber la IP real del cliente.
 - `GOOGLE_SHEETS_WEBHOOK_URL` — URL del Google Apps Script Web App que appendea la fila al Sheet de seguimiento (ver abajo). Si queda vacío, ese paso se omite (se loggea, no rompe el flujo).
 - `SITE_BASE_URL` — usado para armar links absolutos en los mails cuando no hay `request` disponible.
 - `MYSQL_DB`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`, `MYSQL_PORT` — la base en producción. Si `MYSQL_DB` no está seteado, la app usa SQLite (desarrollo y tests).
@@ -66,6 +67,7 @@ En ambos casos:
 - Estáticos: los sirve la propia app (WhiteNoise, tras `collectstatic`); no hace falta configurarlos en el proxy.
 - Adjuntos subidos (`MEDIA_ROOT`, `media/`): requieren un volumen/carpeta persistente y entrar en el backup. Los sirve la app con login (`/media/`): el equipo ve cualquiera y un cliente solo los suyos. **No publicar `/media/` desde el proxy.**
 - Después de cada `migrate` hay que correr `seed_catalogos` y `seed_modulos` (idempotentes).
+- **Límite de intentos de login** (django-axes): 5 fallos seguidos con el mismo usuario desde la misma IP bloquean ese par por 30 minutos, en `/login/` y `/admin/login/`. Requiere que el proxy reenvíe `X-Forwarded-For` (ver `deploy/DOCKER.md`). Para desbloquear a alguien: `manage.py axes_reset_username <usuario>`.
 - SMTP real para los mails (en dev se usa el backend de consola).
 
 ## Cómo probar el flujo completo
