@@ -300,3 +300,40 @@ class PendientesDeEnvioTests(TestCase):
             PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre="X, Y")
         PersonaRol.objects.create(implementacion=self.implementacion, rol=PersonaRol.ROL_ADMIN_RRHH, apellido_nombre="")
         self.assertIn(3, self._pasos())
+
+
+class DiasHabilesTests(TestCase):
+    """El mínimo para el cliente se cuenta en días hábiles: lunes a viernes, sin descontar
+    feriados (decisión del negocio)."""
+
+    def test_diez_dias_habiles_desde_un_miercoles_son_dos_semanas(self):
+        from datetime import date
+
+        self.assertEqual(services.sumar_dias_habiles(date(2026, 10, 14), 10), date(2026, 10, 28))
+
+    def test_desde_un_viernes_el_primer_dia_habil_es_el_lunes(self):
+        from datetime import date
+
+        self.assertEqual(services.sumar_dias_habiles(date(2026, 10, 16), 1), date(2026, 10, 19))
+
+    def test_desde_un_fin_de_semana_cuenta_desde_el_lunes(self):
+        from datetime import date
+
+        self.assertEqual(services.sumar_dias_habiles(date(2026, 10, 17), 1), date(2026, 10, 19))  # sábado
+        self.assertEqual(services.sumar_dias_habiles(date(2026, 10, 18), 10), date(2026, 10, 30))  # domingo
+
+    def test_cero_dias_es_la_misma_fecha(self):
+        from datetime import date
+
+        self.assertEqual(services.sumar_dias_habiles(date(2026, 10, 14), 0), date(2026, 10, 14))
+
+    def test_la_fecha_minima_del_cliente_son_diez_dias_habiles_desde_hoy(self):
+        from datetime import date
+
+        self.assertEqual(services.fecha_minima_para_cliente(date(2026, 10, 14)), date(2026, 10, 28))
+
+    def test_el_mismo_resultado_cae_siempre_en_dia_habil(self):
+        from datetime import date, timedelta
+
+        for i in range(14):
+            self.assertLess(services.sumar_dias_habiles(date(2026, 10, 1) + timedelta(days=i), 10).weekday(), 5)

@@ -1,6 +1,7 @@
 import secrets
 
 from django.core.serializers.json import DjangoJSONEncoder
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -131,6 +132,17 @@ class Implementacion(models.Model):
 
     telefono = models.CharField("N° de Teléfono", max_length=50, blank=True)
     mail_contacto = models.EmailField("Mail de contacto", blank=True)
+
+    # Qué decide el cliente y qué deja fijo el equipo. Cuando un dato está bloqueado, el
+    # valor lo carga el implementador y el cliente lo ve pero no lo puede cambiar.
+    tipo_firma_editable = models.BooleanField("El cliente puede elegir el tipo de firma", default=True)
+    nomenclatura_editable = models.BooleanField("El cliente puede definir la nomenclatura de los PDF", default=True)
+    segmentacion_editable = models.BooleanField("El cliente puede elegir la segmentación del liquidador", default=True)
+    max_roles = models.PositiveSmallIntegerField(
+        "Máximo de personas con rol", default=6,
+        validators=[MinValueValidator(3), MaxValueValidator(6)],
+        help_text="Cuántas personas puede cargar el cliente en el paso de roles (mínimo 3: uno por rol obligatorio).",
+    )
 
     TIPO_FIRMA_CHOICES = [
         ("electronica", "Electrónica"),
@@ -371,6 +383,7 @@ class ImplementacionVersion(models.Model):
         ("documentos", "Documentos de Legajo"),
         ("empleados", "Empleados"),
         ("fecha_implementacion", "Fecha de implementación"),
+        ("condiciones", "Condiciones del proceso"),
     ]
 
     implementacion = models.ForeignKey(

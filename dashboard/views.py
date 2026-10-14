@@ -12,13 +12,13 @@ from clients.services import (
     COLUMNAS_ORDENABLES,
     crear_o_resetear_acceso,
     filtrar_y_ordenar_implementaciones,
-    guardar_version,
     resumen_implementacion,
 )
 from employees.forms import EmpleadoForm, ImportarArchivoForm
 from employees.services import generar_nomina_xlsx
 from onboarding import services as onboarding_services
 from onboarding.forms import (
+    CondicionesForm,
     DocumentosLegajoForm,
     ImplementacionDatosForm,
     LicenciasNovedadesForm,
@@ -69,43 +69,74 @@ def _sort_links(request):
     return links
 
 
+def _alta_de_implementacion(request, condiciones_form):
+    """Crea la implementación (y la empresa, si es nueva) con lo que llegó del formulario de
+    alta. Devuelve (implementacion, errores): si algo no pasó la validación la implementación
+    es None y `errores` dice por qué (se muestran dentro del modal del alta)."""
+    cliente_id = request.POST.get("cliente_id")
+    nombre_nuevo = request.POST.get("nombre", "").strip()
+    razon_social_nueva = request.POST.get("razon_social", "").strip()
+    cuits_nuevo = request.POST.get("cuits", "").strip()
+    modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
+    errores = []
+
+    if not condiciones_form.is_valid():
+        detalle = " ".join(e for lista in condiciones_form.errors.values() for e in lista)
+        return None, [f"Revisá las condiciones del proceso: {detalle}"]
+
+    cliente = None
+    if cliente_id and cliente_id.isdigit():
+        cliente = Cliente.objects.filter(pk=cliente_id).first()
+    elif nombre_nuevo:
+        # Razón social y CUIT son opcionales acá: si no se cargan, el cliente los
+        # completa (obligatorios) en el paso 1 del wizard.
+        try:
+            cuits_nuevo = normalizar_cuits(cuits_nuevo) if cuits_nuevo else ""
+        except ValidationError as error:
+            errores.append(error.messages[0])
+        else:
+            cliente = Cliente.objects.create(
+                nombre=nombre_nuevo, razon_social=razon_social_nueva, cuits=cuits_nuevo,
+            )
+    if not cliente:
+        return None, errores or ["Elegí un cliente existente o completá el nombre de la empresa."]
+
+    if not cliente.usuario:
+        username_deseado = request.POST.get("username", "").strip()
+        username, password = crear_o_resetear_acceso(cliente, username_deseado)
+        _avisar_credenciales(request, "Acceso creado para el cliente", username, password)
+
+    implementacion = Implementacion(
+        cliente=cliente, creado_por=request.user, implementador_asignado=_implementador_elegido(request),
+        modulos_editables_por_cliente=bool(request.POST.get("modulos_editables")),
+    )
+    condiciones_form.aplicar(implementacion)
+    implementacion.save()
+    onboarding_services.guardar_modulos(
+        implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username(),
+    )
+    return implementacion, []
+
+
 @staff_member_required(login_url="login")
 def home(request):
-    if request.method == "POST" and request.POST.get("accion") == "crear_implementacion":
-        cliente_id = request.POST.get("cliente_id")
-        nombre_nuevo = request.POST.get("nombre", "").strip()
-        razon_social_nueva = request.POST.get("razon_social", "").strip()
-        cuits_nuevo = request.POST.get("cuits", "").strip()
-        asignado = _implementador_elegido(request)
-        modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
-        editable = bool(request.POST.get("modulos_editables"))
-
-        cliente = None
-        if cliente_id and cliente_id.isdigit():
-            cliente = Cliente.objects.filter(pk=cliente_id).first()
-        elif nombre_nuevo:
-            # Razón social y CUIT son opcionales acá: si no se cargan, el cliente los
-            # completa (obligatorios) en el paso 1 del wizard.
-            try:
-                cuits_nuevo = normalizar_cuits(cuits_nuevo) if cuits_nuevo else ""
-            except ValidationError as error:
-                messages.error(request, error.messages[0])
-            else:
-                cliente = Cliente.objects.create(
-                    nombre=nombre_nuevo, razon_social=razon_social_nueva, cuits=cuits_nuevo,
-                )
-
-        if cliente:
-            if not cliente.usuario:
-                username_deseado = request.POST.get("username", "").strip()
-                username, password = crear_o_resetear_acceso(cliente, username_deseado)
-                _avisar_credenciales(request, "Acceso creado para el cliente", username, password)
-            implementacion = Implementacion.objects.create(
-                cliente=cliente, creado_por=request.user, implementador_asignado=asignado,
-                modulos_editables_por_cliente=editable,
-            )
-            onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username())
+    es_alta = request.method == "POST" and request.POST.get("accion") == "crear_implementacion"
+    condiciones_form = CondicionesForm(request.POST if es_alta else None)
+    errores_alta = []
+    if es_alta:
+        implementacion, errores_alta = _alta_de_implementacion(request, condiciones_form)
+        if implementacion:
             return redirect("dashboard:implementacion_detalle", pk=implementacion.pk)
+
+    # El alta vive en un modal. Si falló, se reabre mostrando el motivo y conservando lo que
+    # el usuario ya había escrito (no tiene que volver a cargar todo).
+    alta = {
+        "abrir": bool(errores_alta),
+        "errores": errores_alta,
+        "valores": request.POST if es_alta else {},
+        "modulos": set(request.POST.getlist("modulos")) if es_alta else set(),
+        "editables": bool(request.POST.get("modulos_editables")) if es_alta else True,
+    }
 
     clientes_existentes = Cliente.objects.order_by("nombre")
     implementaciones = filtrar_y_ordenar_implementaciones(
@@ -118,6 +149,8 @@ def home(request):
             "implementaciones": implementaciones,
             "clientes_existentes": clientes_existentes,
             "asignables": cuentas.asignables(),
+            "condiciones_form": condiciones_form,
+            "alta": alta,
             "modulos": Modulo.objects.all(),
             "estados_choices": Implementacion.VISUAL_LABELS.items(),
             "filtros_aplicados": request.GET,
@@ -235,6 +268,14 @@ def _manejar_accion_implementacion(request, implementacion):
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"import_form": import_form}
 
+    if accion == "actualizar_condiciones":
+        form = CondicionesForm(request.POST, implementacion=implementacion)
+        if form.is_valid():
+            onboarding_services.guardar_condiciones(implementacion, form, editado_por)
+            messages.success(request, "Condiciones del proceso actualizadas.")
+            return redirect("dashboard:implementacion_detalle", pk=pk)
+        return {"condiciones_form": form}
+
     if accion == "reasignar":
         elegido = request.POST.get("implementador_id", "")
         nuevo = cuentas.asignables().filter(pk=elegido).first() if elegido.isdigit() else None
@@ -266,9 +307,10 @@ def _manejar_accion_implementacion(request, implementacion):
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     if accion == "actualizar_fecha_productivo":
-        guardar_version(implementacion, "fecha_implementacion", editado_por)
-        implementacion.fecha_salida_productivo = parse_date(request.POST.get("fecha_salida_productivo", ""))
-        implementacion.save(update_fields=["fecha_salida_productivo"])
+        # El equipo puede poner cualquier fecha (sin el mínimo que se le exige al cliente).
+        onboarding_services.guardar_fecha_implementacion(
+            implementacion, parse_date(request.POST.get("fecha_salida_productivo", "")), editado_por,
+        )
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     if accion == "regenerar_acceso":
@@ -328,6 +370,8 @@ def implementacion_detalle(request, pk):
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
         "asignables": cuentas.asignables(),
+        "condiciones_form": formularios_con_error.get("condiciones_form")
+        or CondicionesForm(implementacion=implementacion),
         "datos_form": formularios_con_error.get("datos_form") or ImplementacionDatosForm(instance=implementacion),
         "roles_formset": formularios_con_error.get("roles_formset") or RolFormSet(initial=roles_iniciales, prefix="roles"),
         "sucursales_formset": formularios_con_error.get("sucursales_formset") or SucursalFormSet(initial=sucursales_iniciales, prefix="sucursales"),

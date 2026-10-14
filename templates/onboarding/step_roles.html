@@ -2,7 +2,8 @@
 {% block step_content %}
 <p class="muted">
     Tenés que cargar <strong>al menos una persona para cada uno de estos tres roles</strong>:
-    Apoderado / Firmante, Liquidador y Admin. de RRHH. Las filas que no uses podés dejarlas vacías.
+    Apoderado / Firmante, Liquidador y Admin. de RRHH. Podés cargar <strong>hasta {{ max_roles }} personas</strong>;
+    las filas que no uses podés dejarlas vacías.
 </p>
 <form method="post">
     {% csrf_token %}

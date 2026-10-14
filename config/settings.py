@@ -125,6 +125,12 @@ AXES_CLIENT_IP_CALLABLE = "clients.security.ip_del_cliente"
 TRUSTED_PROXY_COUNT = int(os.environ.get("TRUSTED_PROXY_COUNT", "0" if DEBUG else "1"))
 
 
+# Al correr los tests se usa un hasher rápido. El de producción (PBKDF2, más de un millón de
+# iteraciones) es lento A PROPÓSITO para frenar la fuerza bruta, pero cada test crea usuarios
+# y se loguea: con él cada test tardaba ~2 s solo en hashear contraseñas.
+if sys.argv[1:2] == ["test"]:
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

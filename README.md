@@ -43,6 +43,18 @@ Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulo
 - Panel interno: `http://localhost:8000/panel/` (requiere login).
 - Wizard de cliente: se accede vía el link único que genera el panel (`/r/<token>/`), no tiene login.
 
+## Tests
+
+```bash
+venv/Scripts/python manage.py test                   # toda la suite (~10 segundos)
+venv/Scripts/python manage.py test dashboard         # solo una app
+venv/Scripts/python manage.py test --durations=10    # los 10 más lentos
+```
+
+Hay tests por app, en paquetes `tests/`. La base de test arranca vacía (los catálogos se cargan con `seed_catalogos`/`seed_modulos`, no con migraciones), así que cada test crea lo que necesita.
+
+Al correr los tests `settings.py` cambia el hasher de contraseñas a uno rápido. El de producción (PBKDF2) es lento a propósito, y como cada test crea usuarios y se loguea, con él la suite tardaba más de 10 minutos en vez de segundos. Un test verifica que ese cambio nunca se active fuera de los tests.
+
 ## Variables de entorno (`.env`)
 
 - `DJANGO_SECRET_KEY` — **obligatoria con `DJANGO_DEBUG=false`** (sin ella la app no arranca). `DJANGO_DEBUG` (default `false`; en dev ya viene en `true` por el `.env`).
@@ -88,6 +100,16 @@ El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo q
 - **Roles** (si hay Recibo Digital o Legajos): al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
 - **Modelo de recibo** en PDF (si hay Recibo Digital).
 - **Nómina**: al menos un empleado.
+
+**Condiciones del proceso.** Al crear la implementación (y después desde su ficha) el equipo decide qué deja fijo y qué decide el cliente. Cada dato se bloquea **al completarlo**; si se deja vacío, lo decide el cliente:
+
+- **Tipo de firma** (electrónica o digital) y **nomenclatura de los recibos PDF**: si el implementador los define, el cliente los ve en el paso 4 pero no los puede cambiar (ni editando el formulario a mano).
+- **Solo Área única**: bloquea la segmentación del liquidador.
+- **Máximo de personas con rol** (de 3 a 6): cuántas filas ve el cliente en el paso de roles. El mínimo es 3 porque tiene que cargar un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
+
+En el alta del panel estas condiciones están plegadas bajo **Opciones avanzadas**. El tipo de empresa (ART o comercial) no está: se agrega cuando se defina qué cambia en el proceso.
+
+**Fecha de implementación.** En el paso 9 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
 
 Cada implementación tiene un **implementador asignado** (por defecto quien la crea, se elige en el alta y se puede reasignar). Es quien lleva la implementación y, además de la lista `IMPLEMENTATION_TEAM_EMAILS`, recibe sus notificaciones.
 

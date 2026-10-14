@@ -20,10 +20,11 @@ from .forms import (
     ConfiguracionForm,
     DocumentosLegajoForm,
     EmpresaForm,
+    FechaImplementacionForm,
     LicenciasNovedadesForm,
     ModulosForm,
     PedirRevisionForm,
-    RolFormSetObligatorio,
+    rol_formset_obligatorio,
     SucursalFormSet,
 )
 from .services import TOTAL_PASOS
@@ -204,14 +205,18 @@ def _step_roles(request, implementacion, step):
         for r in existentes
     ]
 
+    RolesFormSet = rol_formset_obligatorio(implementacion.max_roles)
     if request.method == "POST":
-        formset = RolFormSetObligatorio(request.POST)
+        formset = RolesFormSet(request.POST)
         if formset.is_valid():
             services.guardar_roles(implementacion, formset, EDITADO_POR_CLIENTE)
             return _redirect_next(implementacion, step)
     else:
-        formset = RolFormSetObligatorio(initial=initial)
-    return render(request, "onboarding/step_roles.html", _wizard_context(implementacion, step, {"formset": formset}))
+        formset = RolesFormSet(initial=initial)
+    return render(
+        request, "onboarding/step_roles.html",
+        _wizard_context(implementacion, step, {"formset": formset, "max_roles": implementacion.max_roles}),
+    )
 
 
 def _step_configuracion(request, implementacion, step):
@@ -373,11 +378,19 @@ def descargar_plantilla_empleados(request, token):
 
 def _step_revision(request, implementacion, step):
     pendientes = services.pendientes_de_envio(implementacion)
+    enviando = request.method == "POST" and request.POST.get("accion") == "enviar"
+    fecha_form = FechaImplementacionForm(
+        request.POST if enviando else None,
+        implementacion=implementacion, minima=services.fecha_minima_para_cliente(),
+    )
 
-    if request.method == "POST" and request.POST.get("accion") == "enviar":
+    if enviando:
         if pendientes:
             messages.error(request, "Todavía falta completar algunos datos obligatorios para poder enviar.")
-        else:
+        elif fecha_form.is_valid():
+            fecha = fecha_form.cleaned_data["fecha_salida_productivo"]
+            if fecha != implementacion.fecha_salida_productivo:
+                services.guardar_fecha_implementacion(implementacion, fecha, EDITADO_POR_CLIENTE)
             # Primero se registra el envío y recién después se avisa al equipo: si el mail
             # falla (SMTP caído, etc.) el cliente no tiene por qué ver un error ni perder
             # lo que ya terminó. La falla queda en el log.
@@ -396,7 +409,7 @@ def _step_revision(request, implementacion, step):
     }
     return render(
         request, "onboarding/step_revision.html",
-        _wizard_context(implementacion, step, {"resumen": resumen, "pendientes": pendientes}),
+        _wizard_context(implementacion, step, {"resumen": resumen, "pendientes": pendientes, "fecha_form": fecha_form}),
     )
 
 

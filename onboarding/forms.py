@@ -123,9 +123,13 @@ class _RolesObligatoriosFormSet(BaseFormSet):
             )
 
 
-RolFormSetObligatorio = formset_factory(
-    RolForm, formset=_RolesObligatoriosFormSet, extra=6, can_delete=True
-)
+def rol_formset_obligatorio(max_roles):
+    """El formset de roles del wizard, con tantas filas como personas puede cargar el
+    cliente en esta implementación (max_roles) y rechazando que se manden más."""
+    return formset_factory(
+        RolForm, formset=_RolesObligatoriosFormSet, extra=max_roles, max_num=max_roles,
+        validate_max=True, can_delete=True,
+    )
 
 
 class ConfiguracionForm(forms.ModelForm):
@@ -141,6 +145,18 @@ class ConfiguracionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Lo que el implementador dejó fijo se muestra pero no se puede cambiar. Con
+        # disabled=True Django ignora lo que llegue por POST y conserva el valor guardado,
+        # así que tampoco se puede evadir editando el formulario a mano.
+        bloqueados = (
+            ("tipo_firma", self.instance.tipo_firma_editable),
+            ("nomenclatura_pdf", self.instance.nomenclatura_editable),
+            ("segmentacion_liquidador", self.instance.segmentacion_editable),
+        )
+        for nombre, editable in bloqueados:
+            if not editable:
+                self.fields[nombre].disabled = True
+                self.fields[nombre].help_text = "Lo definió Napsis para tu implementación: no se puede cambiar."
         campo = self.fields["modelo_recibo"]
         campo.validators.append(FileExtensionValidator(["pdf"]))
         if not self.instance.modelo_recibo:
@@ -215,6 +231,92 @@ class DocumentosLegajoForm(forms.Form):
             if nombre.strip() and campos:
                 resultado.append((nombre.strip(), campos))
         return resultado
+
+
+class CondicionesForm(forms.Form):
+    """Qué deja fijo el equipo y qué decide el cliente en su proceso. Cada dato se bloquea al
+    completarlo: si el implementador elige la firma, queda fija; si la deja sin elegir, la
+    decide el cliente. Lo usan el alta de la implementación y la ficha del panel."""
+
+    tipo_firma = forms.ChoiceField(
+        label="Tipo de firma", required=False,
+        choices=[("", "Que lo elija el cliente")] + list(Implementacion.TIPO_FIRMA_CHOICES),
+        help_text="Si elegís una, el cliente no puede cambiarla.",
+    )
+    nomenclatura_pdf = forms.CharField(
+        label="Nomenclatura de los recibos PDF", max_length=255, required=False,
+        help_text="Cómo tienen que emitirlos (ej: recibo_{legajo}_{periodo}.pdf). Si la completás, el "
+                  "cliente no puede cambiarla; si la dejás vacía, la define él.",
+    )
+    area_unica = forms.BooleanField(
+        label="El liquidador ve todos los recibos (sin segmentar)", required=False,
+        help_text="Si lo tildás, el liquidador no se limita a una sucursal o sector, y el cliente no puede "
+                  "cambiarlo en el wizard. Si no, el cliente indica cómo segmentarlo.",
+    )
+    max_roles = forms.IntegerField(
+        label="Máximo de personas con rol", min_value=3, max_value=6, required=False, initial=6,
+        help_text="Cuántas personas puede cargar el cliente en el paso de roles. Mínimo 3: tiene que "
+                  "cargar al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.",
+    )
+
+    def __init__(self, *args, implementacion=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if implementacion is not None:
+            self.initial.update({
+                "tipo_firma": "" if implementacion.tipo_firma_editable else implementacion.tipo_firma,
+                "nomenclatura_pdf": "" if implementacion.nomenclatura_editable else implementacion.nomenclatura_pdf,
+                "area_unica": not implementacion.segmentacion_editable,
+                "max_roles": implementacion.max_roles,
+            })
+
+    def clean_max_roles(self):
+        return self.cleaned_data.get("max_roles") or 6
+
+    def aplicar(self, implementacion):
+        """Vuelca las condiciones en la implementación (sin guardarla)."""
+        datos = self.cleaned_data
+        implementacion.max_roles = datos["max_roles"]
+
+        implementacion.tipo_firma_editable = not datos["tipo_firma"]
+        if datos["tipo_firma"]:
+            implementacion.tipo_firma = datos["tipo_firma"]
+
+        nomenclatura = datos["nomenclatura_pdf"].strip()
+        implementacion.nomenclatura_editable = not nomenclatura
+        if nomenclatura:
+            implementacion.nomenclatura_pdf = nomenclatura
+
+        implementacion.segmentacion_editable = not datos["area_unica"]
+        if datos["area_unica"]:
+            implementacion.segmentacion_liquidador = "AREA UNICA"
+
+
+class FechaImplementacionForm(forms.Form):
+    """La fecha en la que el cliente quiere salir en productivo. Es opcional (si no la pide,
+    la define el equipo) pero, si la pide, tiene que respetar el mínimo de días hábiles.
+    Si el equipo ya había puesto una fecha anterior al mínimo, esa se acepta tal cual."""
+
+    fecha_salida_productivo = forms.DateField(
+        label="Fecha en la que querés salir en productivo", required=False,
+        widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+    )
+
+    def __init__(self, *args, implementacion, minima, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.implementacion = implementacion
+        self.minima = minima
+        campo = self.fields["fecha_salida_productivo"]
+        campo.initial = implementacion.fecha_salida_productivo
+        campo.widget.attrs["min"] = minima.isoformat()
+        campo.help_text = f"Opcional. A partir del {minima:%d/%m/%Y} (10 días hábiles, de lunes a viernes)."
+
+    def clean_fecha_salida_productivo(self):
+        fecha = self.cleaned_data.get("fecha_salida_productivo")
+        if fecha and fecha < self.minima and fecha != self.implementacion.fecha_salida_productivo:
+            raise forms.ValidationError(
+                f"La fecha tiene que ser a partir del {self.minima:%d/%m/%Y} (10 días hábiles desde hoy)."
+            )
+        return fecha
 
 
 class PedirRevisionForm(forms.Form):

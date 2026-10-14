@@ -5,6 +5,10 @@ Cada función de guardado registra primero una versión anterior (clients.servic
 con el estado previo de la sección, así el cliente y el equipo pueden consultarlas después.
 """
 
+from datetime import timedelta
+
+from django.utils import timezone
+
 from catalog.models import TipoDocumento
 from clients.models import (
     Implementacion,
@@ -19,6 +23,11 @@ from employees.models import Empleado, ImportBatch
 from employees.services import parse_archivo_empleados
 
 TOTAL_PASOS = 9
+
+# El cliente solo puede pedir una fecha de implementación a partir de tantos días hábiles
+# (lunes a viernes; no se descuentan feriados). El equipo de implementación puede poner
+# cualquier fecha desde el panel.
+DIAS_HABILES_MINIMOS_CLIENTE = 10
 
 # Pasos que solo aplican si el cliente contrató alguno de estos módulos.
 # Los pasos que no aparecen acá (1, 2, 8, 9) son universales para cualquier implementación.
@@ -43,6 +52,37 @@ def pasos_activos(implementacion):
         if requeridos is None or requeridos & modulos_activos:
             activos.append(paso)
     return activos
+
+
+def sumar_dias_habiles(desde, cantidad):
+    """La fecha que queda `cantidad` días hábiles (lunes a viernes) después de `desde`."""
+    fecha = desde
+    while cantidad > 0:
+        fecha += timedelta(days=1)
+        if fecha.weekday() < 5:
+            cantidad -= 1
+    return fecha
+
+
+def fecha_minima_para_cliente(hoy=None):
+    """Primera fecha de implementación que el cliente puede pedir."""
+    return sumar_dias_habiles(hoy or timezone.localdate(), DIAS_HABILES_MINIMOS_CLIENTE)
+
+
+def guardar_condiciones(implementacion, form, editado_por):
+    """Aplica las condiciones del proceso (form = CondicionesForm ya validado) registrando antes
+    la versión anterior."""
+    guardar_version(implementacion, "condiciones", editado_por)
+    form.aplicar(implementacion)
+    implementacion.save()
+
+
+def guardar_fecha_implementacion(implementacion, fecha, editado_por):
+    """Guarda la fecha de salida en productivo (None la borra), registrando antes la versión
+    anterior. Lo usan el cliente (con su mínimo) y el panel (sin límite)."""
+    guardar_version(implementacion, "fecha_implementacion", editado_por)
+    implementacion.fecha_salida_productivo = fecha
+    implementacion.save(update_fields=["fecha_salida_productivo"])
 
 
 def pendientes_de_envio(implementacion):

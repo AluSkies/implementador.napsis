@@ -30,6 +30,7 @@
 <form method="post">
     {% csrf_token %}
     <input type="hidden" name="accion" value="enviar">
+    {{ fecha_form.as_p }}
     <div class="actions">
         <button class="btn" type="submit" {% if pendientes %}disabled title="Completá los datos que faltan"{% endif %}>Enviar a Napsis</button>
     </div>

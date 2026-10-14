@@ -3,7 +3,13 @@
 {% block content %}
 <div class="dashboard-layout">
 <div class="card dashboard-listado">
-    <h1>Implementaciones</h1>
+    <div class="page-header">
+        <h1>Implementaciones</h1>
+        <button type="button" class="btn success icono" data-abrir-alta>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Nueva implementación
+        </button>
+    </div>
 
     <form method="get" class="filter-form">
         <div class="filter-row">
@@ -84,72 +90,115 @@
     </table>
 </div>
 
-<div class="card dashboard-alta">
-    <h2>Nueva implementación</h2>
+<dialog id="modal-alta" class="modal" {% if alta.abrir %}data-abrir="1"{% endif %} aria-labelledby="modal-alta-titulo">
+    <div class="modal-header">
+        <h2 id="modal-alta-titulo">Nueva implementación</h2>
+        <button type="button" class="modal-cerrar" data-cerrar-alta aria-label="Cerrar">&times;</button>
+    </div>
     <form method="post" class="alta-form">
         {% csrf_token %}
         <input type="hidden" name="accion" value="crear_implementacion">
+        <div class="modal-body">
+            {% if alta.errores %}
+                <ul class="modal-errores">{% for e in alta.errores %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
 
-        <div class="alta-field">
-            <label for="cliente_id">Cliente existente</label>
-            <select name="cliente_id" id="cliente_id">
-                <option value="">-- Elegir cliente existente --</option>
-                {% for c in clientes_existentes %}
-                    <option value="{{ c.id }}">{{ c.nombre }}</option>
-                {% endfor %}
-            </select>
-        </div>
+            <div class="alta-field">
+                <label for="cliente_id">Cliente existente</label>
+                <select name="cliente_id" id="cliente_id">
+                    <option value="">-- Elegir cliente existente --</option>
+                    {% for c in clientes_existentes %}
+                        <option value="{{ c.id }}" {% if alta.valores.cliente_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <p class="muted">O, si es un cliente nuevo, completá estos datos (se ignoran si elegiste uno de arriba):</p>
-        <div class="alta-field">
-            <label for="nombre">Nombre de la empresa</label>
-            <input type="text" name="nombre" id="nombre" placeholder="Como se muestra en el portal (puede ser el nombre de fantasía)">
-        </div>
-        <div class="alta-field">
-            <label for="razon_social">Razón social <span class="muted">(opcional)</span></label>
-            <input type="text" name="razon_social" id="razon_social">
-        </div>
-        <div class="alta-field">
-            <label for="cuits">CUIT(s) <span class="muted">(opcional)</span></label>
-            <input type="text" name="cuits" id="cuits" placeholder="30-12345678-9, 30-98765432-1">
-            <p class="muted">Si no cargás razón social y CUIT acá, el cliente los completa (obligatorios) en el paso 1.</p>
-        </div>
-        <div class="alta-field">
-            <label for="username">Usuario para que el cliente inicie sesión</label>
-            <input type="text" name="username" id="username" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
-            <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la implementación.</p>
-        </div>
+            <p class="muted">O, si es un cliente nuevo, completá estos datos (se ignoran si elegiste uno de arriba):</p>
+            <div class="alta-field">
+                <label for="nombre">Nombre de la empresa</label>
+                <input type="text" name="nombre" id="nombre" value="{{ alta.valores.nombre|default:'' }}" placeholder="Como se muestra en el portal (puede ser el nombre de fantasía)">
+            </div>
+            <div class="alta-field">
+                <label for="razon_social">Razón social <span class="muted">(opcional)</span></label>
+                <input type="text" name="razon_social" id="razon_social" value="{{ alta.valores.razon_social|default:'' }}">
+            </div>
+            <div class="alta-field">
+                <label for="cuits">CUIT(s) <span class="muted">(opcional)</span></label>
+                <input type="text" name="cuits" id="cuits" value="{{ alta.valores.cuits|default:'' }}" placeholder="30-12345678-9, 30-98765432-1">
+                <p class="muted">Si no cargás razón social y CUIT acá, el cliente los completa (obligatorios) en el paso 1.</p>
+            </div>
+            <div class="alta-field">
+                <label for="username">Usuario para que el cliente inicie sesión</label>
+                <input type="text" name="username" id="username" value="{{ alta.valores.username|default:'' }}" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
+                <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la implementación.</p>
+            </div>
 
-        <div class="alta-field">
-            <label for="implementador_id">Implementador asignado</label>
-            <select name="implementador_id" id="implementador_id">
-                {% for u in asignables %}
-                    <option value="{{ u.id }}" {% if u.id == request.user.id %}selected{% endif %}>{{ u.get_full_name|default:u.username }}{% if u.id == request.user.id %} (vos){% endif %}</option>
-                {% endfor %}
-            </select>
-            <p class="muted">Lleva la implementación y recibe sus notificaciones. Por defecto, quien la crea.</p>
-        </div>
+            <div class="alta-field">
+                <label for="implementador_id">Implementador asignado</label>
+                <select name="implementador_id" id="implementador_id">
+                    {% for u in asignables %}
+                        <option value="{{ u.id }}" {% if alta.valores.implementador_id %}{% if alta.valores.implementador_id == u.id|stringformat:"s" %}selected{% endif %}{% elif u.id == request.user.id %}selected{% endif %}>{{ u.get_full_name|default:u.username }}{% if u.id == request.user.id %} (vos){% endif %}</option>
+                    {% endfor %}
+                </select>
+                <p class="muted">Lleva la implementación y recibe sus notificaciones. Por defecto, quien la crea.</p>
+            </div>
 
-        <div class="alta-field">
-            <label>Módulos contratados</label>
-            <div class="modulos-grid">
-                {% for modulo in modulos %}
-                    <div class="checkbox-row">
-                        <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}">
-                        <label for="modulo_{{ modulo.id }}">{{ modulo.nombre }}</label>
+            <details class="opciones-avanzadas" {% if condiciones_form.errors %}open{% endif %}>
+                <summary>Opciones avanzadas</summary>
+                <p class="muted">Condiciones del proceso: lo que completes queda <strong>fijo</strong> para el cliente; lo que dejes vacío lo decide él.</p>
+                {% for campo in condiciones_form %}
+                    <div class="alta-field">
+                        {% if campo.field.widget.input_type == "checkbox" %}
+                            <div class="checkbox-row">{{ campo }} {{ campo.label_tag }}</div>
+                        {% else %}
+                            {{ campo.label_tag }} {{ campo }}
+                        {% endif %}
+                        {% if campo.help_text %}<p class="muted">{{ campo.help_text }}</p>{% endif %}
+                        {{ campo.errors }}
                     </div>
                 {% endfor %}
+            </details>
+
+            <div class="alta-field">
+                <label>Módulos contratados</label>
+                <div class="modulos-grid">
+                    {% for modulo in modulos %}
+                        <div class="checkbox-row">
+                            <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}" {% if modulo.id|stringformat:"s" in alta.modulos %}checked{% endif %}>
+                            <label for="modulo_{{ modulo.id }}">{{ modulo.nombre }}</label>
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
-        </div>
 
-        <div class="checkbox-row">
-            <input type="checkbox" name="modulos_editables" id="modulos_editables" checked>
-            <label for="modulos_editables">Permitir que el cliente edite los módulos en el wizard</label>
+            <div class="checkbox-row">
+                <input type="checkbox" name="modulos_editables" id="modulos_editables" {% if alta.editables %}checked{% endif %}>
+                <label for="modulos_editables">Permitir que el cliente edite los módulos en el wizard</label>
+            </div>
+            <p class="muted">Si lo destildás, el cliente ve los módulos precargados arriba de solo lectura en el paso 2.</p>
         </div>
-        <p class="muted">Si lo destildás, el cliente ve los módulos precargados arriba de solo lectura en el paso 2.</p>
-
-        <div class="actions"><button class="btn" type="submit">Generar link de implementación</button></div>
+        <div class="modal-footer">
+            <button type="button" class="btn secondary" data-cerrar-alta>Cancelar</button>
+            <button class="btn success" type="submit">Generar link de implementación</button>
+        </div>
     </form>
+</dialog>
 </div>
-</div>
+
+<script>
+(function () {
+    var dialogo = document.getElementById("modal-alta");
+    if (!dialogo || typeof dialogo.showModal !== "function") { return; }
+    document.querySelectorAll("[data-abrir-alta]").forEach(function (boton) {
+        boton.addEventListener("click", function () { dialogo.showModal(); });
+    });
+    dialogo.querySelectorAll("[data-cerrar-alta]").forEach(function (boton) {
+        boton.addEventListener("click", function () { dialogo.close(); });
+    });
+    // Un clic en el fondo oscuro también cierra; lo escrito se conserva si se vuelve a abrir.
+    dialogo.addEventListener("click", function (evento) { if (evento.target === dialogo) { dialogo.close(); } });
+    // Si el alta falló, se reabre sola para mostrar el motivo.
+    if (dialogo.dataset.abrir === "1") { dialogo.showModal(); }
+})();
+</script>
 {% endblock %}

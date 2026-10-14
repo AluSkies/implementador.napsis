@@ -100,6 +100,25 @@
 </div>
 
 <div class="card section-readonly">
+    <h2>Condiciones del proceso</h2>
+    <dl>
+        <dt>Tipo de firma</dt><dd>{% if implementacion.tipo_firma_editable %}<span class="muted">Lo elige el cliente</span>{% else %}{{ implementacion.get_tipo_firma_display }} <span class="muted">(fijo)</span>{% endif %}</dd>
+        <dt>Nomenclatura de los PDF</dt><dd>{% if implementacion.nomenclatura_editable %}<span class="muted">La define el cliente</span>{% else %}{{ implementacion.nomenclatura_pdf }} <span class="muted">(fija)</span>{% endif %}</dd>
+        <dt>Segmentación del liquidador</dt><dd>{% if implementacion.segmentacion_editable %}<span class="muted">La elige el cliente</span>{% else %}Solo Área única <span class="muted">(fija)</span>{% endif %}</dd>
+        <dt>Máximo de personas con rol</dt><dd>{{ implementacion.max_roles }}</dd>
+    </dl>
+    <details class="section-edit" {% if condiciones_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_condiciones">
+            {{ condiciones_form.as_p }}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar condiciones</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card section-readonly">
     <h2>Módulos contratados</h2>
     <p>{% for im in modulos_activos %}{{ im.modulo.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguno activado</span>{% endfor %}</p>
     <p class="muted">El cliente {% if implementacion.modulos_editables_por_cliente %}puede{% else %}no puede{% endif %} editar los módulos en el wizard.</p>

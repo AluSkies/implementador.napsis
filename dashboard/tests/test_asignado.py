@@ -101,3 +101,24 @@ class ReasignarYListadoTests(BasePanel):
         respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "sin asignar")
+
+
+class FechaDeImplementacionDelEquipoTests(BasePanel):
+    """A diferencia del cliente, el equipo puede poner cualquier fecha."""
+
+    def setUp(self):
+        super().setUp()
+        cliente = Cliente.objects.create(nombre="Empresa A")
+        self.implementacion = Implementacion.objects.create(cliente=cliente)
+        self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
+
+    def test_puede_poner_una_fecha_de_manana_y_hasta_una_pasada(self):
+        for fecha in ("2099-01-01", "2020-01-01"):
+            with self.subTest(fecha=fecha):
+                self.client.post(self.url, {"accion": "actualizar_fecha_productivo", "fecha_salida_productivo": fecha})
+                self.implementacion.refresh_from_db()
+                self.assertEqual(self.implementacion.fecha_salida_productivo.isoformat(), fecha)
+
+    def test_queda_en_el_historial_con_el_nombre_del_usuario(self):
+        self.client.post(self.url, {"accion": "actualizar_fecha_productivo", "fecha_salida_productivo": "2099-01-01"})
+        self.assertEqual(self.implementacion.versiones.get(seccion="fecha_implementacion").editado_por, "ana")

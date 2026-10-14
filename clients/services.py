@@ -164,6 +164,20 @@ def _snapshot_documentos(implementacion):
     return {d.tipo_documento.nombre: d.activo for d in implementacion.documentos_legajo.select_related("tipo_documento")}
 
 
+def _snapshot_condiciones(implementacion):
+    return {
+        "Tipo de firma": (
+            "Que lo elija el cliente" if implementacion.tipo_firma_editable
+            else implementacion.get_tipo_firma_display()
+        ),
+        "Nomenclatura de PDFs": (
+            "Que la defina el cliente" if implementacion.nomenclatura_editable else implementacion.nomenclatura_pdf
+        ),
+        "Solo Área única": "No" if implementacion.segmentacion_editable else "Sí",
+        "Máximo de personas con rol": implementacion.max_roles,
+    }
+
+
 def _snapshot_fecha_implementacion(implementacion):
     return {
         "Fecha estimada de salida en productivo": implementacion.fecha_salida_productivo,
@@ -180,6 +194,7 @@ _SNAPSHOT_BUILDERS = {
     "licencias_novedades": _snapshot_licencias_novedades,
     "documentos": _snapshot_documentos,
     "fecha_implementacion": _snapshot_fecha_implementacion,
+    "condiciones": _snapshot_condiciones,
 }
 
 
