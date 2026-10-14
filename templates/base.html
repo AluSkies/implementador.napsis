@@ -90,6 +90,13 @@
         .section-readonly dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
         .section-readonly dt { font-weight: 600; color: var(--primary-dark); }
         .section-readonly dd { margin: 0; }
+        .topbar-user { display: flex; align-items: center; gap: 8px; }
+        details.menu-usuario { position: relative; }
+        details.menu-usuario summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        details.menu-usuario summary::-webkit-details-marker { display: none; }
+        .menu-usuario-lista { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 4px 0; z-index: 20; }
+        .menu-usuario-lista a, .menu-usuario-lista button { display: block; width: 100%; text-align: left; padding: 8px 14px; background: none; border: none; font: inherit; color: var(--primary-dark); cursor: pointer; text-decoration: none; box-sizing: border-box; }
+        .menu-usuario-lista a:hover, .menu-usuario-lista button:hover { background: #f1f4f8; }
         details.opciones-avanzadas { margin: 16px 0; border: 1px solid #d9dee5; border-radius: 6px; padding: 10px 14px; }
         details.opciones-avanzadas summary { cursor: pointer; font-weight: 600; }
         details.opciones-avanzadas[open] summary { margin-bottom: 10px; }
@@ -126,13 +133,21 @@
         <span>Implementación</span>
     </a>
     {% if request.user.is_authenticated %}
-        <span>
+        <span class="topbar-user">
             {% if request.user.is_superuser %}<a href="{% url 'dashboard:implementadores' %}">Implementadores</a> ·{% endif %}
-            {{ request.user }}{% if request.user.is_staff %} <span class="muted">({% if request.user.is_superuser %}Admin{% else %}Implementador{% endif %})</span>{% endif %} ·
-            <form method="post" action="{% url 'logout' %}" style="display:inline">
-                {% csrf_token %}
-                <button type="submit" style="background:none;border:none;padding:0;color:var(--primary-dark);text-decoration:underline;cursor:pointer;font:inherit;">Salir</button>
-            </form>
+            <details class="menu-usuario">
+                <summary aria-label="Menú de usuario">
+                    <span>{{ request.user }}{% if request.user.is_staff %} <span class="muted">({% if request.user.is_superuser %}Admin{% else %}Implementador{% endif %})</span>{% endif %}</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </summary>
+                <div class="menu-usuario-lista">
+                    <a href="{% url 'perfil' %}">Mi perfil</a>
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button type="submit">Salir</button>
+                    </form>
+                </div>
+            </details>
         </span>
     {% endif %}
 </header>

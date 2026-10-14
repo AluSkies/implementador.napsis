@@ -1,13 +1,27 @@
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.urls import reverse_lazy
 
 from .models import Implementacion
+
+
+class PerfilView(LoginRequiredMixin, PasswordChangeView):
+    """Autogestión de la cuenta ("Mi perfil"), igual para clientes y equipo. Por ahora solo
+    permite cambiar la contraseña; el cambio mantiene abierta la sesión actual."""
+
+    template_name = "perfil.html"
+    success_url = reverse_lazy("perfil")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Tu contraseña se cambió correctamente.")
+        return super().form_valid(form)
 
 
 class PortalLoginView(LoginView):

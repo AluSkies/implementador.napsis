@@ -3,11 +3,12 @@ from django.contrib.auth.views import LogoutView
 from django.urls import include, path
 from django.views.generic import TemplateView
 
-from clients.views import PortalLoginView, media_protegida
+from clients.views import PerfilView, PortalLoginView, media_protegida
 
 urlpatterns = [
     path("", TemplateView.as_view(template_name="landing.html"), name="landing"),
     path("login/", PortalLoginView.as_view(), name="login"),
+    path("perfil/", PerfilView.as_view(), name="perfil"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("admin/", admin.site.urls),
     path("panel/", include("dashboard.urls")),

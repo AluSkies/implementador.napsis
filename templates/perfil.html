@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:480px;margin:40px auto;">
+    <h1>Mi perfil</h1>
+    <p class="muted">Usuario: <strong>{{ request.user.username }}</strong></p>
+    <h2>Cambiar contraseña</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="actions">
+            <button class="btn" type="submit">Cambiar contraseña</button>
+            <a class="btn secondary" href="{% if request.user.is_staff %}{% url 'dashboard:home' %}{% else %}{% url 'onboarding:mis_implementaciones' %}{% endif %}">Volver</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
