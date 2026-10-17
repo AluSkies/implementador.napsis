@@ -1,4 +1,4 @@
-Se completó una nueva implementación en el portal de autoservicio.
+{% autoescape off %}Se completó una nueva implementación en el portal de autoservicio.
 
 Cliente: {{ razon_social }} (CUIT {{ cuits }})
 Contacto: {{ mail_contacto }} / {{ telefono }}
@@ -12,4 +12,4 @@ Documentos de legajo activados: {{ documentos_legajo }}
 Empleados cargados: {{ cantidad_empleados }}
 
 Ver el detalle completo (incluye adjuntos) en el panel interno:
-{{ detalle_url }}
+{{ detalle_url }}{% endautoescape %}

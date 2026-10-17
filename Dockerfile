@@ -19,13 +19,13 @@ COPY . .
 #   WhiteNoise (no hace falta compartir nada con el proxy). La SECRET_KEY de acá
 #   es solo para que Django arranque durante el build; la real viene por entorno.
 # - El usuario necesita un home escribible: Gunicorn guarda ahí su socket de control.
-# - media/ es el volumen donde la app guarda los adjuntos subidos.
+# - media/ es el volumen donde la app guarda los adjuntos subidos; logs/, el del log de errores.
 RUN sed -i 's/\r$//' docker/entrypoint.sh \
     && chmod +x docker/entrypoint.sh \
     && DJANGO_SECRET_KEY=solo-para-el-build python manage.py collectstatic --no-input \
     && useradd --system --create-home --home-dir /home/napsis napsis \
-    && mkdir -p /app/media \
-    && chown -R napsis:napsis /app/media
+    && mkdir -p /app/media /app/logs \
+    && chown -R napsis:napsis /app/media /app/logs
 
 USER napsis
 EXPOSE 8000

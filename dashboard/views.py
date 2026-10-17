@@ -1,11 +1,13 @@
-from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 import logging
 
+from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import transaction
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from catalog.models import TipoLicencia, TipoNovedad
@@ -18,7 +20,7 @@ from clients.services import (
     resumen_implementacion,
 )
 from employees.forms import EmpleadoForm, ImportarArchivoForm
-from employees.services import generar_nomina_xlsx
+from employees.services import ArchivoInvalido, generar_nomina_xlsx
 from onboarding import services as onboarding_services
 from onboarding.forms import (
     CondicionesForm,
@@ -34,6 +36,7 @@ from notifications.services import enviar_invitacion, notificar_cliente_implemen
 from . import services as cuentas
 from .forms import ImplementadorAltaForm, ImplementadorEdicionForm
 from .permisos import admin_requerido
+from .reportes import generar_reporte_implementaciones_xlsx
 
 
 def _avisar_credenciales(request, titulo, username, password):
@@ -52,6 +55,11 @@ def _entregar_acceso(request, cliente, username_deseado, mail=""):
     su propia contraseña; si no, genera una y se la muestra al equipo una única vez."""
     era_nueva = not cliente.usuario
     username, password = crear_o_resetear_acceso(cliente, username_deseado, email=mail)
+    _avisar_acceso(request, cliente, username, password, era_nueva)
+
+
+def _avisar_acceso(request, cliente, username, password, era_nueva):
+    """Le informa al equipo cómo quedó el acceso: la contraseña (una sola vez) o el mail de invitación."""
     if password:
         _avisar_credenciales(
             request, "Acceso creado para el cliente" if era_nueva else "Nueva contraseña generada", username, password,
@@ -158,36 +166,47 @@ def _alta_de_implementacion(request, condiciones_form):
         except ValidationError:
             return None, ["El mail del cliente no es válido."]
 
-    cliente = None
-    if cliente_id and cliente_id.isdigit():
-        cliente = Cliente.objects.filter(pk=cliente_id).first()
-    elif nombre_nuevo:
-        # Razón social y CUIT son opcionales acá: si no se cargan, el cliente los
-        # completa (obligatorios) en el paso 1 del wizard.
-        try:
-            cuits_nuevo = normalizar_cuits(cuits_nuevo) if cuits_nuevo else ""
-        except ValidationError as error:
-            errores.append(error.messages[0])
-        else:
-            cliente = Cliente.objects.create(
-                nombre=nombre_nuevo, razon_social=razon_social_nueva, cuits=cuits_nuevo,
+    acceso = None
+    # Todo o nada: empresa, cuenta, implementación y módulos. Si algo falla a mitad de camino no
+    # queda una empresa o un usuario suelto que después estorbe al reintentar. Los mensajes y el
+    # mail de invitación se mandan recién cuando ya está todo guardado.
+    with transaction.atomic():
+        cliente = None
+        if cliente_id and cliente_id.isdigit():
+            cliente = Cliente.objects.filter(pk=cliente_id).first()
+        elif nombre_nuevo:
+            # Razón social y CUIT son opcionales acá: si no se cargan, el cliente los
+            # completa (obligatorios) en el paso 1 del wizard.
+            try:
+                cuits_nuevo = normalizar_cuits(cuits_nuevo) if cuits_nuevo else ""
+            except ValidationError as error:
+                errores.append(error.messages[0])
+            else:
+                cliente = Cliente.objects.create(
+                    nombre=nombre_nuevo, razon_social=razon_social_nueva, cuits=cuits_nuevo,
+                )
+        if not cliente:
+            return None, errores or ["Elegí un cliente existente o completá el nombre de la empresa."]
+
+        if not cliente.usuario:
+            username, password = crear_o_resetear_acceso(
+                cliente, request.POST.get("username", "").strip(), email=mail_cliente,
             )
-    if not cliente:
-        return None, errores or ["Elegí un cliente existente o completá el nombre de la empresa."]
+            acceso = (username, password)
 
-    if not cliente.usuario:
-        _entregar_acceso(request, cliente, request.POST.get("username", "").strip(), mail_cliente)
+        implementacion = Implementacion(
+            cliente=cliente, creado_por=request.user, implementador_asignado=_implementador_elegido(request),
+            mail_contacto=mail_cliente,  # el paso 1 del cliente ya lo trae cargado
+            modulos_editables_por_cliente=bool(request.POST.get("modulos_editables")),
+        )
+        condiciones_form.aplicar(implementacion)
+        implementacion.save()
+        onboarding_services.guardar_modulos(
+            implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username(),
+        )
 
-    implementacion = Implementacion(
-        cliente=cliente, creado_por=request.user, implementador_asignado=_implementador_elegido(request),
-        mail_contacto=mail_cliente,  # el paso 1 del cliente ya lo trae cargado
-        modulos_editables_por_cliente=bool(request.POST.get("modulos_editables")),
-    )
-    condiciones_form.aplicar(implementacion)
-    implementacion.save()
-    onboarding_services.guardar_modulos(
-        implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username(),
-    )
+    if acceso:
+        _avisar_acceso(request, cliente, *acceso, era_nueva=True)
     return implementacion, []
 
 
@@ -251,6 +270,10 @@ def cliente_detalle(request, pk):
         request, "dashboard/cliente_detalle.html",
         {"cliente": cliente, "implementaciones": implementaciones},
     )
+
+
+def _empleado_del_panel(implementacion, empleado_id):
+    return implementacion.empleados.filter(pk=empleado_id).first() if str(empleado_id).isdigit() else None
 
 
 def _manejar_accion_implementacion(request, implementacion):
@@ -324,6 +347,16 @@ def _manejar_accion_implementacion(request, implementacion):
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"empleado_form": empleado_form}
 
+    if accion == "editar_empleado":
+        empleado = _empleado_del_panel(implementacion, request.POST.get("empleado_id"))
+        if empleado:
+            form = EmpleadoForm(request.POST, instance=empleado, implementacion=implementacion)
+            if onboarding_services.editar_empleado(implementacion, form, editado_por):
+                messages.success(request, "Empleado actualizado.")
+                return redirect("dashboard:implementacion_detalle", pk=pk)
+            return {"empleado_edit_form": form, "empleado_editando": empleado}
+        return redirect("dashboard:implementacion_detalle", pk=pk)
+
     if accion == "eliminar_empleado":
         onboarding_services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), editado_por)
         messages.info(request, "Empleado eliminado.")
@@ -332,16 +365,18 @@ def _manejar_accion_implementacion(request, implementacion):
     if accion == "importar_empleados":
         import_form = ImportarArchivoForm(request.POST, request.FILES)
         if import_form.is_valid():
-            filas, errores = onboarding_services.importar_archivo_empleados(
-                implementacion, import_form.cleaned_data["archivo"], editado_por
-            )
-            if errores:
-                messages.warning(
-                    request,
-                    f"Se importaron {len(filas)} empleados. {len(errores)} filas tuvieron errores y no se cargaron.",
+            try:
+                filas, errores, advertencias = onboarding_services.importar_archivo_empleados(
+                    implementacion, import_form.cleaned_data["archivo"], editado_por
                 )
-            else:
-                messages.success(request, f"Se importaron {len(filas)} empleados correctamente.")
+            except ArchivoInvalido as error:
+                import_form.add_error("archivo", str(error))
+                return {"import_form": import_form}
+            for nivel, texto in onboarding_services.resumen_importacion(filas, errores, advertencias):
+                messages.add_message(request, nivel, texto)
+            if errores:
+                detalle = "; ".join(f"fila {e['fila']}: {e['mensaje']}" for e in errores[:5])
+                messages.warning(request, "Filas rechazadas: " + detalle + (" ..." if len(errores) > 5 else ""))
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"import_form": import_form}
 
@@ -427,6 +462,15 @@ def implementacion_detalle(request, pk):
             return resultado
         formularios_con_error = resultado
 
+    # Edición de un empleado: ?editar_empleado=<id> abre el formulario con sus datos (o vuelve con
+    # los errores si se intentó guardar algo inválido).
+    empleado_editando = formularios_con_error.get("empleado_editando")
+    empleado_edit_form = formularios_con_error.get("empleado_edit_form")
+    if empleado_editando is None and request.method == "GET":
+        empleado_editando = _empleado_del_panel(implementacion, request.GET.get("editar_empleado"))
+        if empleado_editando:
+            empleado_edit_form = EmpleadoForm(instance=empleado_editando, implementacion=implementacion)
+
     roles_iniciales = [
         {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": r.cuil, "mail": r.mail}
         for r in implementacion.roles.all()
@@ -467,6 +511,8 @@ def implementacion_detalle(request, pk):
         "documentos_rows": [(t, documentos_form[f"tipo_{t.id}_activo"]) for t in tipos_documento_qs],
         "documentos_form": documentos_form,
         "empleado_form": formularios_con_error.get("empleado_form") or EmpleadoForm(implementacion=implementacion),
+        "empleado_editando": empleado_editando,
+        "empleado_edit_form": empleado_edit_form,
         "import_form": formularios_con_error.get("import_form") or ImportarArchivoForm(),
     })
     return render(request, "dashboard/implementacion_detalle.html", contexto)
@@ -480,6 +526,16 @@ def descargar_nomina(request, pk):
     nombre_archivo = f"nomina_{implementacion.cliente.nombre}.xlsx".replace(" ", "_")
     return FileResponse(
         buffer, as_attachment=True, filename=nombre_archivo,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@staff_member_required(login_url="login")
+def exportar_implementaciones(request):
+    """Descarga un .xlsx con todas las implementaciones (botón "Exportar" al pie del panel)."""
+    nombre = f"implementaciones_{timezone.localdate():%Y-%m-%d}.xlsx"
+    return FileResponse(
+        generar_reporte_implementaciones_xlsx(), as_attachment=True, filename=nombre,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

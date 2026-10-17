@@ -1,15 +1,19 @@
-# En cada push a main (o tag vX.Y.Z): corre los tests y, si pasan, publica la
-# imagen en GitHub Container Registry. Napsis despliega con `docker compose pull`.
+# En cada pull request: corre los tests. En cada push a main (o tag vX.Y.Z): corre los tests y,
+# si pasan, publica la imagen en GitHub Container Registry. Napsis despliega con la imagen
+# (ver deploy/RELEASE.md).
 name: Imagen Docker
 
 on:
   push:
     branches: [main]
     tags: ["v*"]
+  pull_request:
 
 jobs:
   tests:
     runs-on: ubuntu-latest
+    env:
+      DJANGO_SECRET_KEY: solo-para-ci-no-es-una-clave-real
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,10 +21,42 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      # Que no haya cambios de modelos sin su migración.
+      - run: python manage.py makemigrations --check --dry-run
       - run: python manage.py test
 
+  # La base de producción es MySQL 8: la suite también tiene que pasar ahí (las migraciones,
+  # la collation y el modo estricto se comportan distinto que en SQLite).
+  tests-mysql:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: napsis
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      MYSQL_DB: napsis
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      MYSQL_HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python manage.py test --noinput
+
   imagen:
-    needs: tests
+    needs: [tests, tests-mysql]
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

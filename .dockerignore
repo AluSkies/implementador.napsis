@@ -9,6 +9,7 @@ __pycache__
 .env.*
 db.sqlite3*
 media
+logs
 staticfiles
 # Planillas de relevamiento originales: contienen CUIL/DNI/nombres reales.
 *.xlsx

@@ -73,7 +73,7 @@ class CondicionesFormTests(TestCase):
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-class Paso4RespetaLosBloqueosTests(test_wizard.BaseWizard):
+class ConfiguracionRespetaLosBloqueosTests(test_wizard.BaseWizard):
     """Lo que el implementador dejó fijo no se puede cambiar desde el wizard, ni siquiera
     editando el formulario a mano."""
 
@@ -84,7 +84,7 @@ class Paso4RespetaLosBloqueosTests(test_wizard.BaseWizard):
             "modelo_recibo": SimpleUploadedFile("m.pdf", b"%PDF-1.4"),
             **extra,
         }
-        return self.client.post(reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 4}), datos)
+        return self.client.post(reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 6}), datos)
 
     def bloquear(self):
         self.implementacion.tipo_firma, self.implementacion.tipo_firma_editable = "digital", False
@@ -109,7 +109,7 @@ class Paso4RespetaLosBloqueosTests(test_wizard.BaseWizard):
 
     def test_lo_bloqueado_se_muestra_deshabilitado_con_el_valor_fijo(self):
         self.bloquear()
-        respuesta = self.client.get(reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 4}))
+        respuesta = self.client.get(reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 6}))
         formulario = respuesta.context["form"]
         for campo in ("tipo_firma", "nomenclatura_pdf", "segmentacion_liquidador"):
             self.assertTrue(formulario.fields[campo].disabled, campo)
@@ -125,9 +125,9 @@ class Paso4RespetaLosBloqueosTests(test_wizard.BaseWizard):
         self.assertEqual(self.implementacion.nomenclatura_pdf, "mi_formato.pdf")
 
 
-class Paso3MaximoDeRolesTests(test_wizard.BaseWizard):
+class RolesMaximoDePersonasTests(test_wizard.BaseWizard):
     def _url(self):
-        return reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 3})
+        return reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 5})
 
     def _post(self, cantidad):
         roles = ["apoderado", "liquidador", "admin_rrhh"] + ["apoderado"] * 3

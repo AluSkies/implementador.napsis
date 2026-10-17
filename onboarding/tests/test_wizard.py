@@ -80,10 +80,10 @@ class AccesoAlWizardTests(BaseWizard):
         self.assertTemplateUsed(respuesta, "onboarding/cancelada.html")
 
     def test_un_paso_que_no_corresponde_a_los_modulos_redirige(self):
-        """Sucursales (paso 5) solo existe con el módulo Fichada."""
-        respuesta = self.client.get(_url(self.implementacion, 5))
+        """Sucursales (paso 3) solo existe con el módulo Fichada."""
+        respuesta = self.client.get(_url(self.implementacion, 3))
         self.assertEqual(respuesta.status_code, 302)
-        self.assertNotIn("/paso/5/", respuesta.url)
+        self.assertNotIn("/paso/3/", respuesta.url)
 
 
 class Paso1EmpresaTests(BaseWizard):
@@ -120,14 +120,14 @@ class Paso1EmpresaTests(BaseWizard):
         self.assertContains(respuesta, CUIT)
 
 
-class Paso3RolesTests(BaseWizard):
+class PasoRolesTests(BaseWizard):
     """Apoderado/Firmante, Liquidador y Admin. de RRHH son elementales: sin los tres no se avanza."""
 
     def _post(self, filas):
         datos = {"form-TOTAL_FORMS": str(len(filas)), "form-INITIAL_FORMS": "0"}
         for i, (rol, nombre) in enumerate(filas):
             datos.update({f"form-{i}-rol": rol, f"form-{i}-apellido_nombre": nombre, f"form-{i}-cuil": "", f"form-{i}-mail": ""})
-        return self.client.post(_url(self.implementacion, 3), datos)
+        return self.client.post(_url(self.implementacion, 5), datos)
 
     def test_sin_los_tres_roles_no_avanza_y_no_guarda(self):
         respuesta = self._post([(PersonaRol.ROL_APODERADO, "Gomez, Ana"), (PersonaRol.ROL_LIQUIDADOR, "Ruiz, Luis")])
@@ -152,12 +152,12 @@ class Paso3RolesTests(BaseWizard):
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
-class Paso4ModeloDeReciboTests(BaseWizard):
+class PasoConfiguracionModeloDeReciboTests(BaseWizard):
     def _post(self, archivo=None):
         datos = {"tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA"}
         if archivo:
             datos["modelo_recibo"] = archivo
-        return self.client.post(_url(self.implementacion, 4), datos)
+        return self.client.post(_url(self.implementacion, 6), datos)
 
     def test_el_modelo_de_recibo_es_obligatorio(self):
         respuesta = self._post()
@@ -181,15 +181,15 @@ class Paso4ModeloDeReciboTests(BaseWizard):
         self.assertEqual(respuesta.status_code, 302)
 
 
-class Paso8NominaTests(BaseWizard):
+class PasoNominaTests(BaseWizard):
     def test_no_se_puede_continuar_sin_empleados(self):
-        respuesta = self.client.post(_url(self.implementacion, 8), {"accion": "continuar"})
+        respuesta = self.client.post(_url(self.implementacion, 4), {"accion": "continuar"})
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "al menos un empleado")
 
     def test_con_un_empleado_continua(self):
         self.agregar_empleado()
-        respuesta = self.client.post(_url(self.implementacion, 8), {"accion": "continuar"})
+        respuesta = self.client.post(_url(self.implementacion, 4), {"accion": "continuar"})
         self.assertEqual(respuesta.status_code, 302)
 
 

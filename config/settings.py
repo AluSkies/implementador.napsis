@@ -4,6 +4,7 @@ Django settings for the Portal de Implementación Napsis project.
 
 import os
 import sys
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 
@@ -15,13 +16,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 dotenv.load_dotenv(BASE_DIR / ".env")
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
+# `manage.py test`: algunas cosas se relajan solo ahí (hasher rápido, sin HTTPS forzado, etc.).
+EJECUTANDO_TESTS = sys.argv[1:2] == ["test"]
 
 # La clave firma las sesiones y los tokens: en producción es obligatoria. Antes caía a
 # una clave escrita acá (y el repo es público), con lo cual cualquiera podría falsificar
 # sesiones. Solo en desarrollo (DEBUG) y al correr los tests se tolera una de relleno.
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    if DEBUG or sys.argv[1:2] == ["test"]:
+    if DEBUG or EJECUTANDO_TESTS:
         SECRET_KEY = "django-insecure-solo-desarrollo-y-tests"
     else:
         raise ImproperlyConfigured(
@@ -35,6 +38,23 @@ CSRF_TRUSTED_ORIGINS = [h for h in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS",
 # El proxy reverso termina TLS y reenvía la petición a Django por HTTP plano,
 # indicando el esquema original en este header.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# --- HTTPS obligatorio --------------------------------------------------------
+# En producción la app exige HTTPS por sí misma, sin depender de que el proxy lo haga bien:
+# redirige http -> https, marca las cookies de sesión y CSRF como Secure (nunca viajan en
+# claro) y le dice al navegador que use siempre https (HSTS). Requiere que el proxy mande
+# X-Forwarded-Proto (si no, la app cree que todo llega por http y entra en un bucle de
+# redirecciones). DJANGO_FORCE_HTTPS=false lo apaga, solo para probar un arranque por http.
+# HSTS arranca en 1 hora; cuando todo ande, subir SECURE_HSTS_SECONDS a 31536000 (1 año).
+# Sin includeSubDomains: el dominio puede compartir zona con otros sitios.
+# Vacío cuenta como "sin definir" (la plantilla del .env trae las variables en blanco): usa el default.
+FORCE_HTTPS = (os.environ.get("DJANGO_FORCE_HTTPS") or ("false" if DEBUG else "true")).lower() == "true"
+if FORCE_HTTPS and not EJECUTANDO_TESTS:
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS") or 3600)
+    SECURE_REDIRECT_EXEMPT = [r"^salud/$"]  # el chequeo de salud no debería redirigir
 
 
 INSTALLED_APPS = [
@@ -128,7 +148,7 @@ TRUSTED_PROXY_COUNT = int(os.environ.get("TRUSTED_PROXY_COUNT", "0" if DEBUG els
 # Al correr los tests se usa un hasher rápido. El de producción (PBKDF2, más de un millón de
 # iteraciones) es lento A PROPÓSITO para frenar la fuerza bruta, pero cada test crea usuarios
 # y se loguea: con él cada test tardaba ~2 s solo en hashear contraseñas.
-if sys.argv[1:2] == ["test"]:
+if EJECUTANDO_TESTS:
     PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # Vigencia del link para crear o recuperar la contraseña (también el de la invitación).
@@ -155,6 +175,24 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
+
+if EJECUTANDO_TESTS:
+    # El storage con manifest exige haber corrido collectstatic: en un checkout limpio (CI) los
+    # tests fallaban con "Missing staticfiles manifest entry". Para los tests alcanza el común.
+    STORAGES["staticfiles"] = {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}
+
+# Caché compartida entre los workers de gunicorn (archivos en una carpeta temporal): la usan
+# el límite de pedidos de recuperar contraseña y el filtro de las alertas de error. En los
+# tests, en memoria. No guarda nada que importe: si se borra, solo se reinician los contadores.
+if EJECUTANDO_TESTS:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+            "LOCATION": str(Path(tempfile.gettempdir()) / "napsis-cache"),
+        }
+    }
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -184,6 +222,11 @@ IMPLEMENTATION_TEAM_EMAILS = [
     e for e in os.environ.get("IMPLEMENTATION_TEAM_EMAILS", "").split(",") if e
 ]
 
+# Aviso por mail cuando la app tiene un error 500 (ver notifications/alertas.py). APAGADO por
+# defecto: por ahora los errores se guardan en el archivo de log (ver LOGGING). Se activa
+# definiendo ERROR_ALERT_EMAILS (lista separada por comas); necesita el SMTP de .env.mail.
+ERROR_ALERT_EMAILS = [e.strip() for e in os.environ.get("ERROR_ALERT_EMAILS", "").split(",") if e.strip()]
+
 # Google Apps Script Web App URL que appendea una fila al Sheet de seguimiento.
 GOOGLE_SHEETS_WEBHOOK_URL = os.environ.get("GOOGLE_SHEETS_WEBHOOK_URL", "")
 
@@ -192,14 +235,31 @@ SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://localhost:8000")
 
 MAX_UPLOAD_SIZE_BYTES = 15 * 1024 * 1024  # 15MB por adjunto
 
+# Dónde se guarda el log de errores. En Docker es un volumen (napsis_logs) para que sobreviva a
+# los redeploys; los logs por consola (`docker compose logs`) se pierden al recrear el contenedor.
+LOG_DIR = Path(os.environ.get("LOG_DIR") or BASE_DIR / "logs")
+LOG_ARCHIVO_ERRORES = LOG_DIR / "errores.log"
+_log_a_archivo = not EJECUTANDO_TESTS
+if _log_a_archivo:
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:  # sistema de archivos de solo lectura: queda solo la consola
+        _log_a_archivo = False
+
 # Por default, con DEBUG=False Django manda los errores 500 a mail_admins
-# (que no configuramos) en vez de a la consola — quedan "mudos" en los logs
-# de `docker logs`/journalctl. Esto asegura que el traceback real se vea ahí.
+# (que no configuramos) en vez de a la consola: quedan "mudos". Esto asegura que el traceback
+# se vea por consola y además quede guardado en errores.log (rota a los 5 MB, conserva 5 archivos).
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "formatters": {
+        "con_fecha": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"},
+    },
     "handlers": {
         "console": {"class": "logging.StreamHandler"},
+        # Aviso por mail de un 500 (con tope: uno cada 10 min por tipo de error). Solo hace algo
+        # si ERROR_ALERT_EMAILS está definido.
+        "alerta_mail": {"class": "notifications.alertas.AlertaErrorHandler", "level": "ERROR"},
     },
     "root": {
         "handlers": ["console"],
@@ -207,7 +267,7 @@ LOGGING = {
     },
     "loggers": {
         "django.request": {
-            "handlers": ["console"],
+            "handlers": ["console", "alerta_mail"],
             "level": "ERROR",
             "propagate": False,
         },
@@ -220,3 +280,18 @@ LOGGING = {
         },
     },
 }
+if _log_a_archivo:
+    # Errores de la app: los 500 (django.request) y todo lo que el código registra con
+    # logger.exception/error (mails que fallan, etc.). Los avisos y el INFO no se guardan acá.
+    LOGGING["handlers"]["errores_archivo"] = {
+        "class": "logging.handlers.RotatingFileHandler",
+        "filename": str(LOG_ARCHIVO_ERRORES),
+        "maxBytes": 5 * 1024 * 1024,
+        "backupCount": 5,
+        "encoding": "utf-8",
+        "delay": True,  # el archivo se crea con el primer error
+        "level": "ERROR",
+        "formatter": "con_fecha",
+    }
+    LOGGING["root"]["handlers"].append("errores_archivo")
+    LOGGING["loggers"]["django.request"]["handlers"].append("errores_archivo")

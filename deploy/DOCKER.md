@@ -30,7 +30,7 @@ el superusuario inicial (`DJANGO_SUPERUSER_*`). Los tres pasos son idempotentes.
 
 **Opcionales:** `DJANGO_SUPERUSER_USERNAME/PASSWORD/EMAIL` (superusuario inicial), `MYSQL_PORT`
 (3306 por defecto), `IMPLEMENTATION_TEAM_EMAILS` y `GOOGLE_SHEETS_WEBHOOK_URL`, y
-`TRUSTED_PROXY_COUNT` (ver abajo). El **correo saliente** (`EMAIL_*`, `DEFAULT_FROM_EMAIL`) va
+`TRUSTED_PROXY_COUNT`, `DJANGO_FORCE_HTTPS`, `SECURE_HSTS_SECONDS` y `ERROR_ALERT_EMAILS` (ver abajo). El **correo saliente** (`EMAIL_*`, `DEFAULT_FROM_EMAIL`) va
 aparte, en `.env.mail`: ver [CORREO.md](CORREO.md). Sin él la app funciona pero no envía mails.
 `DJANGO_DEBUG` debe quedar en `false`.
 
@@ -45,13 +45,44 @@ location / {
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    client_max_body_size 20M;
+    client_max_body_size 35M;     # un paso sube dos adjuntos de hasta 15 MB cada uno
+    proxy_read_timeout 120s;      # importar una nómina grande puede tardar unos segundos
 }
 ```
 
 No hace falta servir `/static/` ni `/media/` aparte: los estáticos los sirve la app (WhiteNoise)
 y los adjuntos también, **con login** — un cliente solo ve los suyos. No publicar `/media/`
 desde el proxy.
+
+## HTTPS obligatorio
+
+En producción la app **exige HTTPS por sí misma** (no depende de que el proxy lo haga bien):
+redirige `http` a `https`, marca las cookies de sesión y CSRF como `Secure` y manda HSTS.
+
+- **El proxy tiene que terminar TLS y mandar `X-Forwarded-Proto: https`** (el ejemplo de arriba
+  lo hace). Si no lo manda, la app cree que todo llega por http y entra en un **bucle de
+  redirecciones**. También conviene que el proxy redirija 80 → 443 por su lado.
+- **HSTS** arranca en 1 hora (`SECURE_HSTS_SECONDS=3600`). Cuando se confirme que todo anda por
+  https, subirlo a un año (`31536000`) en `.env.docker`. No incluye subdominios.
+- **Probar sin TLS** (solo un ensayo, nunca en producción): `DJANGO_FORCE_HTTPS=false`. Con
+  los flags activos, el login **no anda por http** (la cookie es `Secure`).
+- `/salud/` está exento del redirect (lo usa el healthcheck y se puede usar desde un monitor).
+
+## Monitoreo y alertas
+
+- **Healthcheck:** el contenedor consulta `/salud/` (que responde 200 solo si llega a la base),
+  con el `Host` correcto, no solo si el puerto está abierto. `docker compose ps` muestra
+  `healthy`/`unhealthy`. Docker no reinicia solo un contenedor `unhealthy`: para que alguien se
+  entere, apuntar el monitor de infra a `https://<dominio>/salud/`.
+- **Errores en un archivo de log:** cada error interno (500) y cada `logger.exception` del código
+  (por ejemplo un mail que falla) queda guardado, con fecha y traceback, en `errores.log` dentro del
+  volumen `napsis_logs` (sobrevive a los redeploys; rota a los 5 MB y guarda 5 archivos). Ver los
+  últimos: `docker compose exec app tail -n 100 logs/errores.log`. Los tracebacks pueden incluir
+  datos del error (por ejemplo un CUIL en un mensaje de la base): tratarlo como archivo interno.
+  También salen por consola (`docker compose logs app`), que se pierde al recrear el contenedor.
+- **Aviso por mail de un error 500: apagado por defecto.** Se activa definiendo `ERROR_ALERT_EMAILS`
+  (lista separada por comas) y necesita el SMTP de `.env.mail`. Manda un mail por tipo de error
+  cada 10 minutos, con el error y el traceback pero sin los datos del pedido.
 
 ## Límite de intentos de login
 
@@ -71,19 +102,24 @@ por **30 minutos** (un ingreso correcto reinicia la cuenta). Ver `AXES_*` en `co
 
 ## Actualizar a una versión nueva
 
-```bash
-docker compose pull && docker compose up -d
-```
+**Guía paso a paso (primer despliegue, actualizar y volver atrás): [RELEASE.md](RELEASE.md).**
+En resumen: fijar la versión en `NAPSIS_IMAGE`, `docker compose pull && docker compose up -d`.
 
-El CI (`.github/workflows/docker.yml`) corre los tests y publica la imagen en
-`ghcr.io/aluskies/implementador-napsis` (`latest`, `sha-…` y `vX.Y.Z` por tag). El paquete es
-privado: el host necesita `docker login ghcr.io` con un token de solo lectura (`read:packages`).
+El CI (`.github/workflows/docker.yml`) corre los tests (también contra MySQL 8) y, si pasan,
+publica la imagen en `ghcr.io/aluskies/implementador-napsis` (`latest`, `sha-…` y `vX.Y.Z` por
+tag). Si los tests fallan, **no se publica nada**. El paquete es privado: el host necesita
+`docker login ghcr.io` con un token de solo lectura (`read:packages`).
 
 ## Qué hay que saber
 
 - **MySQL:** el usuario de la app necesita permisos de esquema (`CREATE/ALTER/DROP/INDEX`
   además del CRUD), si no `migrate` falla. Charset `utf8mb4`.
-- **Backups:** además de MySQL, respaldar el volumen `media` (adjuntos de los clientes).
+- **Backups:** además de MySQL, respaldar el volumen `napsis_media` (modelo de recibo y banner
+  de los clientes). Comandos y restore en [RELEASE.md](RELEASE.md#backups-y-restore).
+- **Valores de ejemplo:** el contenedor **no arranca** si `DJANGO_SECRET_KEY` es de ejemplo o
+  tiene menos de 40 caracteres, o si `MYSQL_PASSWORD` / `DJANGO_SUPERUSER_PASSWORD` siguen en
+  `cambiar`. Es a propósito: son los textos de relleno de `.env.docker.example`.
 - **Más de una réplica:** poner `RUN_MIGRATIONS=0` en todas y correr
   `docker compose run --rm app python manage.py migrate` una sola vez por release.
-- **Logs:** salen por stdout (`docker compose logs`). Un error 500 deja el traceback ahí.
+- **Logs:** salen por stdout (`docker compose logs app`) y los errores además quedan en
+  `errores.log` (ver "Monitoreo y alertas").

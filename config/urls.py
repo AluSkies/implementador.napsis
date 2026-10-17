@@ -5,7 +5,7 @@ from django.views.generic import TemplateView
 
 from clients.views import (
     ClaveConfirmarView, ClaveEnviadaView, ClaveListaView, PerfilView, PortalLoginView,
-    RecuperarClaveView, media_protegida,
+    RecuperarClaveView, media_protegida, salud,
 )
 
 urlpatterns = [
@@ -15,6 +15,7 @@ urlpatterns = [
     path("clave/enviada/", ClaveEnviadaView.as_view(), name="clave_enviada"),
     path("clave/nueva/<uidb64>/<token>/", ClaveConfirmarView.as_view(), name="clave_confirmar"),
     path("clave/lista/", ClaveListaView.as_view(), name="clave_lista"),
+    path("salud/", salud, name="salud"),
     path("perfil/", PerfilView.as_view(), name="perfil"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("admin/", admin.site.urls),

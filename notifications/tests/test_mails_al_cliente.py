@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -119,6 +120,7 @@ class ReenvioDesdeLaFichaTests(BasePanel):
 
 class RecuperarContrasenaTests(TestCase):
     def setUp(self):
+        cache.clear()  # el límite de pedidos usa la caché: no puede arrastrarse de un test a otro
         self.usuario = User.objects.create_user("cli", password="clave-vieja-123", email="cli@a.com")
 
     def test_el_login_ofrece_recuperar_la_contrasena(self):
@@ -232,3 +234,26 @@ class AvisoDeImplementacionCumplidaTests(BasePanel):
     def test_anular_no_manda_nada_al_cliente(self):
         self.implementacion.anular()
         self.assertEqual(mail.outbox, [])
+
+
+class MailsEnTextoPlanoTests(TestCase):
+    """Los mails son texto plano: un "&" o un apóstrofo tienen que verse tal cual, no como &amp; / &#x27;."""
+
+    def test_la_razon_social_no_sale_con_entidades_html(self):
+        cliente = Cliente.objects.create(nombre="Pérez & Hijos", razon_social="Pérez & Hijos S.R.L. - D'Angelo")
+        implementacion = Implementacion.objects.create(cliente=cliente, mail_contacto="c@a.com")
+        from notifications.services import notificar_cliente_implementacion_cumplida, notificar_cliente_relevamiento_recibido
+
+        notificar_cliente_relevamiento_recibido(implementacion)
+        notificar_cliente_implementacion_cumplida(implementacion)
+        for enviado in mail.outbox:
+            self.assertIn("Pérez & Hijos S.R.L. - D'Angelo", enviado.body)
+            self.assertNotIn("&amp;", enviado.body)
+            self.assertNotIn("&#x27;", enviado.body)
+
+    def test_el_mail_de_recuperar_tampoco(self):
+        User.objects.create_user("o'brien", password="x", email="ob@a.com")
+        cache.clear()
+        self.client.post(reverse("clave_recuperar"), {"email": "ob@a.com"})
+        self.assertIn("o'brien", mail.outbox[0].body)
+        self.assertNotIn("&#x27;", mail.outbox[0].body)

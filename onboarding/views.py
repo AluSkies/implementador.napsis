@@ -12,7 +12,7 @@ from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Implementacion, Modulo
 from clients.services import resumen_implementacion
 from employees.forms import EmpleadoForm, ImportarArchivoForm
-from employees.services import generar_plantilla_xlsx
+from employees.services import ArchivoInvalido, generar_plantilla_xlsx
 from notifications.services import (
     notificar_cliente_relevamiento_recibido,
     notificar_implementacion_completa,
@@ -31,22 +31,25 @@ from .forms import (
     rol_formset_obligatorio,
     SucursalFormSet,
 )
-from .services import TOTAL_PASOS
+from .services import (
+    PASO_CONFIGURACION, PASO_DATOS, PASO_DOCUMENTOS, PASO_LICENCIAS, PASO_MODULOS, PASO_NOMINA,
+    PASO_REVISION, PASO_ROLES, PASO_SUCURSALES, TOTAL_PASOS,
+)
 
 logger = logging.getLogger(__name__)
 
 EDITADO_POR_CLIENTE = "Cliente"
 
 TITULOS_PASO = {
-    1: "Datos de contacto",
-    2: "Módulos contratados",
-    3: "Apoderado/s, Liquidador y Admin. de RRHH",
-    4: "Configuración de firma y adjuntos",
-    5: "Sucursales",
-    6: "Licencias y Novedades",
-    7: "Documentos de Legajo Digital",
-    8: "Carga de empleados",
-    9: "Revisión y envío",
+    PASO_DATOS: "Datos de contacto",
+    PASO_MODULOS: "Módulos contratados",
+    PASO_SUCURSALES: "Sucursales",
+    PASO_NOMINA: "Carga de empleados",
+    PASO_ROLES: "Apoderado/s, Liquidador y Admin. de RRHH",
+    PASO_CONFIGURACION: "Configuración de firma y adjuntos",
+    PASO_LICENCIAS: "Licencias y Novedades",
+    PASO_DOCUMENTOS: "Documentos de Legajo Digital",
+    PASO_REVISION: "Revisión y envío",
 }
 
 
@@ -220,9 +223,16 @@ def _step_roles(request, implementacion, step):
             return _redirect_next(implementacion, step)
     else:
         formset = RolesFormSet(initial=initial)
+    nomina = [
+        {"etiqueta": f"{e.apellido}, {e.nombre} — {e.cuil}", "apellido_nombre": f"{e.apellido}, {e.nombre}",
+         "cuil": e.cuil, "mail": e.mail}
+        for e in implementacion.empleados.order_by("apellido", "nombre")
+    ]
     return render(
         request, "onboarding/step_roles.html",
-        _wizard_context(implementacion, step, {"formset": formset, "max_roles": implementacion.max_roles}),
+        _wizard_context(implementacion, step, {
+            "formset": formset, "max_roles": implementacion.max_roles, "nomina": nomina, "paso_nomina": PASO_NOMINA,
+        }),
     )
 
 
@@ -321,13 +331,14 @@ def _importar_archivo_empleados(request, implementacion):
         errores = [{"fila": "-", "mensaje": e} for e in import_form.errors.get("archivo", [])]
         return import_form, errores
 
-    filas, errores = services.importar_archivo_empleados(implementacion, import_form.cleaned_data["archivo"], EDITADO_POR_CLIENTE)
-    if errores:
-        messages.warning(
-            request, f"Se importaron {len(filas)} empleados. {len(errores)} filas tuvieron errores y no se cargaron."
+    try:
+        filas, errores, advertencias = services.importar_archivo_empleados(
+            implementacion, import_form.cleaned_data["archivo"], EDITADO_POR_CLIENTE,
         )
-    else:
-        messages.success(request, f"Se importaron {len(filas)} empleados correctamente.")
+    except ArchivoInvalido as error:
+        return import_form, [{"fila": "-", "mensaje": str(error)}]
+    for nivel, texto in services.resumen_importacion(filas, errores, advertencias):
+        messages.add_message(request, nivel, texto)
     return import_form, errores
 
 
@@ -340,12 +351,31 @@ def _agregar_empleado_manual(request, implementacion):
     return empleado_form
 
 
+def _empleado_a_editar(implementacion, empleado_id):
+    return implementacion.empleados.filter(pk=empleado_id).first() if str(empleado_id).isdigit() else None
+
+
 def _step_empleados(request, implementacion, step):
     accion = request.POST.get("accion") if request.method == "POST" else None
 
     import_form = ImportarArchivoForm()
     empleado_form = EmpleadoForm(implementacion=implementacion)
     errores_import = []
+
+    # Edición de un empleado ya cargado: ?editar=<id> abre el formulario con sus datos.
+    editando = None
+    if accion == "guardar_edicion":
+        editando = _empleado_a_editar(implementacion, request.POST.get("empleado_id"))
+        if editando:
+            edicion_form = EmpleadoForm(request.POST, instance=editando, implementacion=implementacion)
+            if services.editar_empleado(implementacion, edicion_form, EDITADO_POR_CLIENTE):
+                messages.success(request, "Empleado actualizado.")
+                return redirect("onboarding:wizard_step", token=implementacion.token, step=step)
+        accion = None
+    elif request.method == "GET":
+        editando = _empleado_a_editar(implementacion, request.GET.get("editar"))
+        if editando:
+            edicion_form = EmpleadoForm(instance=editando, implementacion=implementacion)
 
     if accion == "importar":
         import_form, errores_import = _importar_archivo_empleados(request, implementacion)
@@ -367,6 +397,8 @@ def _step_empleados(request, implementacion, step):
             "empleado_form": empleado_form,
             "empleados": empleados,
             "errores_import": errores_import,
+            "editando": editando,
+            "edicion_form": edicion_form if editando else None,
         }),
     )
 
@@ -433,13 +465,13 @@ def enviado(request, token):
 
 
 _HANDLERS = {
-    1: _step_empresa,
-    2: _step_modulos,
-    3: _step_roles,
-    4: _step_configuracion,
-    5: _step_sucursales,
-    6: _step_licencias_novedades,
-    7: _step_documentos,
-    8: _step_empleados,
-    9: _step_revision,
+    PASO_DATOS: _step_empresa,
+    PASO_MODULOS: _step_modulos,
+    PASO_SUCURSALES: _step_sucursales,
+    PASO_NOMINA: _step_empleados,
+    PASO_ROLES: _step_roles,
+    PASO_CONFIGURACION: _step_configuracion,
+    PASO_LICENCIAS: _step_licencias_novedades,
+    PASO_DOCUMENTOS: _step_documentos,
+    PASO_REVISION: _step_revision,
 }

@@ -6,6 +6,20 @@
     <br><a href="{% url 'onboarding:plantilla_empleados' token=implementacion.token %}">Descargar plantilla vacía (.xlsx)</a>
 </p>
 
+{% if editando %}
+<fieldset>
+    <legend>Editando a {{ editando.apellido }}, {{ editando.nombre }}</legend>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="guardar_edicion">
+        <input type="hidden" name="empleado_id" value="{{ editando.id }}">
+        {{ edicion_form.as_p }}
+        <button class="btn" type="submit">Guardar cambios</button>
+        <a class="btn secondary" href="{% url 'onboarding:wizard_step' token=implementacion.token step=paso %}">Cancelar</a>
+    </form>
+</fieldset>
+{% endif %}
+
 <div class="upload-toggle">
     <input type="radio" name="metodo_carga" id="metodo_manual" {% if not errores_import %}checked{% endif %}>
     <input type="radio" name="metodo_carga" id="metodo_archivo" {% if errores_import %}checked{% endif %}>
@@ -59,6 +73,7 @@
             <td>{{ e.legajo }}</td>
             <td>{{ e.puesto }}</td>
             <td>
+                <a class="btn secondary" href="?editar={{ e.id }}">Editar</a>
                 <form method="post" style="display:inline">
                     {% csrf_token %}
                     <input type="hidden" name="accion" value="eliminar">

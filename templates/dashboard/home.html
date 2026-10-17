@@ -88,6 +88,9 @@
         {% endfor %}
         </tbody>
     </table>
+    <div class="actions">
+        <a class="btn secondary" href="{% url 'dashboard:exportar' %}" title="Todas las implementaciones, sin filtros">Exportar (.xlsx)</a>
+    </div>
 </div>
 
 <dialog id="modal-alta" class="modal" {% if alta.abrir %}data-abrir="1"{% endif %} aria-labelledby="modal-alta-titulo">

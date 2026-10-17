@@ -12,7 +12,9 @@ disponible se sigue usando `manage.py createsuperuser` normalmente.
 import os
 
 from django.contrib.auth.models import User
-from django.core.management.base import BaseCommand
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
+from django.core.management.base import BaseCommand, CommandError
 
 
 class Command(BaseCommand):
@@ -32,6 +34,15 @@ class Command(BaseCommand):
         if User.objects.filter(username=username).exists():
             self.stdout.write(f"El superusuario '{username}' ya existe; no se toca.")
             return
+
+        # create_superuser no valida la contraseña: sin esto se podía arrancar con una de
+        # ejemplo ("cambiar") en un admin expuesto a internet. Falla fuerte, a propósito.
+        try:
+            validate_password(password, User(username=username, email=email))
+        except ValidationError as error:
+            raise CommandError(
+                "DJANGO_SUPERUSER_PASSWORD no es una contraseña aceptable: " + " ".join(error.messages)
+            )
 
         User.objects.create_superuser(username=username, email=email, password=password)
         self.stdout.write(self.style.SUCCESS(f"Superusuario '{username}' creado."))

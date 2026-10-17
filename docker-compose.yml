@@ -17,11 +17,12 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - media:/app/media
+      - logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      # Chequeo por TCP: un GET desde adentro llegaría con Host=127.0.0.1 y
-      # Django lo rechazaría (400) por ALLOWED_HOSTS aunque la app esté sana.
-      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3)"]
+      # Pide /salud/ con el Host correcto (ver docker/healthcheck.py): comprueba que la app
+      # atiende Y que llega a la base de datos, no solo que el puerto esté abierto.
+      test: ["CMD", "python", "docker/healthcheck.py"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -29,3 +30,9 @@ services:
 
 volumes:
   media:
+    # Nombre fijo: sin esto Docker lo llama <carpeta>_media, y si alguien mueve o renombra la
+    # carpeta del proyecto se crearía un volumen nuevo y vacío sin avisar.
+    name: napsis_media
+  logs:
+    # Log de errores de la app (errores.log): en un volumen para que sobreviva a los redeploys.
+    name: napsis_logs

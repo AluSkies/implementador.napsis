@@ -162,12 +162,20 @@ def notificar_cliente_implementacion_cumplida(implementacion, request=None):
     )
 
 
+def _sin_formulas(valor):
+    """Google Sheets interpreta como fórmula un texto que empiece con = + - @ (y esos datos los
+    escribe el cliente). Con un apóstrofo adelante se guarda como texto."""
+    if isinstance(valor, str) and valor[:1] in ("=", "+", "-", "@"):
+        return "'" + valor
+    return valor
+
+
 def _enviar_a_google_sheets(implementacion):
     if not settings.GOOGLE_SHEETS_WEBHOOK_URL:
         logger.info("GOOGLE_SHEETS_WEBHOOK_URL no configurado; se omite el dump a Sheets.")
         return
 
-    payload = _resumen_dict(implementacion)
+    payload = {clave: _sin_formulas(valor) for clave, valor in _resumen_dict(implementacion).items()}
     try:
         response = requests.post(settings.GOOGLE_SHEETS_WEBHOOK_URL, json=payload, timeout=10)
         response.raise_for_status()

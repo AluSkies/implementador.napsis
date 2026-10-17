@@ -92,18 +92,26 @@ En ambos casos:
 - **Límite de intentos de login** (django-axes): 5 fallos seguidos con el mismo usuario desde la misma IP bloquean ese par por 30 minutos, en `/login/` y `/admin/login/`. Requiere que el proxy reenvíe `X-Forwarded-For` (ver `deploy/DOCKER.md`). Para desbloquear a alguien: `manage.py axes_reset_username <usuario>`.
 - SMTP real para los mails, en `.env.mail` (en dev se usa el backend de consola). Lo configura deploy: `deploy/CORREO.md`.
 
+## Los pasos del wizard
+
+1. Datos de contacto · 2. Módulos · 3. Sucursales (con Fichada) · 4. **Nómina** · 5. **Roles** (con Recibo Digital o Legajos) · 6. Configuración de firma y adjuntos (con Recibo Digital) · 7. Licencias y Novedades (con Novedades) · 8. Documentos de legajo (con Legajos) · 9. Revisión y envío.
+
+La nómina va **antes** que los roles para poder elegir a las personas con rol de esa lista (cada fila de roles tiene un buscador «Buscar en la nómina» que completa nombre, CUIL y mail), y las sucursales antes que la nómina para asignar a cada empleado la suya. En la nómina se puede **editar** a cada empleado (botón «Editar»; también desde la ficha del panel). Los números de paso están definidos una sola vez, como constantes, en `onboarding/services.py`.
+
+**Importar la nómina** (`.xlsx` o `.csv`, hasta 5.000 filas por archivo): se aceptan fechas reales de Excel o en texto (DD/MM/AAAA), CUIL con o sin guiones, y CSV de Excel en español (`;`, cp1252). Si el archivo no se puede leer, falta una columna obligatoria o es demasiado grande, se avisa con un mensaje claro y no se carga nada; las filas con error (CUIL inválido, fecha que no se entiende, valor demasiado largo, mail inválido) se informan con su número de fila y no impiden cargar las demás. La carga es todo-o-nada (una sola transacción) y en lote: 5.000 empleados tardan unos 4 segundos. Se avisa de las columnas desconocidas y de los «Reporta A / Aprobador» que no están en la nómina. **El archivo no se guarda** (tiene datos personales): solo queda el registro de la importación.
+
 ## Qué exige el wizard antes de poder enviar
 
 El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo que falta, con link a cada paso, y el botón queda deshabilitado; el servidor lo valida igual):
 
 - **Razón social y CUIT** de la empresa (paso 1). El implementador puede cargarlos al crear la implementación; si no, los completa el cliente. Los CUIT se validan con su dígito verificador (acepta varios, separados por coma).
-- **Roles** (si hay Recibo Digital o Legajos): al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
-- **Modelo de recibo** en PDF (si hay Recibo Digital).
-- **Nómina**: al menos un empleado.
+- **Roles** (paso 5; si hay Recibo Digital o Legajos): al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
+- **Modelo de recibo** en PDF (paso 6; si hay Recibo Digital).
+- **Nómina** (paso 4): al menos un empleado.
 
 **Condiciones del proceso.** Al crear la implementación (y después desde su ficha) el equipo decide qué deja fijo y qué decide el cliente. Cada dato se bloquea **al completarlo**; si se deja vacío, lo decide el cliente:
 
-- **Tipo de firma** (electrónica o digital) y **nomenclatura de los recibos PDF**: si el implementador los define, el cliente los ve en el paso 4 pero no los puede cambiar (ni editando el formulario a mano).
+- **Tipo de firma** (electrónica o digital) y **nomenclatura de los recibos PDF**: si el implementador los define, el cliente los ve en el paso 6 pero no los puede cambiar (ni editando el formulario a mano).
 - **Solo Área única**: bloquea la segmentación del liquidador.
 - **Máximo de personas con rol** (de 3 a 6): cuántas filas ve el cliente en el paso de roles. El mínimo es 3 porque tiene que cargar un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
 
@@ -112,6 +120,21 @@ En el alta del panel estas condiciones están plegadas bajo **Opciones avanzadas
 **Fecha de implementación.** En el paso 9 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
 
 Cada implementación tiene un **implementador asignado** (por defecto quien la crea, se elige en el alta y se puede reasignar). Es quien lleva la implementación y, además de la lista `IMPLEMENTATION_TEAM_EMAILS`, recibe sus notificaciones.
+
+## Reporte exportable
+
+Al pie del panel (`/panel/`), el botón **Exportar (.xlsx)** descarga todas las implementaciones, sin filtros: empresa, razón social, CUIT(s), estado, paso actual, implementador asignado, quién la creó, mail y teléfono de contacto, fecha de solicitud, de envío del cliente y de implementación (real si está cumplida, estimada si no), módulos, cantidad de empleados y sucursales, y si hay un pedido de contacto sin atender. Los textos que parecen fórmulas (`=...`) se escriben como texto para que no se ejecuten al abrir el archivo en Excel (lo mismo en la nómina descargable y en el envío a Google Sheets).
+
+## Seguridad y operación (producción)
+
+- **HTTPS obligatorio:** la app redirige a https, marca las cookies como `Secure` y manda HSTS (apagable solo para un ensayo con `DJANGO_FORCE_HTTPS=false`). El proxy tiene que mandar `X-Forwarded-Proto`. Ver `deploy/DOCKER.md`.
+- **Valores de ejemplo:** el contenedor no arranca si la clave secreta es de ejemplo o corta, o si las contraseñas siguen en `cambiar`; el superusuario inicial pasa por los validadores de contraseña.
+- **Recuperar contraseña:** el mismo mail no puede pedir el link más de una vez cada 10 minutos (y una IP tiene un tope general), con la misma respuesta siempre para no revelar qué cuentas existen. Usa una caché en archivos compartida entre los workers.
+- **Errores 500:** quedan en `logs/errores.log` (en Docker, volumen `napsis_logs`; con fecha y traceback, rota a los 5 MB). El aviso por mail existe pero está **apagado**: se activa definiendo `ERROR_ALERT_EMAILS`.
+- **`/salud/`:** responde 200 si la app llega a la base; lo usa el healthcheck del contenedor.
+- **Catálogos:** `seed_catalogos` y `seed_modulos` corren en cada arranque pero solo cargan lo que falta o está vacío: lo que se corrija desde el admin no se duplica ni se revierte (`seed_catalogos --completar` agrega lo que falte de la lista original).
+- **Versiones fijas** en `requirements.txt`, y el CI corre `makemigrations --check` y la suite en SQLite **y en MySQL 8** antes de publicar la imagen.
+- **Cómo desplegar, actualizar y volver atrás:** `deploy/RELEASE.md`.
 
 ## Mails
 

@@ -27,6 +27,22 @@ if [ -n "$faltan" ]; then
     exit 1
 fi
 
+# Valores de ejemplo: el .env.docker.example trae textos de relleno. Si alguien lo copia y se
+# olvida de cambiar alguno, la app arrancaría "bien" pero con una clave o una contraseña
+# que cualquiera puede leer en el repo. Mejor que no arranque.
+ejemplos=""
+case "$DJANGO_SECRET_KEY" in
+    *generar-una-clave*|*cambiar*|django-insecure-*|solo-para-el-build) ejemplos="$ejemplos DJANGO_SECRET_KEY" ;;
+esac
+[ "${#DJANGO_SECRET_KEY}" -ge 40 ] || ejemplos="$ejemplos DJANGO_SECRET_KEY(muy corta: mínimo 40 caracteres)"
+[ "$MYSQL_PASSWORD" != "cambiar" ] || ejemplos="$ejemplos MYSQL_PASSWORD"
+[ "${DJANGO_SUPERUSER_PASSWORD:-}" != "cambiar" ] || ejemplos="$ejemplos DJANGO_SUPERUSER_PASSWORD"
+if [ -n "$ejemplos" ]; then
+    echo "ERROR: estas variables siguen con el valor de ejemplo (o son demasiado débiles):$ejemplos" >&2
+    echo "Cambialas por valores propios en .env.docker (ver deploy/DOCKER.md)." >&2
+    exit 1
+fi
+
 if [ "${DJANGO_DEBUG:-false}" = "true" ]; then
     echo "ADVERTENCIA: DJANGO_DEBUG=true; no usar así en producción." >&2
 fi

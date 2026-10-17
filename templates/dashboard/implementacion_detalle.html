@@ -290,8 +290,21 @@
     {% endif %}
 </div>
 
-<div class="card">
+<div class="card" id="empleados">
     <h2>Empleados ({{ empleados.count }})</h2>
+    {% if empleado_editando %}
+    <fieldset>
+        <legend>Editando a {{ empleado_editando.apellido }}, {{ empleado_editando.nombre }}</legend>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="editar_empleado">
+            <input type="hidden" name="empleado_id" value="{{ empleado_editando.id }}">
+            {{ empleado_edit_form.as_p }}
+            <button class="btn" type="submit">Guardar cambios</button>
+            <a class="btn secondary" href="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}#empleados">Cancelar</a>
+        </form>
+    </fieldset>
+    {% endif %}
     <table>
         <thead><tr><th>CUIL</th><th>Apellido y Nombre</th><th>Legajo</th><th>Puesto</th><th></th></tr></thead>
         <tbody>
@@ -299,6 +312,7 @@
             <tr>
                 <td>{{ e.cuil }}</td><td>{{ e.apellido }}, {{ e.nombre }}</td><td>{{ e.legajo }}</td><td>{{ e.puesto }}</td>
                 <td>
+                    <a class="btn secondary" href="?editar_empleado={{ e.id }}#empleados">Editar</a>
                     <form method="post" style="display:inline">
                         {% csrf_token %}
                         <input type="hidden" name="accion" value="eliminar_empleado">

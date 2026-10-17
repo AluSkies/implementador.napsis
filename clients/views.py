@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 from django.conf import settings
@@ -8,11 +9,14 @@ from django.contrib.auth.views import (
     LoginView, PasswordChangeView, PasswordResetCompleteView, PasswordResetConfirmView,
     PasswordResetDoneView, PasswordResetView,
 )
+from django.core.cache import cache
+from django.db import connection
 from django.db.models import Q
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.urls import reverse_lazy
 
 from .forms import RecuperarClaveForm
+from .security import ip_del_cliente
 from .models import Implementacion
 
 
@@ -36,6 +40,30 @@ class RecuperarClaveView(PasswordResetView):
     subject_template_name = "clave/mail_recuperar_asunto.txt"
     form_class = RecuperarClaveForm
     success_url = reverse_lazy("clave_enviada")
+
+    # Tope de pedidos (para que nadie use el portal para llenar de mails una casilla ajena ni
+    # para ocupar a los workers): el mismo mail, una vez cada 10 minutos; una misma IP, hasta 10.
+    VENTANA_SEGUNDOS = 10 * 60
+    MAXIMO_POR_IP = 10
+
+    def _dentro_del_limite(self, email):
+        huella = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+        ip = hashlib.sha256((ip_del_cliente(self.request) or "?").encode()).hexdigest()
+        # `add` solo crea la clave si no existía: es el "primer pedido" de este mail.
+        if not cache.add(f"clave-mail-{huella}", 1, self.VENTANA_SEGUNDOS):
+            return False
+        clave_ip = f"clave-ip-{ip}"
+        cache.add(clave_ip, 0, self.VENTANA_SEGUNDOS)
+        try:
+            return cache.incr(clave_ip) <= self.MAXIMO_POR_IP
+        except ValueError:  # la clave venció justo ahora
+            return True
+
+    def form_valid(self, form):
+        if not self._dentro_del_limite(form.cleaned_data["email"]):
+            # Misma respuesta que si se hubiera mandado: no se revela nada, solo no se reenvía.
+            return HttpResponseRedirect(self.get_success_url())
+        return super().form_valid(form)
 
 
 class ClaveEnviadaView(PasswordResetDoneView):
@@ -98,3 +126,15 @@ def media_protegida(request, ruta):
             raise Http404
 
     return FileResponse(archivo.open("rb"))
+
+
+def salud(request):
+    """Chequeo de salud para el monitoreo y el healthcheck del contenedor: responde 200 solo si
+    la app llega a la base. Sin login ni datos: solo "ok" o 503."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception:
+        return JsonResponse({"estado": "error"}, status=503)
+    return JsonResponse({"estado": "ok"})

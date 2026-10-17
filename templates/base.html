@@ -159,5 +159,17 @@
     {% endif %}
     {% block content %}{% endblock %}
 </main>
+<script>
+/* Anti doble clic: al enviar un formulario se deshabilitan sus botones, así un segundo clic no
+   duplica el alta ni el envío. Se deshabilita en el próximo ciclo (si no, el botón apretado no
+   viaja en el POST) y se vuelve a habilitar si el navegador restaura la página con "Atrás". */
+document.addEventListener('submit', function (e) {
+    var botones = e.target.querySelectorAll('button[type=submit], input[type=submit]');
+    setTimeout(function () { botones.forEach(function (b) { b.disabled = true; }); }, 0);
+});
+window.addEventListener('pageshow', function (e) {
+    if (e.persisted) document.querySelectorAll('button[type=submit], input[type=submit]').forEach(function (b) { b.disabled = false; });
+});
+</script>
 </body>
 </html>

@@ -3,6 +3,7 @@ from django import forms
 from clients.validators import validar_tamanio_archivo
 
 from .models import Empleado
+from .services import CUIL_RE, normalizar_cuil, normalizar_texto
 
 
 class EmpleadoForm(forms.ModelForm):
@@ -16,6 +17,7 @@ class EmpleadoForm(forms.ModelForm):
 
     def __init__(self, *args, implementacion=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.implementacion = implementacion
         # Los combos de sucursal/jerarquía deben acotarse a la implementación
         # actual: por default Django arma el queryset con TODOS los registros
         # del modelo, lo que filtraría empleados/sucursales de otros clientes.
@@ -26,6 +28,28 @@ class EmpleadoForm(forms.ModelForm):
                 empleados_qs = empleados_qs.exclude(pk=self.instance.pk)
             self.fields["reporta_a"].queryset = empleados_qs
             self.fields["aprobador"].queryset = empleados_qs
+
+
+    # Mismas reglas que la importación masiva: si no, el mismo empleado cargado a mano y por
+    # archivo quedaba duplicado (uno con guiones en el CUIL y el otro sin) y un CUIL repetido
+    # daba un error 500 en vez de un aviso.
+    def clean_cuil(self):
+        cuil = normalizar_cuil(self.cleaned_data["cuil"])
+        if not CUIL_RE.match(cuil):
+            raise forms.ValidationError("El CUIL tiene que tener 11 dígitos.")
+        if self.implementacion is not None:
+            repetidos = self.implementacion.empleados.filter(cuil=cuil)
+            if self.instance and self.instance.pk:
+                repetidos = repetidos.exclude(pk=self.instance.pk)
+            if repetidos.exists():
+                raise forms.ValidationError("Ya hay un empleado cargado con ese CUIL.")
+        return cuil
+
+    def clean_nombre(self):
+        return normalizar_texto(self.cleaned_data["nombre"])
+
+    def clean_apellido(self):
+        return normalizar_texto(self.cleaned_data["apellido"])
 
 
 class ImportarArchivoForm(forms.Form):

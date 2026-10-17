@@ -22,23 +22,23 @@ class PasosActivosTests(TestCase):
         )
 
     def test_sin_modulos_solo_los_pasos_universales(self):
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 8, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 9])
 
     def test_fichada_activa_el_paso_de_sucursales(self):
         self._activar_modulo("Fichada")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 5, 8, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 3, 4, 9])
 
     def test_legajos_activa_roles_y_documentos_pero_no_configuracion(self):
         self._activar_modulo("Legajos")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 3, 7, 8, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 5, 8, 9])
 
     def test_novedades_activa_el_paso_de_licencias_y_novedades(self):
         self._activar_modulo("Novedades")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 6, 8, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 7, 9])
 
     def test_recibo_digital_activa_roles_y_configuracion_pero_no_documentos(self):
         self._activar_modulo("Recibo Digital")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 3, 4, 8, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 5, 6, 9])
 
 
 class GuardarDatosContactoTests(TestCase):
@@ -268,19 +268,19 @@ class PendientesDeEnvioTests(TestCase):
         return [p["paso"] for p in services.pendientes_de_envio(self.implementacion)]
 
     def test_sin_modulos_solo_pide_empresa_y_nomina(self):
-        self.assertEqual(self._pasos(), [1, 8])
+        self.assertEqual(self._pasos(), [1, 4])
 
     def test_con_recibo_digital_pide_tambien_roles_y_modelo_de_recibo(self):
         self._activar("Recibo Digital")
-        self.assertEqual(self._pasos(), [1, 3, 4, 8])
+        self.assertEqual(self._pasos(), [1, 4, 5, 6])
 
     def test_con_legajos_pide_roles_pero_no_modelo_de_recibo(self):
         self._activar("Legajos")
-        self.assertEqual(self._pasos(), [1, 3, 8])
+        self.assertEqual(self._pasos(), [1, 4, 5])
 
     def test_con_fichada_no_pide_nada_extra(self):
         self._activar("Fichada")
-        self.assertEqual(self._pasos(), [1, 8])
+        self.assertEqual(self._pasos(), [1, 4])
 
     def test_la_razon_social_sola_no_alcanza_hace_falta_el_cuit(self):
         self.cliente.razon_social = "Empresa S.A."
@@ -299,7 +299,7 @@ class PendientesDeEnvioTests(TestCase):
         for rol in (PersonaRol.ROL_APODERADO, PersonaRol.ROL_LIQUIDADOR):
             PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre="X, Y")
         PersonaRol.objects.create(implementacion=self.implementacion, rol=PersonaRol.ROL_ADMIN_RRHH, apellido_nombre="")
-        self.assertIn(3, self._pasos())
+        self.assertIn(5, self._pasos())
 
 
 class DiasHabilesTests(TestCase):

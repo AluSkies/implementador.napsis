@@ -117,16 +117,33 @@ TIPOS_DOCUMENTO = [
 
 
 class Command(BaseCommand):
-    help = "Carga (o completa) el catálogo global de licencias, novedades y documentos de legajo."
+    help = (
+        "Carga el catálogo global de licencias, novedades y documentos de legajo SOLO en lo que "
+        "todavía está vacío: lo que ya se cargó o corrigió desde el admin no se toca."
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--completar", action="store_true",
+            help="Agrega lo que falte de la lista original aunque el catálogo ya tenga datos "
+                 "(puede volver a crear algo que se haya borrado o renombrado a propósito).",
+        )
 
     def handle(self, *args, **options):
-        for i, nombre in enumerate(LICENCIAS):
+        # Se corre en cada arranque del contenedor. Si sembrara siempre, un nombre corregido en
+        # el admin ("Prestamo" -> "Préstamo") quedaría duplicado y lo borrado reaparecería.
+        completar = options["completar"]
+        sembrar_licencias = completar or not TipoLicencia.objects.exists()
+        sembrar_novedades = completar or not TipoNovedad.objects.exists()
+        sembrar_documentos = completar or not TipoDocumento.objects.filter(implementacion=None).exists()
+
+        for i, nombre in enumerate(LICENCIAS if sembrar_licencias else []):
             TipoLicencia.objects.get_or_create(nombre=nombre, defaults={"orden": i})
 
-        for i, nombre in enumerate(NOVEDADES):
+        for i, nombre in enumerate(NOVEDADES if sembrar_novedades else []):
             TipoNovedad.objects.get_or_create(nombre=nombre, defaults={"orden": i})
 
-        for i, (nombre, requiere_firma, campos) in enumerate(TIPOS_DOCUMENTO):
+        for i, (nombre, requiere_firma, campos) in enumerate(TIPOS_DOCUMENTO if sembrar_documentos else []):
             tipo, _ = TipoDocumento.objects.get_or_create(
                 nombre=nombre,
                 implementacion=None,
@@ -143,7 +160,13 @@ class Command(BaseCommand):
                     },
                 )
 
+        omitidos = [
+            nombre for nombre, sembro in (
+                ("licencias", sembrar_licencias), ("novedades", sembrar_novedades), ("documentos", sembrar_documentos),
+            ) if not sembro
+        ]
         self.stdout.write(self.style.SUCCESS(
             f"Catálogo listo: {len(LICENCIAS)} licencias, {len(NOVEDADES)} novedades, "
             f"{len(TIPOS_DOCUMENTO)} tipos de documento."
+            + (f" Ya tenían datos y no se tocaron: {', '.join(omitidos)}." if omitidos else "")
         ))

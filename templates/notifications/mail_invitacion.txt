@@ -1,4 +1,4 @@
-Hola,
+{% autoescape off %}Hola,
 
 Te damos la bienvenida al Portal de Implementación de Napsis.
 
@@ -10,4 +10,4 @@ Después vas a poder ingresar siempre desde: {{ login_url }}
 
 Si no esperabas este mail, podés ignorarlo.
 
-Equipo de Implementación Napsis
+Equipo de Implementación Napsis{% endautoescape %}

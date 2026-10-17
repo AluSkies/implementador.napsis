@@ -9,9 +9,12 @@ class ImportBatch(models.Model):
     implementacion = models.ForeignKey(
         "clients.Implementacion", on_delete=models.CASCADE, related_name="import_batches"
     )
+    # Las importaciones nuevas no guardan el archivo (tiene datos personales y no se vuelve a usar):
+    # solo `nombre_archivo` y el resultado. `archivo` queda para las importaciones anteriores.
     archivo = models.FileField(
-        upload_to="implementaciones/importaciones/", validators=[validar_tamanio_archivo]
+        upload_to="implementaciones/importaciones/", validators=[validar_tamanio_archivo], blank=True
     )
+    nombre_archivo = models.CharField(max_length=255, blank=True)
     filas_totales = models.PositiveIntegerField(default=0)
     filas_importadas = models.PositiveIntegerField(default=0)
     errores = models.JSONField(default=list, blank=True)

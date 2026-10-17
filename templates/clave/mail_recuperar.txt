@@ -1,4 +1,4 @@
-Hola,
+{% autoescape off %}Hola,
 
 Pediste crear una contraseña nueva para el Portal de Implementación de Napsis.
 Usá este link (vale unos días y se puede usar una sola vez):
@@ -8,4 +8,4 @@ Tu usuario es: {{ user.get_username }}
 
 Si no lo pediste vos, ignorá este mail: tu contraseña actual sigue igual.
 
-Equipo de Implementación Napsis
+Equipo de Implementación Napsis{% endautoescape %}
