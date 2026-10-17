@@ -4,7 +4,12 @@ services:
   app:
     build: .
     image: ${NAPSIS_IMAGE:-ghcr.io/aluskies/implementador-napsis:latest}
-    env_file: .env.docker
+    env_file:
+      - .env.docker
+      # Correo saliente (SMTP): lo configura deploy. Opcional: sin él la app arranca, pero
+      # no envía mails. Requiere Docker Compose >= 2.24 por `required: false`.
+      - path: .env.mail
+        required: false
     # Solo accesible desde el propio host: el proxy reverso de Napsis es quien
     # recibe el tráfico público (80/443) y lo reenvía acá. Cambialo si el proxy
     # corre en otra máquina o red de Docker.

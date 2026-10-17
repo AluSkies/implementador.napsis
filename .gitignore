@@ -8,6 +8,7 @@ staticfiles/
 *.xlsx
 .claude/scheduled_tasks.lock
 .env.docker
+.env.mail
 
 # Demo local (datos ficticios): no viaja al repo
 dashboard/management/

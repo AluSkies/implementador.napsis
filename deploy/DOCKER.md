@@ -6,7 +6,8 @@ el **MySQL existente** de Napsis. El proxy reverso y el TLS son los de la infra.
 ## Puesta en marcha
 
 ```bash
-cp .env.docker.example .env.docker     # completar (secret key, MYSQL_*, dominio, SMTP...)
+cp .env.docker.example .env.docker     # completar (secret key, MYSQL_*, dominio)
+cp .env.mail.example .env.mail         # lo completa deploy cuando tenga el SMTP (ver deploy/CORREO.md)
 docker compose pull                    # o `docker compose build` si se construye en el host
 docker compose up -d
 docker compose logs -f app             # ver el arranque
@@ -28,8 +29,9 @@ el superusuario inicial (`DJANGO_SUPERUSER_*`). Los tres pasos son idempotentes.
 | `MYSQL_DB`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST` | La base. Sin ellas, la app guardaría los datos en un archivo dentro del contenedor y los perdería al reiniciar. |
 
 **Opcionales:** `DJANGO_SUPERUSER_USERNAME/PASSWORD/EMAIL` (superusuario inicial), `MYSQL_PORT`
-(3306 por defecto), las `EMAIL_*` y `DEFAULT_FROM_EMAIL` (sin SMTP no salen mails),
-`IMPLEMENTATION_TEAM_EMAILS` y `GOOGLE_SHEETS_WEBHOOK_URL`, y `TRUSTED_PROXY_COUNT` (ver abajo).
+(3306 por defecto), `IMPLEMENTATION_TEAM_EMAILS` y `GOOGLE_SHEETS_WEBHOOK_URL`, y
+`TRUSTED_PROXY_COUNT` (ver abajo). El **correo saliente** (`EMAIL_*`, `DEFAULT_FROM_EMAIL`) va
+aparte, en `.env.mail`: ver [CORREO.md](CORREO.md). Sin él la app funciona pero no envía mails.
 `DJANGO_DEBUG` debe quedar en `false`.
 
 ## Proxy reverso

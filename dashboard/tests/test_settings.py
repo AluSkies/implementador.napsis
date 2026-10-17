@@ -53,3 +53,36 @@ class HasherRapidoSoloEnTestsTests(SimpleTestCase):
         from django.conf import settings
 
         self.assertEqual(settings.PASSWORD_HASHERS, ["django.contrib.auth.hashers.MD5PasswordHasher"])
+
+
+class CorreoTests(SimpleTestCase):
+    """El SMTP se configura por entorno (archivo .env.mail en el deploy). Un servidor que no
+    responde no puede dejar colgado al worker: siempre hay timeout."""
+
+    def _leer(self, **entorno):
+        env = {**os.environ, "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false", **entorno}
+        salida = subprocess.run(
+            [sys.executable, "-c",
+             "import config.settings as s; print('|'.join(map(str, [s.EMAIL_BACKEND, s.EMAIL_HOST, s.EMAIL_PORT, "
+             "s.EMAIL_USE_TLS, s.EMAIL_USE_SSL, s.EMAIL_TIMEOUT, s.DEFAULT_FROM_EMAIL])))"],
+            cwd=BASE_DIR, env=env, capture_output=True, text=True,
+        )
+        self.assertEqual(salida.returncode, 0, salida.stderr)
+        return salida.stdout.strip().split("|")
+
+    def test_sin_configurar_usa_consola_y_tiene_timeout(self):
+        valores = self._leer(DJANGO_EMAIL_BACKEND="", EMAIL_HOST="", EMAIL_TIMEOUT="", DEFAULT_FROM_EMAIL="")
+        self.assertIn("console", valores[0])
+        self.assertEqual(valores[5], "10")
+
+    def test_toma_el_smtp_del_entorno(self):
+        valores = self._leer(
+            DJANGO_EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend", EMAIL_HOST="smtp.office365.com",
+            EMAIL_PORT="587", EMAIL_USE_TLS="true", EMAIL_USE_SSL="false", EMAIL_TIMEOUT="5",
+            DEFAULT_FROM_EMAIL="portal@napsislatam.com",
+        )
+        self.assertEqual(
+            valores,
+            ["django.core.mail.backends.smtp.EmailBackend", "smtp.office365.com", "587", "True", "False", "5",
+             "portal@napsislatam.com"],
+        )

@@ -31,6 +31,18 @@ if [ "${DJANGO_DEBUG:-false}" = "true" ]; then
     echo "ADVERTENCIA: DJANGO_DEBUG=true; no usar así en producción." >&2
 fi
 
+# --- Correo ---------------------------------------------------------------
+# No es obligatorio para arrancar, pero sin SMTP no salen invitaciones ni avisos y es fácil
+# no darse cuenta: lo avisamos fuerte en el log de arranque.
+case "${DJANGO_EMAIL_BACKEND:-}" in
+    *smtp*)
+        [ -n "${EMAIL_HOST:-}" ] || echo "ADVERTENCIA: DJANGO_EMAIL_BACKEND usa SMTP pero EMAIL_HOST está vacío; los mails van a fallar. Ver deploy/CORREO.md." >&2
+        ;;
+    *)
+        echo "ADVERTENCIA: sin SMTP configurado (.env.mail); los mails NO se envían, solo se imprimen en el log. Ver deploy/CORREO.md." >&2
+        ;;
+esac
+
 # --- Base de datos ----------------------------------------------------------
 if [ "${RUN_MIGRATIONS:-1}" = "1" ]; then
     python manage.py migrate --no-input

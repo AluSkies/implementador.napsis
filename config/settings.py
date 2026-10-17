@@ -167,15 +167,17 @@ LOGOUT_REDIRECT_URL = "login"
 
 
 # Email
-EMAIL_BACKEND = os.environ.get(
-    "DJANGO_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
-)
+# Un valor vacío en el .env (como deja la plantilla) cuenta como "sin definir": usa el default.
+EMAIL_BACKEND = os.environ.get("DJANGO_EMAIL_BACKEND") or "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT") or 587)
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "portal@napsislatam.com")
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() == "true"  # puerto 465 (no combinar con TLS)
+# Sin timeout, un servidor SMTP que no responde dejaría colgado al worker de gunicorn.
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT") or 10)  # vacío en el .env = default
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL") or "portal@napsislatam.com"
 
 # Equipo de implementación que recibe la notificación al enviar un formulario
 IMPLEMENTATION_TEAM_EMAILS = [

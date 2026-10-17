@@ -59,7 +59,7 @@ Al correr los tests `settings.py` cambia el hasher de contraseñas a uno rápido
 
 - `DJANGO_SECRET_KEY` — **obligatoria con `DJANGO_DEBUG=false`** (sin ella la app no arranca). `DJANGO_DEBUG` (default `false`; en dev ya viene en `true` por el `.env`).
 - `DJANGO_ALLOWED_HOSTS` y `DJANGO_CSRF_TRUSTED_ORIGINS` (con `https://`) — el dominio real; sin ellos hay 400/403.
-- `DJANGO_EMAIL_BACKEND` (usa el backend de consola en dev; en producción configurar SMTP con `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, etc.)
+- `DJANGO_EMAIL_BACKEND` (usa el backend de consola en dev; en producción el SMTP — `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, etc. — va en un archivo aparte, `.env.mail`, que maneja deploy: ver `deploy/CORREO.md`)
 - `IMPLEMENTATION_TEAM_EMAILS` — lista separada por comas que recibe el mail de resumen al completarse una implementación.
 - `TRUSTED_PROXY_COUNT` — cuántos proxies reverso propios hay delante de la app (default `1` en producción, `0` en desarrollo). Lo usa el límite de intentos de login para saber la IP real del cliente.
 - `GOOGLE_SHEETS_WEBHOOK_URL` — URL del Google Apps Script Web App que appendea la fila al Sheet de seguimiento (ver abajo). Si queda vacío, ese paso se omite (se loggea, no rompe el flujo).
@@ -90,7 +90,7 @@ En ambos casos:
 - Adjuntos subidos (`MEDIA_ROOT`, `media/`): requieren un volumen/carpeta persistente y entrar en el backup. Los sirve la app con login (`/media/`): el equipo ve cualquiera y un cliente solo los suyos. **No publicar `/media/` desde el proxy.**
 - Después de cada `migrate` hay que correr `seed_catalogos` y `seed_modulos` (idempotentes).
 - **Límite de intentos de login** (django-axes): 5 fallos seguidos con el mismo usuario desde la misma IP bloquean ese par por 30 minutos, en `/login/` y `/admin/login/`. Requiere que el proxy reenvíe `X-Forwarded-For` (ver `deploy/DOCKER.md`). Para desbloquear a alguien: `manage.py axes_reset_username <usuario>`.
-- SMTP real para los mails (en dev se usa el backend de consola).
+- SMTP real para los mails, en `.env.mail` (en dev se usa el backend de consola). Lo configura deploy: `deploy/CORREO.md`.
 
 ## Qué exige el wizard antes de poder enviar
 
