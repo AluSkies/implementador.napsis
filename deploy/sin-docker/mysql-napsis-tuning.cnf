@@ -3,7 +3,7 @@
 # usuarios concurrentes, no para volumen alto.
 #
 # Instalar en /etc/mysql/mysql.conf.d/napsis-tuning.cnf y reiniciar mysql:
-#   sudo cp deploy/mysql-napsis-tuning.cnf /etc/mysql/mysql.conf.d/
+#   sudo cp deploy/sin-docker/mysql-napsis-tuning.cnf /etc/mysql/mysql.conf.d/
 #   sudo systemctl restart mysql
 
 [mysqld]

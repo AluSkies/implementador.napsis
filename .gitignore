@@ -14,3 +14,5 @@ staticfiles/
 # Demo local (datos ficticios): no viaja al repo
 dashboard/management/
 dashboard/tests/test_seed_demo.py
+# Material de referencia local (planillas y manuales de clientes): nunca al repo ni a la imagen.
+referencias/

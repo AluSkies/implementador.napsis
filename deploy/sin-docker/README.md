@@ -1,3 +1,8 @@
+> ⚠️ **Alternativa sin Docker: no es el camino soportado.** El despliegue vigente es con Docker
+> ([../DOCKER.md](../DOCKER.md) y [../RELEASE.md](../RELEASE.md)). Esta guía quedó **desactualizada**: no contempla
+> HTTPS obligatorio, `.env.mail`, el log de errores ni el servicio de tareas. Se conserva por si hiciera falta
+> instalar la app directamente en un servidor Ubuntu.
+
 # Deploy en Ubuntu Server (bare metal, sin Docker)
 
 Pensado para correr en una máquina que ya tiene otras cosas (ej. un server
@@ -18,10 +23,10 @@ sudo apt install -y python3-venv python3-pip mysql-server nginx git
 
 ```bash
 # Editá la password en el archivo antes de correrlo
-sudo mysql < deploy/setup_mysql.sql
+sudo mysql < deploy/sin-docker/setup_mysql.sql
 
 # Tuning para bajo consumo de RAM
-sudo cp deploy/mysql-napsis-tuning.cnf /etc/mysql/mysql.conf.d/
+sudo cp deploy/sin-docker/mysql-napsis-tuning.cnf /etc/mysql/mysql.conf.d/
 sudo systemctl restart mysql
 ```
 
@@ -42,7 +47,7 @@ sudo -u napsis venv/bin/pip install -r requirements.txt
 ## 4. Configuración
 
 ```bash
-sudo -u napsis cp deploy/.env.production.example .env
+sudo -u napsis cp deploy/sin-docker/.env.production.example .env
 sudo -u napsis nano .env   # completar secret key, password de MySQL, host/IP real
 ```
 
@@ -65,7 +70,7 @@ sudo -u napsis venv/bin/python manage.py createsuperuser
 ## 6. Servicio (gunicorn vía systemd)
 
 ```bash
-sudo cp deploy/napsis-portal.service /etc/systemd/system/
+sudo cp deploy/sin-docker/napsis-portal.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now napsis-portal
 sudo systemctl status napsis-portal   # debería decir "active (running)"
@@ -74,7 +79,7 @@ sudo systemctl status napsis-portal   # debería decir "active (running)"
 ## 7. Nginx
 
 ```bash
-sudo cp deploy/nginx-napsis-portal.conf /etc/nginx/sites-available/napsis-portal
+sudo cp deploy/sin-docker/nginx-napsis-portal.conf /etc/nginx/sites-available/napsis-portal
 # Editá server_name con el hostname o IP de la máquina
 sudo nano /etc/nginx/sites-available/napsis-portal
 
@@ -87,7 +92,7 @@ Con eso ya debería responder en `http://<ip-de-la-máquina>/`.
 ## Actualizar a una versión nueva
 
 ```bash
-sudo -u napsis /opt/napsis-portal/deploy/deploy.sh
+sudo -u napsis /opt/napsis-portal/deploy/sin-docker/deploy.sh
 ```
 
 ## Notas de consumo

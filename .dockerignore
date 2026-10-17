@@ -17,3 +17,5 @@ staticfiles
 Dockerfile
 docker-compose.yml
 .dockerignore
+# Material de referencia local (planillas y manuales de clientes): nunca al repo ni a la imagen.
+referencias

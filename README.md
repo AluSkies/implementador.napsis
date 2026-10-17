@@ -38,7 +38,7 @@ venv/Scripts/python manage.py createsuperuser
 venv/Scripts/python manage.py runserver
 ```
 
-Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulos se cargan con `seed_catalogos` / `seed_modulos` (idempotentes; el entrypoint de Docker y `deploy/deploy.sh` los corren en cada arranque/deploy).
+Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulos se cargan con `seed_catalogos` / `seed_modulos` (idempotentes; el entrypoint de Docker y `deploy/sin-docker/deploy.sh` los corren en cada arranque/deploy).
 
 - Panel interno: `http://localhost:8000/panel/` (requiere login).
 - Wizard de cliente: se accede vía el link único que genera el panel (`/r/<token>/`), no tiene login.
@@ -80,7 +80,7 @@ El envío final hace un `POST` con JSON al `GOOGLE_SHEETS_WEBHOOK_URL`. Para arm
 Motor de base de datos: **MySQL 8+** (`utf8mb4`, driver PyMySQL). Hay dos formas de desplegarlo, con la misma app:
 
 - **Docker** (`deploy/DOCKER.md`): un contenedor con Gunicorn contra el MySQL existente. El CI (`.github/workflows/docker.yml`) corre los tests y publica la imagen en `ghcr.io`.
-- **Directo sobre Ubuntu** (`deploy/README.md`): systemd + nginx + MySQL, con el tuning de recursos incluido.
+- **Directo sobre Ubuntu** (`deploy/sin-docker/README.md`): alternativa **no soportada y desactualizada** (systemd + nginx + MySQL). Usar Docker.
 
 En ambos casos:
 

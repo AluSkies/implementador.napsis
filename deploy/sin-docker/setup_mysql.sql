@@ -1,5 +1,5 @@
 -- Corré esto una sola vez como root de MySQL:
---   sudo mysql < deploy/setup_mysql.sql
+--   sudo mysql < deploy/sin-docker/setup_mysql.sql
 -- Cambiá la contraseña antes de correrlo (o después con ALTER USER).
 
 CREATE DATABASE IF NOT EXISTS napsis_portal
