@@ -4,7 +4,7 @@ import logging
 from django.contrib.auth.models import User
 from django.core import mail
 from django.core.cache import cache
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import path
 
 from notifications.alertas import AlertaErrorHandler

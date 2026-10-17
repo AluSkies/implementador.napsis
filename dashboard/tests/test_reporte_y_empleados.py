@@ -47,7 +47,7 @@ class ReporteExportableTests(test_asignado.BasePanel):
 
     def test_la_fila_trae_los_datos_de_la_implementacion(self):
         _r, filas = self.descargar()
-        fila = dict(zip(filas[0], filas[1]))
+        fila = dict(zip(filas[0], filas[1], strict=True))
         self.assertEqual(fila["Empresa"], "Empresa A")
         self.assertEqual(fila["Razón social"], "Empresa A S.A.")
         self.assertEqual(fila["CUIT(s)"], "30500010912")
@@ -65,12 +65,12 @@ class ReporteExportableTests(test_asignado.BasePanel):
         self.implementacion.fecha_salida_productivo = date(2026, 12, 1)
         self.implementacion.save()
         _r, filas = self.descargar()
-        fila = dict(zip(filas[0], filas[1]))
+        fila = dict(zip(filas[0], filas[1], strict=True))
         self.assertEqual((fila["Fecha de implementación"], fila["Tipo de fecha de implementación"]), ("01/12/2026", "Estimada"))
 
         self.implementacion.marcar_cumplida()
         _r, filas = self.descargar()
-        fila = dict(zip(filas[0], filas[1]))
+        fila = dict(zip(filas[0], filas[1], strict=True))
         self.assertEqual(fila["Tipo de fecha de implementación"], "Real")
         self.assertEqual(fila["Estado"], "Completo")
 

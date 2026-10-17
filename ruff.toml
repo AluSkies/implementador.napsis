@@ -1,0 +1,7 @@
+# Chequeo de estilo/errores (lo corre el CI). Local: pip install ruff==0.17.1 && ruff check .
+extend-exclude = ["venv", "staticfiles", "*/migrations"]
+
+[lint]
+# F: errores y imports/variables sin usar · E9: errores de sintaxis · B: bugs probables · UP: sintaxis vieja
+select = ["F", "E9", "B", "UP"]
+ignore = ["UP031", "UP032"]  # % y .format() sueltos: no vale la pena reescribirlos

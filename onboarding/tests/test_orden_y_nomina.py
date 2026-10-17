@@ -1,9 +1,7 @@
 import json
 
-from django.contrib.auth.models import User
-from django.urls import reverse
 
-from clients.models import Cliente, Implementacion, ImplementacionModulo, Modulo, PersonaRol, Sucursal
+from clients.models import Cliente, Implementacion, Sucursal
 from employees.models import Empleado
 from onboarding import services
 from onboarding.tests.test_wizard import BaseWizard, _url

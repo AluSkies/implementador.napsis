@@ -10,7 +10,7 @@ def validar_tamanio_archivo(archivo):
 
 def _digito_verificador(base):
     """Verificador (módulo 11) de los primeros 10 dígitos; 10 significa 'no representable'."""
-    suma = sum(int(d) * p for d, p in zip(base, [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]))
+    suma = sum(int(d) * p for d, p in zip(base, [5, 4, 3, 2, 7, 6, 5, 4, 3, 2], strict=True))
     verificador = 11 - suma % 11
     return 0 if verificador == 11 else verificador
 

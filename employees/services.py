@@ -198,11 +198,11 @@ def _leer_tabla(django_file):
             )
         else:
             tabla = pd.read_excel(django_file, dtype=object, keep_default_na=False)
-    except Exception:
+    except Exception as error:
         raise ArchivoInvalido(
             "No pudimos leer el archivo. Verificá que sea un .xlsx o .csv válido y que no esté dañado "
             "(lo más seguro es descargar la plantilla y pegar ahí tus datos)."
-        )
+        ) from error
     return tabla
 
 

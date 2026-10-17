@@ -42,7 +42,7 @@ class Command(BaseCommand):
         except ValidationError as error:
             raise CommandError(
                 "DJANGO_SUPERUSER_PASSWORD no es una contraseña aceptable: " + " ".join(error.messages)
-            )
+            ) from error
 
         User.objects.create_superuser(username=username, email=email, password=password)
         self.stdout.write(self.style.SUCCESS(f"Superusuario '{username}' creado."))
