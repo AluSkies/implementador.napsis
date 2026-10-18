@@ -95,14 +95,18 @@ class Implementacion(models.Model):
     # Estado "visual": lo que ve el equipo de implementación en el panel. Es un
     # derivado de `estado` + `enviado`, no un campo propio — una sola fuente de
     # verdad, sin dos columnas que puedan quedar inconsistentes entre sí.
+    # Una devolución al cliente no es un estado más: la implementación vuelve a "a completar" y
+    # lleva la marca "Devuelta, ronda N" mientras la ronda siga abierta.
     VISUAL_A_COMPLETAR = "a_completar"
     VISUAL_COMPLETADO_CLIENTE = "completado_cliente"
+    VISUAL_VALIDADA = "validada"
     VISUAL_COMPLETO = "completo"
     VISUAL_CANCELADA = "cancelada"
 
     VISUAL_LABELS = {
         VISUAL_A_COMPLETAR: "Pendiente - A completar por cliente",
-        VISUAL_COMPLETADO_CLIENTE: "Pendiente - Completo por cliente",
+        VISUAL_COMPLETADO_CLIENTE: "Documentación completa - Pendiente de validación",
+        VISUAL_VALIDADA: "Validada - Pendiente de configurar",
         VISUAL_COMPLETO: "Completo",
         VISUAL_CANCELADA: "Cancelada",
     }
@@ -112,7 +116,10 @@ class Implementacion(models.Model):
         """Devuelve el Q() que corresponde a un estado visual, para filtrar el queryset."""
         return {
             cls.VISUAL_A_COMPLETAR: models.Q(estado=cls.ESTADO_PENDIENTE, enviado__isnull=True),
-            cls.VISUAL_COMPLETADO_CLIENTE: models.Q(estado=cls.ESTADO_PENDIENTE, enviado__isnull=False),
+            cls.VISUAL_COMPLETADO_CLIENTE: models.Q(
+                estado=cls.ESTADO_PENDIENTE, enviado__isnull=False, validada_en__isnull=True,
+            ),
+            cls.VISUAL_VALIDADA: models.Q(estado=cls.ESTADO_PENDIENTE, enviado__isnull=False, validada_en__isnull=False),
             cls.VISUAL_COMPLETO: models.Q(estado=cls.ESTADO_CUMPLIDA),
             cls.VISUAL_CANCELADA: models.Q(estado=cls.ESTADO_CANCELADA),
         }[clave]
@@ -123,11 +130,31 @@ class Implementacion(models.Model):
             return self.VISUAL_CANCELADA
         if self.estado == self.ESTADO_CUMPLIDA:
             return self.VISUAL_COMPLETO
-        return self.VISUAL_COMPLETADO_CLIENTE if self.enviado else self.VISUAL_A_COMPLETAR
+        if not self.enviado:
+            return self.VISUAL_A_COMPLETAR
+        return self.VISUAL_VALIDADA if self.validada_en else self.VISUAL_COMPLETADO_CLIENTE
 
     @property
     def estado_visual_label(self):
         return self.VISUAL_LABELS[self.estado_visual]
+
+    @property
+    def ronda_abierta(self):
+        """La devolución al cliente que todavía no respondió (None si no hay). Una implementación
+        con ronda abierta nunca está enviada: devolverla la saca del envío."""
+        if hasattr(self, "_ronda_abierta"):
+            return self._ronda_abierta
+        return self.rondas.filter(respondida_en__isnull=True).order_by("-numero").first()
+
+    @property
+    def marca_de_devolucion(self):
+        """«Devuelta, ronda N» mientras el cliente tiene pendiente responder una devolución; si no, ''."""
+        if hasattr(self, "ronda_abierta_numero"):  # viene anotado en los listados (evita una consulta por fila)
+            numero = self.ronda_abierta_numero
+        else:
+            ronda = self.ronda_abierta
+            numero = ronda.numero if ronda else None
+        return f"Devuelta, ronda {numero}" if numero else ""
 
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="implementaciones")
     token = models.CharField(max_length=64, unique=True, default=generate_token, editable=False)
@@ -232,6 +259,10 @@ class Implementacion(models.Model):
         null=True, blank=True,
         help_text="Cuándo el cliente envió el relevamiento. No implica que la implementación esté cumplida.",
     )
+    validada_en = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Cuándo el equipo validó la documentación y la dejó lista para configurar. Se borra si se devuelve al cliente.",
+    )
     cumplida_en = models.DateTimeField(null=True, blank=True)
     cancelada_en = models.DateTimeField(null=True, blank=True)
     expira = models.DateTimeField(null=True, blank=True)
@@ -292,6 +323,36 @@ class Implementacion(models.Model):
         self.estado = self.ESTADO_CUMPLIDA
         self.cumplida_en = timezone.now()
         self.save(update_fields=["estado", "cumplida_en"])
+
+
+class RondaRevision(models.Model):
+    """Una devolución al cliente: qué tiene que corregir o completar antes de que se valide.
+
+    Se queda para siempre (es el historial de idas y vueltas); se cierra cuando el cliente vuelve a enviar."""
+
+    implementacion = models.ForeignKey(Implementacion, on_delete=models.CASCADE, related_name="rondas")
+    numero = models.PositiveIntegerField()
+    motivo = models.TextField()
+    # {código del paso: observación}; el código es estable aunque cambie el orden de los pasos.
+    observaciones = models.JSONField(default=dict, blank=True)
+    devuelta_por = models.CharField(max_length=150, help_text="Usuario del equipo que la devolvió.")
+    devuelta_en = models.DateTimeField(auto_now_add=True)
+    respondida_en = models.DateTimeField(null=True, blank=True, help_text="Cuándo el cliente volvió a enviar.")
+
+    class Meta:
+        verbose_name = "Ronda de revisión"
+        verbose_name_plural = "Rondas de revisión"
+        ordering = ["numero"]
+        constraints = [
+            models.UniqueConstraint(fields=["implementacion", "numero"], name="ronda_numero_unico_por_implementacion"),
+        ]
+
+    def __str__(self):
+        return f"{self.implementacion} - ronda {self.numero}"
+
+    @property
+    def abierta(self):
+        return self.respondida_en is None
 
 
 class ImplementacionModulo(models.Model):

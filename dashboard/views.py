@@ -341,6 +341,21 @@ def _accion_marcar_cumplida(request, implementacion, actor):
     return _volver(implementacion)
 
 
+def _accion_aprobar_para_configurar(request, implementacion, actor):
+    _mostrar(request, acciones.aprobar_para_configurar(actor, implementacion))
+    return _volver(implementacion)
+
+
+def _accion_devolver_al_cliente(request, implementacion, actor):
+    observaciones = {
+        codigo: request.POST.get(f"obs_{codigo}", "") for codigo in onboarding_services.CODIGO_DE_PASO.values()
+    }
+    _mostrar(request, acciones.devolver_al_cliente(
+        actor, implementacion, request.POST.get("motivo", ""), observaciones, base_url=_base_url(request),
+    ))
+    return _volver(implementacion)
+
+
 def _accion_atender_revision(request, implementacion, actor):
     _mostrar(request, acciones.atender_revision(actor, implementacion))
     return _volver(implementacion)
@@ -386,6 +401,8 @@ ACCIONES_DE_LA_FICHA = {
     "regenerar_link": _accion_regenerar_link,
     "anular": _accion_anular,
     "marcar_cumplida": _accion_marcar_cumplida,
+    "aprobar_para_configurar": _accion_aprobar_para_configurar,
+    "devolver_al_cliente": _accion_devolver_al_cliente,
     "atender_revision": _accion_atender_revision,
     "actualizar_fecha_productivo": _accion_actualizar_fecha_productivo,
     "regenerar_acceso": _accion_regenerar_acceso,
@@ -458,6 +475,11 @@ def implementacion_detalle(request, pk):
     contexto = resumen_implementacion(implementacion)
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
+        "rondas": implementacion.rondas.all(),
+        "pasos_observables": [
+            (onboarding_services.CODIGO_DE_PASO[n], onboarding_services.TITULOS_PASO[n])
+            for n in onboarding_services.pasos_activos(implementacion) if n != onboarding_services.PASO_REVISION
+        ],
         "asignables": cuentas.asignables(),
         "condiciones_form": formularios_con_error.get("condiciones_form")
         or CondicionesForm(implementacion=implementacion),

@@ -2,7 +2,7 @@ from contextlib import contextmanager
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Case, DateField, IntegerField, Value, When
+from django.db.models import Case, DateField, IntegerField, OuterRef, Subquery, Value, When
 from django.db.models.functions import Cast, Coalesce
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date
@@ -10,7 +10,7 @@ from django.utils.text import slugify
 
 from automatizacion import eventos
 
-from .models import Implementacion, ImplementacionVersion
+from .models import Implementacion, ImplementacionVersion, RondaRevision
 
 
 def generar_password():
@@ -61,11 +61,16 @@ def filtrar_y_ordenar_implementaciones(queryset, params):
     """
     queryset = queryset.annotate(
         estado_orden=Case(
-            When(estado=Implementacion.ESTADO_CANCELADA, then=Value(3)),
-            When(estado=Implementacion.ESTADO_CUMPLIDA, then=Value(2)),
+            When(estado=Implementacion.ESTADO_CANCELADA, then=Value(4)),
+            When(estado=Implementacion.ESTADO_CUMPLIDA, then=Value(3)),
+            When(validada_en__isnull=False, then=Value(2)),
             When(enviado__isnull=False, then=Value(1)),
             default=Value(0),
             output_field=IntegerField(),
+        ),
+        ronda_abierta_numero=Subquery(
+            RondaRevision.objects.filter(implementacion=OuterRef("pk"), respondida_en__isnull=True)
+            .order_by("-numero").values("numero")[:1]
         ),
         fecha_implementacion=Coalesce(
             Cast("cumplida_en", DateField()), "fecha_salida_productivo", output_field=DateField()

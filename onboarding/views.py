@@ -26,7 +26,7 @@ from .forms import (
 )
 from .services import (
     PASO_CONFIGURACION, PASO_DATOS, PASO_DOCUMENTOS, PASO_LICENCIAS, PASO_MODULOS, PASO_NOMINA,
-    PASO_REVISION, PASO_ROLES, PASO_SUCURSALES, TOTAL_PASOS,
+    PASO_REVISION, PASO_ROLES, PASO_SUCURSALES, TITULOS_PASO, TOTAL_PASOS,
 )
 
 def _actor(request):
@@ -46,19 +46,6 @@ def _errores_de(formulario):
 def _invalido(request, implementacion, paso, formulario):
     """El cliente intentó guardar un paso y algo no pasó la validación: queda registrado qué."""
     acciones.registrar_validacion_fallida(_actor(request), implementacion, paso, _errores_de(formulario))
-
-
-TITULOS_PASO = {
-    PASO_DATOS: "Datos de contacto",
-    PASO_MODULOS: "Módulos contratados",
-    PASO_SUCURSALES: "Sucursales",
-    PASO_NOMINA: "Carga de empleados",
-    PASO_ROLES: "Apoderado/s, Liquidador y Admin. de RRHH",
-    PASO_CONFIGURACION: "Configuración de firma y adjuntos",
-    PASO_LICENCIAS: "Licencias y Novedades",
-    PASO_DOCUMENTOS: "Documentos de Legajo Digital",
-    PASO_REVISION: "Revisión y envío",
-}
 
 
 @login_required(login_url="login")
@@ -158,6 +145,17 @@ def _vista_solo_lectura(request, implementacion, recien_enviado=False):
     return render(request, "onboarding/ya_enviado.html", contexto)
 
 
+def _devolucion(implementacion, paso):
+    """Lo que el equipo pidió corregir (None si no hay una devolución abierta): el motivo general y la
+    observación de este paso, si la hay."""
+    ronda = implementacion.ronda_abierta
+    if ronda is None:
+        return None
+    return {
+        "ronda": ronda, "observacion": ronda.observaciones.get(services.CODIGO_DE_PASO.get(paso, ""), ""),
+    }
+
+
 def _wizard_context(implementacion, step, extra=None):
     activos = services.pasos_activos(implementacion)
     ctx = {
@@ -168,6 +166,7 @@ def _wizard_context(implementacion, step, extra=None):
         "titulo_paso": TITULOS_PASO[step],
         "pasos": [(n, TITULOS_PASO[n]) for n in activos],
         "paso_anterior": _paso_anterior(activos, step),
+        "devolucion": _devolucion(implementacion, step),
     }
     ctx.update(extra or {})
     return ctx

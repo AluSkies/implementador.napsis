@@ -157,6 +157,22 @@ def notificar_cliente_relevamiento_recibido(implementacion, base_url=None):
     )
 
 
+def notificar_cliente_devuelta(implementacion, ronda, base_url=None):
+    """Le cuenta al cliente qué tiene que corregir o completar. Devuelve a quién se lo mandó."""
+    from onboarding.services import CODIGO_DE_PASO, TITULOS_PASO
+
+    titulo_de = {codigo: TITULOS_PASO[paso] for paso, codigo in CODIGO_DE_PASO.items()}
+    cliente = implementacion.cliente
+    return _enviar_mail_cliente(
+        "Necesitamos que revises algunos datos de tu implementación", "notifications/mail_cliente_devuelta.txt",
+        {"razon_social": cliente.razon_social or cliente.nombre, "implementador": implementacion.asignado_nombre,
+         "motivo": ronda.motivo,
+         "observaciones": [(titulo_de.get(codigo, codigo), texto) for codigo, texto in ronda.observaciones.items()],
+         "link": _base_url(base_url) + implementacion.get_absolute_url()},
+        mail_del_cliente(implementacion),
+    )
+
+
 def notificar_cliente_implementacion_cumplida(implementacion, base_url=None):
     """Le avisa al cliente que su implementación está lista. Devuelve a quién se lo mandó."""
     cliente = implementacion.cliente

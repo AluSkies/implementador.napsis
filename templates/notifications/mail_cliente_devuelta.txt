@@ -1,0 +1,15 @@
+{% autoescape off %}Hola,
+
+Revisamos lo que enviaste para {{ razon_social }} y necesitamos que ajustes algunas cosas antes de seguir:
+
+{{ motivo }}
+{% if observaciones %}
+Detalle por sección:
+{% for seccion, texto in observaciones %}- {{ seccion }}: {{ texto }}
+{% endfor %}{% endif %}
+Podés corregirlo desde: {{ link }}
+Cuando termines, volvé a enviar el relevamiento desde el último paso.
+{% if implementador %}
+Cualquier duda, consultale a {{ implementador }}.
+{% endif %}
+Equipo de Implementación Napsis{% endautoescape %}

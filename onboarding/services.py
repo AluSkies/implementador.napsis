@@ -43,6 +43,26 @@ DIAS_HABILES_MINIMOS_CLIENTE = 10
 
 # Pasos que solo aplican si el cliente contrató alguno de estos módulos.
 # Los pasos que no aparecen acá (datos, módulos, nómina y revisión) son universales.
+TITULOS_PASO = {
+    PASO_DATOS: "Datos de contacto",
+    PASO_MODULOS: "Módulos contratados",
+    PASO_SUCURSALES: "Sucursales",
+    PASO_NOMINA: "Carga de empleados",
+    PASO_ROLES: "Apoderado/s, Liquidador y Admin. de RRHH",
+    PASO_CONFIGURACION: "Configuración de firma y adjuntos",
+    PASO_LICENCIAS: "Licencias y Novedades",
+    PASO_DOCUMENTOS: "Documentos de Legajo Digital",
+    PASO_REVISION: "Revisión y envío",
+}
+
+# Código estable de cada paso: las observaciones de una devolución se guardan con él, así que no se
+# pierden aunque cambie el número de orden de los pasos.
+CODIGO_DE_PASO = {
+    PASO_DATOS: "datos", PASO_MODULOS: "modulos", PASO_SUCURSALES: "sucursales", PASO_NOMINA: "nomina",
+    PASO_ROLES: "roles", PASO_CONFIGURACION: "configuracion", PASO_LICENCIAS: "licencias",
+    PASO_DOCUMENTOS: "documentos", PASO_REVISION: "revision",
+}
+
 PASO_REQUIERE_MODULO = {
     PASO_SUCURSALES: {Modulo.FICHADA},                          # Sucursales (fichada por ubicación)
     PASO_ROLES: {Modulo.RECIBO_DIGITAL, Modulo.LEGAJOS},        # Apoderado/Liquidador (recibos) o Admin RRHH (legajo)
