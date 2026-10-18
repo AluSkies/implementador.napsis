@@ -79,7 +79,7 @@ El envío final hace un `POST` con JSON al `GOOGLE_SHEETS_WEBHOOK_URL`. Para arm
 
 Motor de base de datos: **MySQL 8+** (`utf8mb4`, driver PyMySQL). Hay dos formas de desplegarlo, con la misma app:
 
-- **Docker** (`deploy/DOCKER.md`): un contenedor con Gunicorn contra el MySQL existente. El CI (`.github/workflows/docker.yml`) corre los tests y publica la imagen en `ghcr.io`.
+- **Docker** (`deploy/DOCKER.md`): un contenedor con Gunicorn contra el MySQL existente. El CI (`.github/workflows/docker.yml`) corre el lint y los tests en cada push, y publica la imagen en `ghcr.io` solo cuando se crea un tag de versión (`vX.Y.Z`).
 - **Directo sobre Ubuntu** (`deploy/sin-docker/README.md`): alternativa **no soportada y desactualizada** (systemd + nginx + MySQL). Usar Docker.
 
 En ambos casos:

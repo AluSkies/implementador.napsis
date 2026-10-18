@@ -81,8 +81,9 @@ Después, entrar a `https://<dominio>/login/` con el superusuario y **cambiar su
    ```
 4. Verificar con la lista de abajo.
 
-**Siempre fijar un número de versión (`vX.Y.Z`)** y no usar `latest`: `latest` se mueve con cada
-cambio que se sube y nadie sabe qué versión es la que está corriendo.
+**Siempre fijar un número de versión (`vX.Y.Z`)** y no usar `latest`: `latest` apunta a la
+última versión publicada y nadie sabe cuál es la que está corriendo. La imagen se construye solo cuando
+se crea un tag de versión; un push común a `main` no genera nada para desplegar.
 
 ## Volver atrás (rollback)
 

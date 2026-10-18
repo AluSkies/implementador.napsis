@@ -105,9 +105,10 @@ por **30 minutos** (un ingreso correcto reinicia la cuenta). Ver `AXES_*` en `co
 **Guía paso a paso (primer despliegue, actualizar y volver atrás): [RELEASE.md](RELEASE.md).**
 En resumen: fijar la versión en `NAPSIS_IMAGE`, `docker compose pull && docker compose up -d`.
 
-El CI (`.github/workflows/docker.yml`) corre los tests (también contra MySQL 8) y, si pasan,
-publica la imagen en `ghcr.io/aluskies/implementador-napsis` (`latest`, `sha-…` y `vX.Y.Z` por
-tag). Si los tests fallan, **no se publica nada**. El paquete es privado: el host necesita
+El CI (`.github/workflows/docker.yml`) corre el lint y los tests (también contra MySQL 8) en cada push.
+**La imagen se publica solo cuando se crea un tag de versión** (`vX.Y.Z`): sale como
+`ghcr.io/aluskies/implementador-napsis:vX.Y.Z` y `latest` pasa a apuntar a esa versión. Un push común a
+`main` no construye ninguna imagen. Si los tests fallan, **no se publica nada**. El paquete es privado: el host necesita
 `docker login ghcr.io` con un token de solo lectura (`read:packages`).
 
 ## Qué hay que saber

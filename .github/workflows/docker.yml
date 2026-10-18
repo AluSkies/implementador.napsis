@@ -1,6 +1,7 @@
-# En cada pull request: corre los tests. En cada push a main (o tag vX.Y.Z): corre los tests y,
-# si pasan, publica la imagen en GitHub Container Registry. Napsis despliega con la imagen
-# (ver deploy/RELEASE.md).
+# En cada push a main y en cada pull request: corre el lint y los tests (también contra MySQL 8).
+# La IMAGEN se publica solo cuando se crea un tag de versión (vX.Y.Z): ahí, si todo pasa, se sube
+# a GitHub Container Registry. Napsis despliega esa versión (ver deploy/RELEASE.md). Un push común
+# a main no construye ni publica nada.
 name: Imagen Docker
 
 on:
@@ -58,7 +59,7 @@ jobs:
 
   imagen:
     needs: [tests, tests-mysql]
-    if: github.event_name != 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -76,9 +77,8 @@ jobs:
         with:
           images: ghcr.io/aluskies/implementador-napsis
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
             type=ref,event=tag
+            type=raw,value=latest
       - uses: docker/build-push-action@v6
         with:
           context: .
