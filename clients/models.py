@@ -95,14 +95,18 @@ class Implementacion(models.Model):
     # Estado "visual": lo que ve el equipo de implementación en el panel. Es un
     # derivado de `estado` + `enviado`, no un campo propio — una sola fuente de
     # verdad, sin dos columnas que puedan quedar inconsistentes entre sí.
+    # Una devolución al cliente no es un estado más: la implementación vuelve a "a completar" y
+    # lleva la marca "Devuelta, ronda N" mientras la ronda siga abierta.
     VISUAL_A_COMPLETAR = "a_completar"
     VISUAL_COMPLETADO_CLIENTE = "completado_cliente"
+    VISUAL_VALIDADA = "validada"
     VISUAL_COMPLETO = "completo"
     VISUAL_CANCELADA = "cancelada"
 
     VISUAL_LABELS = {
         VISUAL_A_COMPLETAR: "Pendiente - A completar por cliente",
-        VISUAL_COMPLETADO_CLIENTE: "Pendiente - Completo por cliente",
+        VISUAL_COMPLETADO_CLIENTE: "Documentación completa - Pendiente de validación",
+        VISUAL_VALIDADA: "Validada - Pendiente de configurar",
         VISUAL_COMPLETO: "Completo",
         VISUAL_CANCELADA: "Cancelada",
     }
@@ -112,7 +116,10 @@ class Implementacion(models.Model):
         """Devuelve el Q() que corresponde a un estado visual, para filtrar el queryset."""
         return {
             cls.VISUAL_A_COMPLETAR: models.Q(estado=cls.ESTADO_PENDIENTE, enviado__isnull=True),
-            cls.VISUAL_COMPLETADO_CLIENTE: models.Q(estado=cls.ESTADO_PENDIENTE, enviado__isnull=False),
+            cls.VISUAL_COMPLETADO_CLIENTE: models.Q(
+                estado=cls.ESTADO_PENDIENTE, enviado__isnull=False, validada_en__isnull=True,
+            ),
+            cls.VISUAL_VALIDADA: models.Q(estado=cls.ESTADO_PENDIENTE, enviado__isnull=False, validada_en__isnull=False),
             cls.VISUAL_COMPLETO: models.Q(estado=cls.ESTADO_CUMPLIDA),
             cls.VISUAL_CANCELADA: models.Q(estado=cls.ESTADO_CANCELADA),
         }[clave]
@@ -123,11 +130,31 @@ class Implementacion(models.Model):
             return self.VISUAL_CANCELADA
         if self.estado == self.ESTADO_CUMPLIDA:
             return self.VISUAL_COMPLETO
-        return self.VISUAL_COMPLETADO_CLIENTE if self.enviado else self.VISUAL_A_COMPLETAR
+        if not self.enviado:
+            return self.VISUAL_A_COMPLETAR
+        return self.VISUAL_VALIDADA if self.validada_en else self.VISUAL_COMPLETADO_CLIENTE
 
     @property
     def estado_visual_label(self):
         return self.VISUAL_LABELS[self.estado_visual]
+
+    @property
+    def ronda_abierta(self):
+        """La devolución al cliente que todavía no respondió (None si no hay). Una implementación
+        con ronda abierta nunca está enviada: devolverla la saca del envío."""
+        if hasattr(self, "_ronda_abierta"):
+            return self._ronda_abierta
+        return self.rondas.filter(respondida_en__isnull=True).order_by("-numero").first()
+
+    @property
+    def marca_de_devolucion(self):
+        """«Devuelta, ronda N» mientras el cliente tiene pendiente responder una devolución; si no, ''."""
+        if hasattr(self, "ronda_abierta_numero"):  # viene anotado en los listados (evita una consulta por fila)
+            numero = self.ronda_abierta_numero
+        else:
+            ronda = self.ronda_abierta
+            numero = ronda.numero if ronda else None
+        return f"Devuelta, ronda {numero}" if numero else ""
 
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="implementaciones")
     token = models.CharField(max_length=64, unique=True, default=generate_token, editable=False)
@@ -198,6 +225,10 @@ class Implementacion(models.Model):
         "Banner de la Sociedad", upload_to="implementaciones/banners/", blank=True, null=True,
         validators=[validar_tamanio_archivo],
     )
+    logo = models.ImageField(
+        "Logo de la Sociedad", upload_to="implementaciones/logos/", blank=True, null=True,
+        validators=[validar_tamanio_archivo],
+    )
     modelo_recibo = models.FileField(
         "Modelo de recibo (PDF)", upload_to="implementaciones/modelos_recibo/", blank=True, null=True,
         validators=[validar_tamanio_archivo],
@@ -228,6 +259,10 @@ class Implementacion(models.Model):
         null=True, blank=True,
         help_text="Cuándo el cliente envió el relevamiento. No implica que la implementación esté cumplida.",
     )
+    validada_en = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Cuándo el equipo validó la documentación y la dejó lista para configurar. Se borra si se devuelve al cliente.",
+    )
     cumplida_en = models.DateTimeField(null=True, blank=True)
     cancelada_en = models.DateTimeField(null=True, blank=True)
     expira = models.DateTimeField(null=True, blank=True)
@@ -251,8 +286,17 @@ class Implementacion(models.Model):
         asignado = self.implementador_asignado
         return (asignado.get_full_name() or asignado.get_username()) if asignado else ""
 
+    def usa_modulo(self, codigo):
+        """¿Tiene contratado (y activo) el módulo con ese código?"""
+        return self.modulos.filter(activo=True, modulo__codigo=codigo).exists()
+
     def get_absolute_url(self):
         return reverse("onboarding:wizard_step", kwargs={"token": self.token, "step": 1})
+
+    @property
+    def firma(self):
+        """La ubicación de la firma que vale para todos los tipos de liquidación (None si todavía no se cargó)."""
+        return self.firmas.filter(tipo_liquidacion__isnull=True).first()
 
     def pedir_revision(self, mensaje=""):
         """El cliente pide que el equipo de implementación se contacte con él."""
@@ -286,6 +330,127 @@ class Implementacion(models.Model):
         self.save(update_fields=["estado", "cumplida_en"])
 
 
+def geometria_inicial_de_firma():
+    """Dónde arrancan las tres firmas sobre el recibo (fracciones de la página, de 0 a 1)."""
+    return {
+        "empresa": {"x": 0.08, "y": 0.82, "ancho": 0.25, "alto": 0.08},
+        "conforme": {"x": 0.38, "y": 0.82, "ancho": 0.25, "alto": 0.08},
+        "disconforme": {"x": 0.68, "y": 0.82, "ancho": 0.25, "alto": 0.08},
+    }
+
+
+class UbicacionFirma(models.Model):
+    """Dónde quiere el cliente que vaya su firma sobre su modelo de recibo.
+
+    Es solo la **intención del cliente**: la imagen de la firma del apoderado y, sobre la página del
+    recibo, tres recuadros (la firma de la empresa y los del empleado en conformidad y en
+    disconformidad), con posición y tamaño relativos a la página. El portal no la traduce a Napsis:
+    el equipo la valida, la devuelve o la corrige, y quien configura la lleva a Napsis.
+
+    Los archivos no se pisan ni se borran: al subir otra imagen la anterior sigue guardada."""
+
+    PAGINA_PRIMERA = "primera"
+    PAGINA_ULTIMA = "ultima"
+    PAGINA_TODAS = "todas"
+    PAGINA_CHOICES = [
+        (PAGINA_PRIMERA, "Primera página"),
+        (PAGINA_ULTIMA, "Última página"),
+        (PAGINA_TODAS, "Todas las páginas"),
+    ]
+
+    ESTADO_PROPUESTA = "propuesta"
+    ESTADO_VALIDADA = "validada"
+    ESTADO_OBSERVADA = "observada"
+    ESTADO_CHOICES = [
+        (ESTADO_PROPUESTA, "Propuesta por el cliente"),
+        (ESTADO_VALIDADA, "Validada"),
+        (ESTADO_OBSERVADA, "Observada"),
+    ]
+
+    ELEMENTOS = [
+        ("empresa", "Firma de la empresa"),
+        ("conforme", "Empleado en conformidad"),
+        ("disconforme", "Empleado en disconformidad"),
+    ]
+
+    # Catálogo cerrado de motivos: lo que se registra es el código (estable), no el texto.
+    MOTIVOS = [
+        ("ilegible", "La firma no se lee bien"),
+        ("baja_calidad", "La imagen es de baja calidad"),
+        ("tamano_excesivo", "La firma quedó demasiado grande o demasiado chica"),
+        ("superpone_texto", "Se superpone con el texto del recibo"),
+        ("no_replicable", "No se puede replicar así en Napsis"),
+        ("otro", "Otro motivo"),
+    ]
+
+    implementacion = models.ForeignKey(Implementacion, on_delete=models.CASCADE, related_name="firmas")
+    # Vacío = vale para todos los tipos de liquidación (hoy es el único caso que ofrece la pantalla).
+    tipo_liquidacion = models.ForeignKey(
+        "catalog.TipoLiquidacion", on_delete=models.CASCADE, null=True, blank=True, related_name="+",
+    )
+    pagina = models.CharField(max_length=10, choices=PAGINA_CHOICES, default=PAGINA_PRIMERA)
+    imagen = models.ImageField(
+        "Imagen de la firma", upload_to="implementaciones/firmas/", blank=True, null=True,
+        validators=[validar_tamanio_archivo],
+    )
+    imagen_sha256 = models.CharField(max_length=64, blank=True)
+    # {"empresa": {"x", "y", "ancho", "alto"}, "conforme": {...}, "disconforme": {...}}, de 0 a 1.
+    geometria = models.JSONField(default=geometria_inicial_de_firma)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ESTADO_PROPUESTA)
+    motivos = models.JSONField(default=list, blank=True, help_text="Códigos del catálogo, si fue observada.")
+    comentario = models.TextField(blank=True)
+    propuesta_por = models.CharField(max_length=150, blank=True)
+    validada_por = models.CharField(max_length=150, blank=True)
+    validada_en = models.DateTimeField(null=True, blank=True)
+    creada = models.DateTimeField(auto_now_add=True)
+    actualizada = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ubicación de la firma"
+        verbose_name_plural = "Ubicaciones de la firma"
+        constraints = [
+            models.UniqueConstraint(fields=["implementacion", "tipo_liquidacion"], name="firma_unica_por_tipo"),
+        ]
+
+    def __str__(self):
+        return f"{self.implementacion} - firma ({self.get_estado_display()})"
+
+    @property
+    def motivos_texto(self):
+        nombres = dict(self.MOTIVOS)
+        return [nombres.get(codigo, codigo) for codigo in self.motivos]
+
+
+class RondaRevision(models.Model):
+    """Una devolución al cliente: qué tiene que corregir o completar antes de que se valide.
+
+    Se queda para siempre (es el historial de idas y vueltas); se cierra cuando el cliente vuelve a enviar."""
+
+    implementacion = models.ForeignKey(Implementacion, on_delete=models.CASCADE, related_name="rondas")
+    numero = models.PositiveIntegerField()
+    motivo = models.TextField()
+    # {código del paso: observación}; el código es estable aunque cambie el orden de los pasos.
+    observaciones = models.JSONField(default=dict, blank=True)
+    devuelta_por = models.CharField(max_length=150, help_text="Usuario del equipo que la devolvió.")
+    devuelta_en = models.DateTimeField(auto_now_add=True)
+    respondida_en = models.DateTimeField(null=True, blank=True, help_text="Cuándo el cliente volvió a enviar.")
+
+    class Meta:
+        verbose_name = "Ronda de revisión"
+        verbose_name_plural = "Rondas de revisión"
+        ordering = ["numero"]
+        constraints = [
+            models.UniqueConstraint(fields=["implementacion", "numero"], name="ronda_numero_unico_por_implementacion"),
+        ]
+
+    def __str__(self):
+        return f"{self.implementacion} - ronda {self.numero}"
+
+    @property
+    def abierta(self):
+        return self.respondida_en is None
+
+
 class ImplementacionModulo(models.Model):
     implementacion = models.ForeignKey(
         Implementacion, on_delete=models.CASCADE, related_name="modulos"
@@ -317,10 +482,17 @@ class PersonaRol(models.Model):
     implementacion = models.ForeignKey(
         Implementacion, on_delete=models.CASCADE, related_name="roles"
     )
+    # Roles que Napsis elige de la nómina ya importada: tienen que ser empleados cargados.
+    ROLES_EN_NOMINA = (ROL_APODERADO, ROL_LIQUIDADOR)
+
     rol = models.CharField(max_length=20, choices=ROL_CHOICES)
     apellido_nombre = models.CharField("Apellido y Nombre", max_length=255)
     cuil = models.CharField("CUIL", max_length=20, blank=True)
     mail = models.EmailField("Mail", blank=True)
+    # El empleado de la nómina al que corresponde (por CUIL). Si se borra el empleado, queda vacío.
+    empleado = models.ForeignKey(
+        "employees.Empleado", null=True, blank=True, on_delete=models.SET_NULL, related_name="roles",
+    )
 
     class Meta:
         verbose_name = "Persona / Rol"
@@ -365,6 +537,24 @@ class ImplementacionLicencia(models.Model):
 
     def __str__(self):
         return f"{self.implementacion} - {self.tipo_licencia}"
+
+
+class ImplementacionLiquidacion(models.Model):
+    """Qué tipos de liquidación usa la empresa (Recibo Digital)."""
+
+    implementacion = models.ForeignKey(
+        Implementacion, on_delete=models.CASCADE, related_name="liquidaciones"
+    )
+    tipo_liquidacion = models.ForeignKey("catalog.TipoLiquidacion", on_delete=models.PROTECT)
+    activo = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Tipo de liquidación de la implementación"
+        verbose_name_plural = "Tipos de liquidación de la implementación"
+        unique_together = ("implementacion", "tipo_liquidacion")
+
+    def __str__(self):
+        return f"{self.implementacion} - {self.tipo_liquidacion}"
 
 
 class ImplementacionNovedad(models.Model):
@@ -415,6 +605,8 @@ class ImplementacionVersion(models.Model):
         ("roles", "Roles"),
         ("sucursales", "Sucursales"),
         ("licencias_novedades", "Licencias y Novedades"),
+        ("liquidaciones", "Tipos de liquidación"),
+        ("firma", "Firma del recibo"),
         ("documentos", "Documentos de Legajo"),
         ("empleados", "Empleados"),
         ("fecha_implementacion", "Fecha de implementación"),

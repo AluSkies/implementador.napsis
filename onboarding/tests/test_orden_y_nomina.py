@@ -16,11 +16,11 @@ class OrdenDelWizardTests(BaseWizard):
     def test_el_orden_de_los_pasos(self):
         self.assertEqual(
             (services.PASO_DATOS, services.PASO_MODULOS, services.PASO_SUCURSALES, services.PASO_NOMINA,
-             services.PASO_ROLES, services.PASO_CONFIGURACION, services.PASO_LICENCIAS,
+             services.PASO_ROLES, services.PASO_CONFIGURACION, services.PASO_FIRMA, services.PASO_LICENCIAS,
              services.PASO_DOCUMENTOS, services.PASO_REVISION),
-            tuple(range(1, 10)),
+            tuple(range(1, 11)),
         )
-        self.assertEqual(services.pasos_activos(self.implementacion), list(range(1, 10)))
+        self.assertEqual(services.pasos_activos(self.implementacion), list(range(1, 11)))
 
     def test_la_nomina_viene_antes_que_los_roles_y_las_sucursales_antes_que_la_nomina(self):
         self.assertLess(services.PASO_NOMINA, services.PASO_ROLES)
@@ -44,10 +44,10 @@ class OrdenDelWizardTests(BaseWizard):
         self.assertRedirects(respuesta, _url(self.implementacion, 5), fetch_redirect_response=False)
 
     def test_los_pendientes_de_envio_apuntan_al_paso_correcto(self):
-        pendientes = {p["paso"]: p["mensaje"] for p in services.pendientes_de_envio(self.implementacion)}
-        self.assertIn("Cargar la nómina", pendientes[4])
-        self.assertIn("rol", pendientes[5])
-        self.assertIn("modelo de recibo", pendientes[6])
+        pendientes = [(p["paso"], p["mensaje"]) for p in services.pendientes_de_envio(self.implementacion)]
+        for paso, texto in ((4, "Cargar la nómina"), (5, "rol"), (6, "modelo de recibo"), (6, "tipo de liquidación")):
+            with self.subTest(texto=texto):
+                self.assertTrue(any(p == paso and texto in m for p, m in pendientes), pendientes)
 
 
 class RolesDesdeLaNominaTests(BaseWizard):
@@ -98,6 +98,7 @@ class EdicionDeEmpleadosEnElWizardTests(BaseWizard):
         respuesta = self.client.post(_url(self.implementacion, 4), {
             "accion": "guardar_edicion", "empleado_id": self.empleado.pk,
             "cuil": "20111111112", "nombre": "Juan Carlos", "apellido": "Pérez", "puesto": "Analista",
+            "fecha_ingreso": "2020-01-01",
         })
         self.assertRedirects(respuesta, _url(self.implementacion, 4), fetch_redirect_response=False)
         self.empleado.refresh_from_db()

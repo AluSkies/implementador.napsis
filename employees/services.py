@@ -206,13 +206,15 @@ def _leer_tabla(django_file):
     return tabla
 
 
-def leer_archivo_empleados(django_file):
+def leer_archivo_empleados(django_file, ingreso_obligatorio=False):
     """
     Lee un .xlsx/.csv subido por el cliente y devuelve un ResultadoLectura(filas, errores, columnas_ignoradas).
 
     filas: lista de dicts listos para instanciar/actualizar Empleado (con `numero_fila`).
     errores: lista de dicts {fila, mensaje} para las filas rechazadas.
     columnas_ignoradas: encabezados del archivo que no corresponden a ningún campo conocido.
+
+    Con `ingreso_obligatorio` (Recibo Digital), la fecha de ingreso pasa a ser obligatoria en cada fila.
 
     Levanta ArchivoInvalido cuando el archivo en sí no sirve (ilegible, sin las columnas
     obligatorias, vacío o demasiado grande): ahí no hay nada que cargar.
@@ -222,6 +224,8 @@ def leer_archivo_empleados(django_file):
     etiquetas = {campo: header.split(" (")[0] for header, campo, *_ in COLUMNAS}
     tipos_por_campo = {campo: tipo for _header, campo, _req, tipo in COLUMNAS}
     obligatorios = {campo for _header, campo, req, _tipo in COLUMNAS if req}
+    if ingreso_obligatorio:
+        obligatorios.add("fecha_ingreso")
 
     # tolerante a variaciones menores de header (mayúsculas/espacios)
     columnas_normalizadas = {normalizar_texto(h): campo for h, campo, *_ in COLUMNAS}
@@ -234,7 +238,8 @@ def leer_archivo_empleados(django_file):
             ignoradas.append(str(col).strip())
     df = df.rename(columns=mapeo_reales)
 
-    faltantes = [etiquetas[c] for c in ("cuil", "nombre", "apellido") if c not in mapeo_reales.values()]
+    columnas_requeridas = ("cuil", "nombre", "apellido") + (("fecha_ingreso",) if ingreso_obligatorio else ())
+    faltantes = [etiquetas[c] for c in columnas_requeridas if c not in mapeo_reales.values()]
     if faltantes:
         raise ArchivoInvalido(
             "Al archivo le faltan columnas obligatorias: " + ", ".join(faltantes) + ". "
@@ -316,9 +321,9 @@ def leer_archivo_empleados(django_file):
     return ResultadoLectura(filas_validas, errores, ignoradas)
 
 
-def parse_archivo_empleados(django_file):
+def parse_archivo_empleados(django_file, ingreso_obligatorio=False):
     """Versión corta de leer_archivo_empleados: devuelve solo (filas_validas, errores)."""
-    resultado = leer_archivo_empleados(django_file)
+    resultado = leer_archivo_empleados(django_file, ingreso_obligatorio)
     return resultado.filas, resultado.errores
 
 

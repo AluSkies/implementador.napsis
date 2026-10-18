@@ -21,8 +21,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from automatizacion import eventos
-from clients.models import Cliente, Implementacion, Modulo
-from clients.services import crear_o_resetear_acceso, foto_de_seccion
+from clients.models import Cliente, Implementacion, Modulo, RondaRevision, UbicacionFirma
+from clients.services import cambio_de_seccion, crear_o_resetear_acceso, foto_de_seccion
 from clients.validators import normalizar_cuits
 from notifications import services as notificaciones
 
@@ -261,15 +261,18 @@ def reabrir(actor, implementacion):
     antes = {
         "estado": implementacion.estado, "paso_actual": implementacion.paso_actual,
         "enviado": implementacion.enviado, "cancelada_en": implementacion.cancelada_en,
-        "cumplida_en": implementacion.cumplida_en,
+        "cumplida_en": implementacion.cumplida_en, "validada_en": implementacion.validada_en,
     }
     with transaction.atomic():
         implementacion.estado = Implementacion.ESTADO_PENDIENTE
         implementacion.paso_actual = 1
         implementacion.enviado = None
+        implementacion.validada_en = None
         implementacion.cancelada_en = None
         implementacion.cumplida_en = None
-        implementacion.save(update_fields=["estado", "paso_actual", "enviado", "cancelada_en", "cumplida_en"])
+        implementacion.save(update_fields=[
+            "estado", "paso_actual", "enviado", "validada_en", "cancelada_en", "cumplida_en",
+        ])
         eventos.registrar(actor, "estado.reabierta", implementacion, post_envio=antes["enviado"] is not None,
                           datos={"antes": antes})
     return Resultado(implementacion=implementacion)
@@ -281,6 +284,132 @@ def anular(actor, implementacion):
         implementacion.anular()
         eventos.registrar(actor, "estado.cancelada", implementacion, datos={"estado_anterior": estado_anterior})
     return Resultado(implementacion=implementacion)
+
+
+def _puede_revisarse(implementacion):
+    return implementacion.estado == Implementacion.ESTADO_PENDIENTE and implementacion.enviado is not None
+
+
+def aprobar_para_configurar(actor, implementacion):
+    """El equipo da por buena la documentación: queda «Validada - Pendiente de configurar».
+
+    Solo se valida lo que está completo: se vuelve a correr el control de faltantes, porque el equipo
+    pudo haber cambiado datos después del envío."""
+    if not _puede_revisarse(implementacion) or implementacion.validada_en:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo se puede validar una implementación enviada por el cliente y todavía sin validar."),
+        ])
+    pendientes = [p["mensaje"] for p in services.pendientes_de_envio(implementacion)]
+    if implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
+        firma = implementacion.firma
+        if firma is not None and firma.imagen and firma.estado != UbicacionFirma.ESTADO_VALIDADA:
+            pendientes.append("Falta validar la firma del recibo.")
+    if pendientes:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "No se puede validar: todavía falta completar datos obligatorios. " + " ".join(pendientes)),
+        ])
+    with transaction.atomic():
+        implementacion.validada_en = timezone.now()
+        implementacion.save(update_fields=["validada_en", "actualizado"])
+        eventos.registrar(actor, "estado.validada", implementacion, datos={"ronda": implementacion.rondas.count()})
+    return Resultado(
+        implementacion=implementacion,
+        avisos=[Aviso(messages.SUCCESS, "Documentación validada: la implementación quedó lista para configurar.")],
+    )
+
+
+def validar_firma(actor, implementacion):
+    """El equipo da por buena la ubicación de la firma que propuso el cliente."""
+    firma = implementacion.firma
+    if firma is None or not firma.imagen:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Todavía no hay una firma cargada para validar."),
+        ])
+    if firma.estado == UbicacionFirma.ESTADO_VALIDADA:
+        return Resultado(implementacion=implementacion)
+    with cambio_de_seccion(implementacion, "firma", actor, accion="firma.validada"):
+        firma.estado = UbicacionFirma.ESTADO_VALIDADA
+        firma.motivos, firma.comentario = [], ""
+        firma.validada_por, firma.validada_en = actor.etiqueta, timezone.now()
+        firma.save()
+    return Resultado(implementacion=implementacion, avisos=[Aviso(messages.SUCCESS, "Firma validada.")])
+
+
+def observar_firma(actor, implementacion, motivos, comentario="", base_url=None):
+    """El equipo no acepta la firma: la marca como observada (con motivos del catálogo cerrado) y la
+    devuelve al cliente para que la ubique de nuevo, con el mismo recorrido que cualquier devolución."""
+    firma = implementacion.firma
+    if firma is None or not firma.imagen:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Todavía no hay una firma cargada para observar."),
+        ])
+    nombres = dict(UbicacionFirma.MOTIVOS)
+    motivos = [m for m in dict.fromkeys(motivos or []) if m in nombres]
+    if not motivos:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Elegí al menos un motivo de la lista."),
+        ])
+    if not _puede_revisarse(implementacion):
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo se puede devolver una implementación que el cliente ya envió."),
+        ])
+    comentario = (comentario or "").strip()
+    texto = "Hay que ajustar la firma del recibo: " + "; ".join(nombres[m].lower() for m in motivos) + "."
+    if comentario:
+        texto += f" {comentario}"
+    with cambio_de_seccion(
+        implementacion, "firma", actor, accion="firma.observada", datos={"motivos": motivos, "comentario": comentario},
+    ):
+        firma.estado = UbicacionFirma.ESTADO_OBSERVADA
+        firma.motivos, firma.comentario = motivos, comentario
+        firma.validada_por, firma.validada_en = "", None
+        firma.save()
+    return devolver_al_cliente(actor, implementacion, texto, {"firma": texto}, base_url=base_url)
+
+
+def devolver_al_cliente(actor, implementacion, motivo, observaciones=None, base_url=None):
+    """El equipo le devuelve el relevamiento al cliente para que corrija o complete algo.
+
+    Abre una ronda (queda el historial de idas y vueltas), saca la implementación del envío para que el
+    cliente pueda editar y le avisa por mail. Las observaciones por sección son opcionales:
+    `{código de paso: texto}`; se descartan las vacías y las de pasos que no existen."""
+    motivo = (motivo or "").strip()
+    if not motivo:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Contale al cliente qué tiene que corregir o completar."),
+        ])
+    if not _puede_revisarse(implementacion):
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo se puede devolver una implementación que el cliente ya envió."),
+        ])
+    codigos = set(services.CODIGO_DE_PASO.values())
+    observaciones = {
+        codigo: texto.strip() for codigo, texto in (observaciones or {}).items()
+        if codigo in codigos and (texto or "").strip()
+    }
+    with transaction.atomic():
+        numero = implementacion.rondas.count() + 1
+        ronda = RondaRevision.objects.create(
+            implementacion=implementacion, numero=numero, motivo=motivo, observaciones=observaciones,
+            devuelta_por=actor.ref,
+        )
+        implementacion.enviado = None
+        implementacion.validada_en = None
+        implementacion.paso_actual = services.PASO_REVISION
+        implementacion.save(update_fields=["enviado", "validada_en", "paso_actual", "actualizado"])
+        eventos.registrar(
+            actor, "ronda.devuelta", implementacion, post_envio=True,
+            datos={"ronda": numero, "motivo": motivo, "observaciones": observaciones},
+        )
+    avisos = [Aviso(messages.SUCCESS, f"Devuelta al cliente (ronda {numero}).")]
+    falla = _avisar_por_mail(
+        actor, implementacion, "cliente_devuelta",
+        lambda: notificaciones.notificar_cliente_devuelta(implementacion, ronda, base_url=base_url),
+        descripcion_falla="Quedó devuelta, pero no se pudo avisarle al cliente por mail.",
+    )
+    if falla:
+        avisos.append(falla)
+    return Resultado(implementacion=implementacion, avisos=avisos)
 
 
 def marcar_cumplida(actor, implementacion, base_url=None):
@@ -325,8 +454,13 @@ def enviar_relevamiento(actor, implementacion, fecha, base_url=None):
             services.guardar_fecha_implementacion(implementacion, fecha, actor)
         implementacion.enviado = timezone.now()
         implementacion.save(update_fields=["enviado"])
+        ronda = implementacion.ronda_abierta
+        if ronda:
+            ronda.respondida_en = implementacion.enviado
+            ronda.save(update_fields=["respondida_en"])
         eventos.registrar(actor, "envio.confirmado", implementacion, datos={
             "fecha_salida_productivo": fecha, "empleados": implementacion.empleados.count(),
+            **({"ronda": ronda.numero} if ronda else {}),
         })
     for tipo, enviar in (
         ("equipo_resumen", lambda: notificaciones.notificar_implementacion_completa(implementacion, base_url=base_url)),

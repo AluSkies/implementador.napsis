@@ -1,12 +1,18 @@
+import io
 import tempfile
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from clients.models import Cliente, Implementacion, ImplementacionModulo, Modulo, PersonaRol
+from catalog.models import TipoLiquidacion
+from clients.models import (
+    Cliente, Implementacion, ImplementacionLiquidacion, ImplementacionModulo, Modulo, PersonaRol, UbicacionFirma,
+)
 from employees.models import Empleado
 
 CUIT = "30-50001091-2"
@@ -28,25 +34,52 @@ class BaseWizard(TestCase):
         for nombre in self.modulos:
             modulo, _ = Modulo.objects.get_or_create(nombre=nombre)
             ImplementacionModulo.objects.create(implementacion=self.implementacion, modulo=modulo, activo=True)
+        self.liquidacion = TipoLiquidacion.objects.create(nombre="Liquidación Normal")
         self.client.force_login(self.usuario)
 
-    def agregar_empleado(self):
-        return Empleado.objects.create(
-            implementacion=self.implementacion, cuil="20111111112", nombre="JUAN", apellido="PEREZ",
+    CUIL_APODERADO = "20111111112"
+    CUIL_LIQUIDADOR = "20222222223"
+
+    def agregar_empleado(self, cuil=CUIL_APODERADO, nombre="JUAN", apellido="PEREZ"):
+        empleado, _ = Empleado.objects.get_or_create(
+            implementacion=self.implementacion, cuil=cuil,
+            defaults={"nombre": nombre, "apellido": apellido, "fecha_ingreso": date(2020, 1, 1)},  # obligatoria con Recibo Digital
         )
+        return empleado
 
     def cargar_roles_completos(self):
-        for rol, nombre in ((PersonaRol.ROL_APODERADO, "Gomez, Ana"), (PersonaRol.ROL_LIQUIDADOR, "Ruiz, Luis"),
-                            (PersonaRol.ROL_ADMIN_RRHH, "Sosa, Eva")):
-            PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre=nombre)
+        """Los tres roles. El Apoderado y el Liquidador salen de la nómina, así que se cargan sus empleados."""
+        self.agregar_empleado(self.CUIL_APODERADO)
+        self.agregar_empleado(self.CUIL_LIQUIDADOR, "LUIS", "RUIZ")
+        for rol, nombre, cuil in (
+            (PersonaRol.ROL_APODERADO, "Gomez, Ana", self.CUIL_APODERADO),
+            (PersonaRol.ROL_LIQUIDADOR, "Ruiz, Luis", self.CUIL_LIQUIDADOR),
+            (PersonaRol.ROL_ADMIN_RRHH, "Sosa, Eva", ""),
+        ):
+            PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre=nombre, cuil=cuil)
 
     def completar_todo(self):
         self.cliente.razon_social = "Empresa A S.A."
         self.cliente.cuits = CUIT
         self.cliente.save()
         self.cargar_roles_completos()
+        ImplementacionLiquidacion.objects.update_or_create(
+            implementacion=self.implementacion, tipo_liquidacion=self.liquidacion, defaults={"activo": True},
+        )
         self.implementacion.modelo_recibo.save("m.pdf", SimpleUploadedFile("m.pdf", b"%PDF-1.4"))
         self.agregar_empleado()
+        self.cargar_firma()
+
+    def cargar_firma(self, estado=UbicacionFirma.ESTADO_VALIDADA):
+        """La firma ya subida y ubicada (por defecto, también validada por el equipo)."""
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (300, 100), "white").save(buffer, format="PNG")
+        firma = UbicacionFirma(implementacion=self.implementacion, estado=estado, propuesta_por="cliente_a")
+        firma.imagen.save("firma.png", ContentFile(buffer.getvalue()), save=False)
+        firma.save()
+        return firma
 
 
 class AccesoAlWizardTests(BaseWizard):
@@ -123,10 +156,20 @@ class Paso1EmpresaTests(BaseWizard):
 class PasoRolesTests(BaseWizard):
     """Apoderado/Firmante, Liquidador y Admin. de RRHH son elementales: sin los tres no se avanza."""
 
+    def setUp(self):
+        super().setUp()
+        self.agregar_empleado(self.CUIL_APODERADO)
+        self.agregar_empleado(self.CUIL_LIQUIDADOR, "LUIS", "RUIZ")
+
     def _post(self, filas):
+        """Cada fila es (rol, nombre); el CUIL de cada rol sale de la nómina (el de Admin. de RRHH es opcional)."""
+        cuils = {PersonaRol.ROL_APODERADO: self.CUIL_APODERADO, PersonaRol.ROL_LIQUIDADOR: self.CUIL_LIQUIDADOR}
         datos = {"form-TOTAL_FORMS": str(len(filas)), "form-INITIAL_FORMS": "0"}
         for i, (rol, nombre) in enumerate(filas):
-            datos.update({f"form-{i}-rol": rol, f"form-{i}-apellido_nombre": nombre, f"form-{i}-cuil": "", f"form-{i}-mail": ""})
+            datos.update({
+                f"form-{i}-rol": rol, f"form-{i}-apellido_nombre": nombre,
+                f"form-{i}-cuil": cuils.get(rol, ""), f"form-{i}-mail": "",
+            })
         return self.client.post(_url(self.implementacion, 5), datos)
 
     def test_sin_los_tres_roles_no_avanza_y_no_guarda(self):
@@ -154,7 +197,7 @@ class PasoRolesTests(BaseWizard):
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class PasoConfiguracionModeloDeReciboTests(BaseWizard):
     def _post(self, archivo=None):
-        datos = {"tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA"}
+        datos = {"tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA", "tipos_liquidacion": [self.liquidacion.pk]}
         if archivo:
             datos["modelo_recibo"] = archivo
         return self.client.post(_url(self.implementacion, 6), datos)
@@ -195,7 +238,7 @@ class PasoNominaTests(BaseWizard):
 
 class Paso9EnvioTests(BaseWizard):
     def _enviar(self):
-        return self.client.post(_url(self.implementacion, 9), {"accion": "enviar"})
+        return self.client.post(_url(self.implementacion, 10), {"accion": "enviar"})
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_con_pendientes_no_se_envia_y_se_los_muestra(self):
@@ -251,7 +294,7 @@ class Paso9FechaDeImplementacionTests(BaseWizard):
 
     def _enviar_con_fecha(self, fecha):
         return self.client.post(
-            _url(self.implementacion, 9), {"accion": "enviar", "fecha_salida_productivo": fecha.isoformat() if fecha else ""},
+            _url(self.implementacion, 10), {"accion": "enviar", "fecha_salida_productivo": fecha.isoformat() if fecha else ""},
         )
 
     def test_es_opcional(self):
@@ -300,7 +343,7 @@ class Paso9FechaDeImplementacionTests(BaseWizard):
     def test_viene_precargada_con_la_fecha_ya_definida(self):
         self.implementacion.fecha_salida_productivo = self.minima
         self.implementacion.save()
-        self.assertContains(self.client.get(_url(self.implementacion, 9)), self.minima.isoformat())
+        self.assertContains(self.client.get(_url(self.implementacion, 10)), self.minima.isoformat())
 
     def test_el_campo_avisa_cual_es_la_fecha_minima(self):
-        self.assertContains(self.client.get(_url(self.implementacion, 9)), f'min="{self.minima.isoformat()}"')
+        self.assertContains(self.client.get(_url(self.implementacion, 10)), f'min="{self.minima.isoformat()}"')

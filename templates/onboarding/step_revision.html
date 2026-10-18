@@ -10,6 +10,7 @@
     <tr><th>Módulos</th><td>{% for m in implementacion.modulos.all %}{% if m.activo %}{{ m.modulo.nombre }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}</td></tr>
     <tr><th>Roles cargados</th><td>{{ implementacion.roles.count }}</td></tr>
     <tr><th>Sucursales</th><td>{{ implementacion.sucursales.count }}</td></tr>
+    {% if resumen.liquidaciones_activas %}<tr><th>Tipos de liquidación</th><td>{{ resumen.liquidaciones_activas }}</td></tr>{% endif %}
     <tr><th>Licencias activas</th><td>{{ resumen.licencias_activas }}</td></tr>
     <tr><th>Novedades activas</th><td>{{ resumen.novedades_activas }}</td></tr>
     <tr><th>Documentos de legajo activos</th><td>{{ resumen.documentos_activos }}</td></tr>

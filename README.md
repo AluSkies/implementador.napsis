@@ -11,7 +11,7 @@ Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis.
 - `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Se cargan con `manage.py seed_catalogos` (a partir del relevamiento original), no con una migración.
 - `onboarding/` — el wizard público (9 pasos) y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
 - `employees/` — Empleado, ImportBatch (ambos FK a Implementacion), parser/validador de la plantilla masiva (`employees/services.py`) y generador de la plantilla vacía descargable.
-- `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones), y el POST a un webhook de Google Apps Script para el dump a Sheets.
+- `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones).
 - `dashboard/` — panel interno con login: listado de implementaciones, ficha de cliente con su historial, generación de links, anular/reiniciar una implementación, atender pedidos de revisión.
 
 Todos los datos que se completan en el wizard (roles, sucursales, módulos, licencias, novedades, documentos de legajo, empleados) cuelgan de `Implementacion`, no de `Cliente` — así una misma empresa puede repetir el proceso en el futuro sin arrastrar datos de una ronda anterior.
@@ -62,18 +62,9 @@ Al correr los tests `settings.py` cambia el hasher de contraseñas a uno rápido
 - `DJANGO_EMAIL_BACKEND` (usa el backend de consola en dev; en producción el SMTP — `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, etc. — va en un archivo aparte, `.env.mail`, que maneja deploy: ver `deploy/CORREO.md`)
 - `IMPLEMENTATION_TEAM_EMAILS` — lista separada por comas que recibe el mail de resumen al completarse una implementación.
 - `TRUSTED_PROXY_COUNT` — cuántos proxies reverso propios hay delante de la app (default `1` en producción, `0` en desarrollo). Lo usa el límite de intentos de login para saber la IP real del cliente.
-- `GOOGLE_SHEETS_WEBHOOK_URL` — URL del Google Apps Script Web App que appendea la fila al Sheet de seguimiento (ver abajo). Si queda vacío, ese paso se omite (se loggea, no rompe el flujo).
 - `SITE_BASE_URL` — usado para armar links absolutos en los mails cuando no hay `request` disponible.
 - `MYSQL_DB`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`, `MYSQL_PORT` — la base en producción. Si `MYSQL_DB` no está seteado, la app usa SQLite (desarrollo y tests).
 - `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`, `DJANGO_SUPERUSER_EMAIL` — opcionales; `manage.py ensure_superuser` crea ese superusuario si no existe (útil donde no hay shell).
-
-## Integración con Google Sheets
-
-El envío final hace un `POST` con JSON al `GOOGLE_SHEETS_WEBHOOK_URL`. Para armarlo:
-
-1. Crear un Google Sheet de seguimiento.
-2. Extensiones → Apps Script, y publicar un `doPost(e)` que parsee `e.postData.contents` (JSON) y haga `sheet.appendRow([...])` con los campos que se necesiten (el payload incluye: razón social, CUIT, mail/teléfono de contacto, módulos, licencias, novedades, documentos activos, cantidad de empleados/sucursales, roles).
-3. Implementar como aplicación web (acceso "Cualquier usuario"), copiar la URL del deployment y pegarla en `GOOGLE_SHEETS_WEBHOOK_URL`.
 
 ## Producción
 
@@ -94,19 +85,27 @@ En ambos casos:
 
 ## Los pasos del wizard
 
-1. Datos de contacto · 2. Módulos · 3. Sucursales (con Fichada) · 4. **Nómina** · 5. **Roles** (con Recibo Digital o Legajos) · 6. Configuración de firma y adjuntos (con Recibo Digital) · 7. Licencias y Novedades (con Novedades) · 8. Documentos de legajo (con Legajos) · 9. Revisión y envío.
+1. Datos de contacto · 2. Módulos · 3. Sucursales (con Fichada) · 4. **Nómina** · 5. **Roles** (con Recibo Digital o Legajos) · 6. Configuración y adjuntos (con Recibo Digital) · 7. **Firma del recibo** (con Recibo Digital) · 8. Licencias y Novedades (con Novedades) · 9. Documentos de legajo (con Legajos) · 10. Revisión y envío.
 
 La nómina va **antes** que los roles para poder elegir a las personas con rol de esa lista (cada fila de roles tiene un buscador «Buscar en la nómina» que completa nombre, CUIL y mail), y las sucursales antes que la nómina para asignar a cada empleado la suya. En la nómina se puede **editar** a cada empleado (botón «Editar»; también desde la ficha del panel). Los números de paso están definidos una sola vez, como constantes, en `onboarding/services.py`.
 
 **Importar la nómina** (`.xlsx` o `.csv`, hasta 5.000 filas por archivo): se aceptan fechas reales de Excel o en texto (DD/MM/AAAA), CUIL con o sin guiones, y CSV de Excel en español (`;`, cp1252). Si el archivo no se puede leer, falta una columna obligatoria o es demasiado grande, se avisa con un mensaje claro y no se carga nada; las filas con error (CUIL inválido, fecha que no se entiende, valor demasiado largo, mail inválido) se informan con su número de fila y no impiden cargar las demás. La carga es todo-o-nada (una sola transacción) y en lote: 5.000 empleados tardan unos 4 segundos. Se avisa de las columnas desconocidas y de los «Reporta A / Aprobador» que no están en la nómina. **El archivo no se guarda** (tiene datos personales): solo queda el registro de la importación.
 
+**Firma del recibo.** El cliente sube la imagen de la firma del apoderado y, sobre su modelo de recibo, arrastra y redimensiona tres recuadros (firma de la empresa, empleado en conformidad y en disconformidad). Solo se guarda su **intención** (página y recuadros como fracciones de la página, más la imagen con su `sha256`): el portal no la traduce a Napsis. El equipo la **valida**, la **observa** (motivos de un catálogo cerrado; devuelve el relevamiento al cliente con una ronda) o la **corrige** desde la ficha, y no se puede validar la documentación con la firma sin validar. Las imágenes subidas nunca se borran ni se pisan. El recibo se dibuja en el navegador con PDF.js; si no se pudiera mostrar, la firma se ubica con los campos numéricos.
+
+## Decisiones deliberadas
+
+- **PDF.js viaja con el repositorio** (`static/vendor/pdfjs/`, ~1,4 MB) en lugar de cargarse desde un CDN. Es un peso a propósito: el cliente es corporativo y sus redes suelen bloquear dominios externos o exigir una lista de permitidos, y el editor de firma no puede quedar inutilizable por eso. La versión está fija (3.11.174, licencia Apache 2.0) y se actualiza a mano (`static/vendor/pdfjs/LEEME.md`).
+- **Las tipografías también viajan con el repositorio** (`static/fonts/`, Montserrat y Roboto variables, subconjunto latino, ~80 KB, licencia OFL) en lugar de cargarse desde Google Fonts, por el mismo motivo: no hay ningún pedido a dominios externos. Hoy el portal no depende de ningún tercero en el navegador.
+
 ## Qué exige el wizard antes de poder enviar
 
-El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo que falta, con link a cada paso, y el botón queda deshabilitado; el servidor lo valida igual):
+El cliente no puede enviar el relevamiento hasta completar (el paso 10 lista lo que falta, con link a cada paso, y el botón queda deshabilitado; el servidor lo valida igual):
 
 - **Razón social y CUIT** de la empresa (paso 1). El implementador puede cargarlos al crear la implementación; si no, los completa el cliente. Los CUIT se validan con su dígito verificador (acepta varios, separados por coma).
 - **Roles** (paso 5; si hay Recibo Digital o Legajos): al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
 - **Modelo de recibo** en PDF (paso 6; si hay Recibo Digital).
+- **Firma del recibo** (paso 7; si hay Recibo Digital): la imagen de la firma y su ubicación sobre el recibo.
 - **Nómina** (paso 4): al menos un empleado.
 
 **Condiciones del proceso.** Al crear la implementación (y después desde su ficha) el equipo decide qué deja fijo y qué decide el cliente. Cada dato se bloquea **al completarlo**; si se deja vacío, lo decide el cliente:
@@ -117,13 +116,13 @@ El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo q
 
 En el alta del panel estas condiciones están plegadas bajo **Opciones avanzadas**. El tipo de empresa (ART o comercial) no está: se agrega cuando se defina qué cambia en el proceso.
 
-**Fecha de implementación.** En el paso 9 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
+**Fecha de implementación.** En el paso 10 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
 
 Cada implementación tiene un **implementador asignado** (por defecto quien la crea, se elige en el alta y se puede reasignar). Es quien lleva la implementación y, además de la lista `IMPLEMENTATION_TEAM_EMAILS`, recibe sus notificaciones.
 
 ## Reporte exportable
 
-Al pie del panel (`/panel/`), el botón **Exportar (.xlsx)** descarga todas las implementaciones, sin filtros: empresa, razón social, CUIT(s), estado, paso actual, implementador asignado, quién la creó, mail y teléfono de contacto, fecha de solicitud, de envío del cliente y de implementación (real si está cumplida, estimada si no), módulos, cantidad de empleados y sucursales, y si hay un pedido de contacto sin atender. Los textos que parecen fórmulas (`=...`) se escriben como texto para que no se ejecuten al abrir el archivo en Excel (lo mismo en la nómina descargable y en el envío a Google Sheets).
+Al pie del panel (`/panel/`), el botón **Exportar (.xlsx)** descarga todas las implementaciones, sin filtros: empresa, razón social, CUIT(s), estado, paso actual, implementador asignado, quién la creó, mail y teléfono de contacto, fecha de solicitud, de envío del cliente y de implementación (real si está cumplida, estimada si no), módulos, cantidad de empleados y sucursales, y si hay un pedido de contacto sin atender. Los textos que parecen fórmulas (`=...`) se escriben como texto para que no se ejecuten al abrir el archivo en Excel (lo mismo en la nómina descargable).
 
 ## Seguridad y operación (producción)
 
@@ -152,6 +151,6 @@ Un mail que falla (SMTP caído) nunca rompe el flujo: queda en el log y, en el p
 1. Entrar a `/panel/`, loguearse, crear una implementación (elegís un Cliente existente o cargás uno nuevo con Nombre + CUIT(s); esto genera el link único).
 2. Abrir el link generado en una pestaña sin sesión (simula al cliente) y completar los 9 pasos.
 3. En el paso de empleados, se puede descargar la plantilla vacía, completarla y subirla, o cargar empleados a mano.
-4. Al enviar el paso 9, la implementación queda "Pendiente - Completo por cliente" (el cliente ya cargó todo; sigue pendiente porque el trabajo de implementar es del equipo), se dispara el mail (visible en consola en dev) y el POST a Sheets si está configurado. Pasa a "Cumplida" recién cuando el equipo la marca como cumplida desde el panel.
+4. Al enviar el paso 9, la implementación queda "Pendiente - Completo por cliente" (el cliente ya cargó todo; sigue pendiente porque el trabajo de implementar es del equipo), se disparan los mails (visibles en consola en dev). Pasa a "Cumplida" recién cuando el equipo la marca como cumplida desde el panel.
 5. Con el mismo link, el cliente puede volver a entrar y ver todo en solo lectura, y pedir que lo contacten ("Pedir que me contacten") — eso también manda un mail al equipo.
 6. Desde `/panel/`, en la ficha de la implementación, se puede reiniciar el link, anular la implementación (pasa a "Cancelada" y el cliente ya no puede completarla), y marcar como atendido un pedido de contacto.

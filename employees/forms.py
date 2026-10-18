@@ -2,6 +2,8 @@ from django import forms
 
 from clients.validators import validar_tamanio_archivo
 
+from clients.models import Modulo
+
 from .models import Empleado
 from .services import CUIL_RE, normalizar_cuil, normalizar_texto
 
@@ -22,6 +24,9 @@ class EmpleadoForm(forms.ModelForm):
         # actual: por default Django arma el queryset con TODOS los registros
         # del modelo, lo que filtraría empleados/sucursales de otros clientes.
         if implementacion is not None:
+            # El wizard de Recibo Digital necesita la fecha de ingreso de todos los empleados.
+            if implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
+                self.fields["fecha_ingreso"].required = True
             self.fields["sucursal"].queryset = implementacion.sucursales.all()
             empleados_qs = implementacion.empleados.all()
             if self.instance and self.instance.pk:

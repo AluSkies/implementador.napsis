@@ -160,7 +160,7 @@ class RecuperarContrasenaTests(TestCase):
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class ConfirmacionesAlClienteTests(BaseWizard):
     def _enviar(self):
-        return self.client.post(_url(self.implementacion, 9), {"accion": "enviar"})
+        return self.client.post(_url(self.implementacion, 10), {"accion": "enviar"})
 
     def test_al_enviar_el_relevamiento_el_cliente_recibe_la_confirmacion(self):
         self.implementacion.mail_contacto = "contacto@a.com"

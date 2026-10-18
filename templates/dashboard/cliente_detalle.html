@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pasos %}
 {% block content %}
 <div class="card">
     <p><a href="{% url 'dashboard:home' %}">&larr; Volver al listado</a></p>
@@ -36,7 +37,7 @@
         <tbody>
         {% for imp in implementaciones %}
             <tr>
-                <td>{{ imp.estado_visual_label }}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/9)</span>{% endif %}</td>
+                <td>{{ imp.estado_visual_label }}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/{% total_pasos %})</span>{% endif %}</td>
                 <td>{{ imp.creado|date:"d/m/Y" }}</td>
                 <td><a href="{% url 'dashboard:implementacion_detalle' pk=imp.pk %}">Ver detalle</a></td>
             </tr>

@@ -45,6 +45,7 @@
                 {% endif %}
             </td>
         </tr>
+        <tr><th>Logo</th><td>{% if implementacion.logo %}<a href="{{ implementacion.logo.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
         <tr><th>Banner</th><td>{% if implementacion.banner %}<a href="{{ implementacion.banner.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
         <tr><th>Modelo de recibo</th><td>{% if implementacion.modelo_recibo %}<a href="{{ implementacion.modelo_recibo.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
     </table>
@@ -78,6 +79,21 @@
         </tbody>
     </table>
 </div>
+
+{% if firma and firma.imagen %}
+<div class="card">
+    <h2>Firma del recibo</h2>
+    <p class="muted">Así quedó ubicada la firma sobre tu recibo.{% if firma.estado == "validada" %} El equipo de Napsis ya la validó.{% endif %}</p>
+    {% include "onboarding/_editor_firma.html" with form=form_lectura solo_lectura=True %}
+</div>
+{% endif %}
+
+{% if liquidaciones_activas %}
+<div class="card">
+    <h2>Tipos de liquidación</h2>
+    <ul>{% for l in liquidaciones_activas %}<li>{{ l.tipo_liquidacion.nombre }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
 
 <div class="card">
     <h2>Licencias activas</h2>

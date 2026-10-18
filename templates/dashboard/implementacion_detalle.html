@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pasos %}
 {% block content %}
 <div class="card">
     <p><a href="{% url 'dashboard:cliente_detalle' pk=cliente.pk %}">&larr; Volver a {{ cliente.nombre }}</a></p>
@@ -19,8 +20,10 @@
     </form>
     <p>
         <strong>Estado:</strong> {{ implementacion.estado_visual_label }}
-        {% if implementacion.estado_visual == "a_completar" %} · <span class="muted">paso {{ implementacion.paso_actual }}/9</span>
+        {% if implementacion.marca_de_devolucion %} · <strong>{{ implementacion.marca_de_devolucion }}</strong>{% endif %}
+        {% if implementacion.estado_visual == "a_completar" %} · <span class="muted">paso {{ implementacion.paso_actual }}/{% total_pasos %}</span>
         {% elif implementacion.estado_visual == "completado_cliente" %} · <span class="muted">enviado el {{ implementacion.enviado|date:"d/m/Y H:i" }}</span>
+        {% elif implementacion.estado_visual == "validada" %} · <span class="muted">validada el {{ implementacion.validada_en|date:"d/m/Y H:i" }}</span>
         {% elif implementacion.estado_visual == "completo" %} · <span class="muted">terminada el {{ implementacion.cumplida_en|date:"d/m/Y H:i" }}</span>
         {% endif %}
     </p>
@@ -63,10 +66,17 @@
     <div class="actions">
         {% if implementacion.estado != "cancelada" %}
         {% if implementacion.enviado and implementacion.estado == "pendiente" %}
+        {% if not implementacion.validada_en %}
+        <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="aprobar_para_configurar">
+            <button class="btn" type="submit">Validar documentación y dejar lista para configurar</button>
+        </form>
+        {% endif %}
         <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
             {% csrf_token %}
             <input type="hidden" name="accion" value="marcar_cumplida">
-            <button class="btn" type="submit">Marcar implementación como cumplida</button>
+            <button class="btn{% if not implementacion.validada_en %} secondary{% endif %}" type="submit">Marcar implementación como cumplida</button>
         </form>
         {% endif %}
         <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
@@ -83,6 +93,44 @@
     </div>
 </div>
 
+{% if rondas or implementacion.enviado and implementacion.estado == "pendiente" %}
+<div class="card">
+    <h2>Revisión con el cliente</h2>
+    {% if implementacion.enviado and implementacion.estado == "pendiente" %}
+    <details class="section-edit">
+        <summary>Devolver al cliente para que corrija o complete</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="devolver_al_cliente">
+            <label for="motivo_devolucion">¿Qué tiene que corregir o completar?</label>
+            <textarea name="motivo" id="motivo_devolucion" rows="3" required></textarea>
+            <p class="muted">Opcional: una observación por sección. El cliente la ve en el paso que corresponde.</p>
+            {% for codigo, titulo in pasos_observables %}
+            <label for="obs_{{ codigo }}">{{ titulo }}</label>
+            <textarea name="obs_{{ codigo }}" id="obs_{{ codigo }}" rows="2"></textarea>
+            {% endfor %}
+            <div class="actions"><button class="btn secondary" type="submit" onclick="return confirm('Esto saca la implementación del envío y le avisa al cliente por mail. ¿Seguro?')">Devolver al cliente</button></div>
+        </form>
+    </details>
+    {% endif %}
+    {% if rondas %}
+    <table>
+        <thead><tr><th>Ronda</th><th>Devuelta</th><th>Qué se pidió</th><th>Respuesta del cliente</th></tr></thead>
+        <tbody>
+        {% for ronda in rondas %}
+            <tr>
+                <td>{{ ronda.numero }}</td>
+                <td>{{ ronda.devuelta_en|date:"d/m/Y H:i" }}<br><span class="muted">{{ ronda.devuelta_por }}</span></td>
+                <td>{{ ronda.motivo|linebreaksbr }}{% for codigo, texto in ronda.observaciones.items %}<br><span class="muted">{{ codigo }}: {{ texto }}</span>{% endfor %}</td>
+                <td>{% if ronda.respondida_en %}{{ ronda.respondida_en|date:"d/m/Y H:i" }}{% else %}<span class="muted">Esperando al cliente</span>{% endif %}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="card section-readonly">
     <h2>Datos de contacto</h2>
     <dl>
@@ -95,6 +143,7 @@
         <dt>Nomenclatura de PDFs</dt><dd>{{ implementacion.nomenclatura_pdf|default:"—" }}</dd>
         <dt>Cantidad de capitas</dt><dd>{{ implementacion.cantidad_capitas|default:"—" }}</dd>
         <dt>Segmentación liquidador</dt><dd>{{ implementacion.segmentacion_liquidador|default:"—" }}</dd>
+        <dt>Logo</dt><dd>{% if implementacion.logo %}<a href="{{ implementacion.logo.url }}">Descargar</a>{% else %}—{% endif %}</dd>
         <dt>Banner</dt><dd>{% if implementacion.banner %}<a href="{{ implementacion.banner.url }}">Descargar</a>{% else %}—{% endif %}</dd>
         <dt>Modelo de recibo</dt><dd>{% if implementacion.modelo_recibo %}<a href="{{ implementacion.modelo_recibo.url }}">Descargar</a>{% else %}—{% endif %}</dd>
     </dl>
@@ -205,6 +254,76 @@
         </form>
     </details>
 </div>
+
+<div class="card section-readonly">
+    <h2>Tipos de liquidación</h2>
+    <p>{% for l in liquidaciones_activas %}{{ l.tipo_liquidacion.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguno elegido</span>{% endfor %}</p>
+    <details class="section-edit" {% if liquidaciones_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_liquidaciones">
+            {{ liquidaciones_form.as_p }}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar tipos de liquidación</button></div>
+        </form>
+    </details>
+</div>
+
+{% if usa_recibo_digital %}
+<div class="card section-readonly">
+    <h2>Firma del recibo</h2>
+    {% if firma and firma.imagen %}
+        <p>
+            <strong>Estado:</strong> {{ firma.get_estado_display }}
+            {% if firma.estado == "validada" %}<span class="muted">· por {{ firma.validada_por }} el {{ firma.validada_en|date:"d/m/Y H:i" }}</span>{% endif %}
+            {% if firma.estado == "observada" %}<span class="muted">· {{ firma.motivos_texto|join:"; " }}{% if firma.comentario %} — {{ firma.comentario }}{% endif %}</span>{% endif %}
+            · <a href="{{ imagen_url }}">Ver imagen</a>
+        </p>
+        {% include "onboarding/_editor_firma.html" with form=form_lectura solo_lectura=True %}
+        <div class="actions">
+            {% if firma.estado != "validada" %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="validar_firma">
+                <button class="btn" type="submit">Validar firma</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if implementacion.enviado and implementacion.estado == "pendiente" %}
+        <details class="section-edit">
+            <summary class="btn secondary">Observar y devolver al cliente</summary>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="observar_firma">
+                <p class="muted">Elegí qué pasa con la firma: se la devolvemos al cliente para que la ubique de nuevo.</p>
+                {% for codigo, nombre in motivos_de_firma %}
+                <div class="checkbox-row"><input type="checkbox" name="motivos" value="{{ codigo }}" id="motivo_{{ codigo }}"><label for="motivo_{{ codigo }}">{{ nombre }}</label></div>
+                {% endfor %}
+                <label for="comentario_firma">Comentario <span class="muted">(opcional)</span></label>
+                <textarea name="comentario" id="comentario_firma" rows="2"></textarea>
+                <div class="actions"><button class="btn secondary" type="submit" onclick="return confirm('Esto saca la implementación del envío y le avisa al cliente por mail. ¿Seguro?')">Observar y devolver</button></div>
+            </form>
+        </details>
+        {% endif %}
+    {% else %}
+        <p class="muted">El cliente todavía no cargó la firma.</p>
+    {% endif %}
+    <details class="section-edit" {% if form.errors %}open{% endif %}>
+        <summary class="btn secondary">Corregir la firma desde acá</summary>
+        {% if not modelo_url %}
+            <p class="muted">Primero tiene que haber un modelo de recibo cargado.</p>
+        {% else %}
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="corregir_firma">
+            <p class="muted">Lo que guardes queda registrado como corrección del equipo (con el antes y el después) y deja la firma validada.</p>
+            {% include "onboarding/_editor_firma.html" with diferido=True %}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar corrección</button></div>
+        </form>
+        {% endif %}
+    </details>
+</div>
+{% endif %}
 
 <div class="card section-readonly">
     <h2>Licencias y Novedades</h2>

@@ -104,9 +104,9 @@ class PortalLoginView(LoginView):
 
 @login_required
 def media_protegida(request, ruta):
-    """Sirve los archivos subidos (banner, modelo de recibo, planillas importadas).
+    """Sirve los archivos subidos (logo, banner, modelo de recibo, firma, planillas importadas).
 
-    El equipo (staff) accede a cualquiera; un cliente solo al banner y al modelo de
+    El equipo (staff) accede a cualquiera; un cliente solo al logo, al banner, a la firma y al modelo de
     recibo de sus propias implementaciones. Cualquier otro caso devuelve 404 (no 403)
     para no revelar si el archivo existe. Así el proxy reverso no necesita servir
     /media/ por su cuenta: la app es la única que decide quién ve qué.
@@ -120,7 +120,7 @@ def media_protegida(request, ruta):
         cliente = getattr(request.user, "cliente", None)
         nombre = archivo.relative_to(base).as_posix()
         propio = cliente is not None and Implementacion.objects.filter(
-            Q(banner=nombre) | Q(modelo_recibo=nombre), cliente=cliente
+            Q(banner=nombre) | Q(logo=nombre) | Q(modelo_recibo=nombre) | Q(firmas__imagen=nombre), cliente=cliente
         ).exists()
         if not propio:
             raise Http404

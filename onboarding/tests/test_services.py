@@ -25,23 +25,23 @@ class PasosActivosTests(TestCase):
         )
 
     def test_sin_modulos_solo_los_pasos_universales(self):
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 10])
 
     def test_fichada_activa_el_paso_de_sucursales(self):
         self._activar_modulo("Fichada")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 3, 4, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 3, 4, 10])
 
     def test_legajos_activa_roles_y_documentos_pero_no_configuracion(self):
         self._activar_modulo("Legajos")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 5, 8, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 5, 9, 10])
 
     def test_novedades_activa_el_paso_de_licencias_y_novedades(self):
         self._activar_modulo("Novedades")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 7, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 8, 10])
 
     def test_recibo_digital_activa_roles_y_configuracion_pero_no_documentos(self):
         self._activar_modulo("Recibo Digital")
-        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 5, 6, 9])
+        self.assertEqual(services.pasos_activos(self.implementacion), [1, 2, 4, 5, 6, 7, 10])
 
 
 class GuardarDatosContactoTests(TestCase):
@@ -275,7 +275,7 @@ class PendientesDeEnvioTests(TestCase):
 
     def test_con_recibo_digital_pide_tambien_roles_y_modelo_de_recibo(self):
         self._activar("Recibo Digital")
-        self.assertEqual(self._pasos(), [1, 4, 5, 6])
+        self.assertEqual(self._pasos(), [1, 4, 5, 6, 6, 7])  # modelo de recibo, tipos de liquidación y firma
 
     def test_con_legajos_pide_roles_pero_no_modelo_de_recibo(self):
         self._activar("Legajos")

@@ -5,6 +5,7 @@ Cada función de guardado registra primero una versión anterior (clients.servic
 con el estado previo de la sección, así el cliente y el equipo pueden consultarlas después.
 """
 
+import hashlib
 from datetime import timedelta
 
 from django.contrib import messages
@@ -12,27 +13,31 @@ from django.forms.models import model_to_dict
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from catalog.models import TipoDocumento
+from catalog.models import TipoDocumento, TipoLiquidacion
 from clients.models import (
     ImplementacionLicencia,
+    ImplementacionLiquidacion,
     ImplementacionNovedad,
     ImplementacionTipoDocumento,
     Modulo,
     PersonaRol,
     Sucursal,
+    UbicacionFirma,
 )
-from automatizacion import eventos
+from automatizacion import actores, eventos
 from clients.services import cambio_de_seccion, guardar_version
 from employees.models import Empleado, ImportBatch
-from employees.services import COLUMNAS, leer_archivo_empleados
+from employees.services import COLUMNAS, leer_archivo_empleados, normalizar_cuil
 
-TOTAL_PASOS = 9
+from .forms import FirmaForm
+
+TOTAL_PASOS = 10
 
 # Orden del wizard. La nómina va antes que los roles (para poder elegir de ahí a las personas
 # con rol) y las sucursales antes que la nómina (para poder asignar a cada empleado la suya).
 (
     PASO_DATOS, PASO_MODULOS, PASO_SUCURSALES, PASO_NOMINA, PASO_ROLES,
-    PASO_CONFIGURACION, PASO_LICENCIAS, PASO_DOCUMENTOS, PASO_REVISION,
+    PASO_CONFIGURACION, PASO_FIRMA, PASO_LICENCIAS, PASO_DOCUMENTOS, PASO_REVISION,
 ) = range(1, TOTAL_PASOS + 1)
 
 # El cliente solo puede pedir una fecha de implementación a partir de tantos días hábiles
@@ -42,10 +47,32 @@ DIAS_HABILES_MINIMOS_CLIENTE = 10
 
 # Pasos que solo aplican si el cliente contrató alguno de estos módulos.
 # Los pasos que no aparecen acá (datos, módulos, nómina y revisión) son universales.
+TITULOS_PASO = {
+    PASO_DATOS: "Datos de contacto",
+    PASO_MODULOS: "Módulos contratados",
+    PASO_SUCURSALES: "Sucursales",
+    PASO_NOMINA: "Carga de empleados",
+    PASO_ROLES: "Apoderado/s, Liquidador y Admin. de RRHH",
+    PASO_CONFIGURACION: "Configuración y adjuntos",
+    PASO_FIRMA: "Firma del recibo",
+    PASO_LICENCIAS: "Licencias y Novedades",
+    PASO_DOCUMENTOS: "Documentos de Legajo Digital",
+    PASO_REVISION: "Revisión y envío",
+}
+
+# Código estable de cada paso: las observaciones de una devolución se guardan con él, así que no se
+# pierden aunque cambie el número de orden de los pasos.
+CODIGO_DE_PASO = {
+    PASO_DATOS: "datos", PASO_MODULOS: "modulos", PASO_SUCURSALES: "sucursales", PASO_NOMINA: "nomina",
+    PASO_ROLES: "roles", PASO_CONFIGURACION: "configuracion", PASO_FIRMA: "firma", PASO_LICENCIAS: "licencias",
+    PASO_DOCUMENTOS: "documentos", PASO_REVISION: "revision",
+}
+
 PASO_REQUIERE_MODULO = {
     PASO_SUCURSALES: {Modulo.FICHADA},                          # Sucursales (fichada por ubicación)
     PASO_ROLES: {Modulo.RECIBO_DIGITAL, Modulo.LEGAJOS},        # Apoderado/Liquidador (recibos) o Admin RRHH (legajo)
-    PASO_CONFIGURACION: {Modulo.RECIBO_DIGITAL},                # Configuración de firma y adjuntos del recibo
+    PASO_CONFIGURACION: {Modulo.RECIBO_DIGITAL},                # Configuración y adjuntos del recibo
+    PASO_FIRMA: {Modulo.RECIBO_DIGITAL},                        # Dónde va la firma sobre el recibo
     PASO_LICENCIAS: {Modulo.NOVEDADES},                         # Licencias y Novedades
     PASO_DOCUMENTOS: {Modulo.LEGAJOS},                          # Documentos de Legajo Digital
 }
@@ -109,19 +136,47 @@ def pendientes_de_envio(implementacion):
         pendientes.append({"paso": PASO_DATOS, "mensaje": "Completar la razón social y el CUIT de la empresa."})
 
     if PASO_ROLES in activos:
-        presentes = set(implementacion.roles.exclude(apellido_nombre="").values_list("rol", flat=True))
-        faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in presentes]
+        roles = list(implementacion.roles.exclude(apellido_nombre=""))
+        faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in {r.rol for r in roles}]
         if faltan:
             pendientes.append({
                 "paso": PASO_ROLES,
                 "mensaje": "Cargar al menos una persona para cada rol. Falta: " + ", ".join(faltan) + ".",
             })
+        cuils_nomina = set(implementacion.empleados.values_list("cuil", flat=True))
+        for rol in roles:
+            if rol.rol in PersonaRol.ROLES_EN_NOMINA and normalizar_cuil(rol.cuil) not in cuils_nomina:
+                pendientes.append({
+                    "paso": PASO_ROLES,
+                    "mensaje": f"{rol.apellido_nombre} ({rol.get_rol_display()}) no figura en la nómina: "
+                               "cargalo como empleado o corregí su CUIL.",
+                })
 
     if PASO_CONFIGURACION in activos and not implementacion.modelo_recibo:
         pendientes.append({"paso": PASO_CONFIGURACION, "mensaje": "Subir el modelo de recibo (PDF)."})
 
+    if PASO_CONFIGURACION in activos and not implementacion.liquidaciones.filter(activo=True).exists():
+        pendientes.append({
+            "paso": PASO_CONFIGURACION, "mensaje": "Elegir al menos un tipo de liquidación.",
+        })
+
+    if PASO_FIRMA in activos:
+        firma = implementacion.firma
+        if firma is None or not firma.imagen:
+            pendientes.append({
+                "paso": PASO_FIRMA, "mensaje": "Subir la imagen de la firma y ubicarla sobre el recibo.",
+            })
+
     if not implementacion.empleados.exists():
         pendientes.append({"paso": PASO_NOMINA, "mensaje": "Cargar la nómina de empleados (al menos una persona)."})
+    elif implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
+        sin_ingreso = implementacion.empleados.filter(fecha_ingreso__isnull=True).count()
+        if sin_ingreso:
+            pendientes.append({
+                "paso": PASO_NOMINA,
+                "mensaje": f"Completar la fecha de ingreso de {sin_ingreso} empleado{'s' if sin_ingreso != 1 else ''} "
+                           "(es obligatoria para Recibo Digital).",
+            })
 
     return sorted(pendientes, key=lambda p: p["paso"])
 
@@ -157,6 +212,17 @@ def guardar_modulos(implementacion, modulos_qs, activos_ids, actor):
             implementacion.modulos.update_or_create(modulo=modulo, defaults={"activo": modulo.id in activos_ids})
 
 
+def vincular_roles_con_nomina(implementacion):
+    """Liga cada persona con rol a su empleado de la nómina (por CUIL). Se llama cuando cambian los
+    roles o la nómina. Si el empleado se borra, el vínculo queda vacío solo."""
+    por_cuil = {e.cuil: e for e in implementacion.empleados.all()}
+    for rol in implementacion.roles.all():
+        empleado = por_cuil.get(normalizar_cuil(rol.cuil)) if rol.cuil else None
+        if (empleado.pk if empleado else None) != rol.empleado_id:
+            rol.empleado = empleado
+            rol.save(update_fields=["empleado"])
+
+
 def guardar_roles(implementacion, formset, actor):
     with cambio_de_seccion(implementacion, "roles", actor):
         implementacion.roles.all().delete()
@@ -177,6 +243,7 @@ def guardar_roles(implementacion, formset, actor):
                 )
             )
         PersonaRol.objects.bulk_create(nuevos)
+        vincular_roles_con_nomina(implementacion)
 
 
 def guardar_sucursales(implementacion, formset, actor):
@@ -222,6 +289,70 @@ def guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_
                 implementacion=implementacion, tipo_novedad=novedad,
                 defaults={"activo": form.cleaned_data.get(f"novedad_{novedad.id}_activo", False)},
             )
+
+
+def guardar_liquidaciones(implementacion, tipos, actor):
+    """Guarda qué tipos de liquidación usa la empresa (`tipos`: los elegidos; el resto queda inactivo)."""
+    elegidos = {t.pk for t in tipos}
+    with cambio_de_seccion(implementacion, "liquidaciones", actor):
+        for tipo in TipoLiquidacion.objects.all():
+            ImplementacionLiquidacion.objects.update_or_create(
+                implementacion=implementacion, tipo_liquidacion=tipo, defaults={"activo": tipo.pk in elegidos},
+            )
+
+
+def guardar_firma(implementacion, actor, *, pagina, geometria, imagen=None):
+    """Guarda la intención del cliente sobre su firma: página, recuadros y (si se sube una) la imagen.
+
+    - La imagen anterior no se borra: queda en el disco y el evento `archivo.reemplazado` apunta a las dos.
+    - Si guarda el cliente, la firma queda «propuesta» cuando algo cambió (o si estaba observada: es
+      su respuesta). Si guarda el equipo, es una corrección posterior al envío y queda validada.
+    """
+    del_cliente = actor.tipo == actores.CLIENTE
+    accion = "firma.propuesta" if del_cliente else "firma.corregida_por_implementador"
+    with cambio_de_seccion(implementacion, "firma", actor, accion=accion):
+        firma = implementacion.firmas.filter(tipo_liquidacion__isnull=True).first() or UbicacionFirma(
+            implementacion=implementacion,
+        )
+        anterior = {"ruta": firma.imagen.name, "sha256": firma.imagen_sha256} if firma.imagen else None
+        cambio = firma.pk is None or firma.pagina != pagina or firma.geometria != geometria or imagen is not None
+        firma.pagina = pagina
+        firma.geometria = geometria
+        if imagen is not None:
+            hash_imagen = hashlib.sha256()
+            for trozo in imagen.chunks():
+                hash_imagen.update(trozo)
+            imagen.seek(0)
+            firma.imagen.save(imagen.name, imagen, save=False)
+            firma.imagen_sha256 = hash_imagen.hexdigest()
+        if del_cliente:
+            if cambio or firma.estado == UbicacionFirma.ESTADO_OBSERVADA:
+                firma.estado = UbicacionFirma.ESTADO_PROPUESTA
+                firma.motivos, firma.comentario = [], ""
+                firma.validada_por, firma.validada_en = "", None
+            firma.propuesta_por = firma.propuesta_por or actor.etiqueta
+        else:
+            firma.estado = UbicacionFirma.ESTADO_VALIDADA
+            firma.motivos, firma.comentario = [], ""
+            firma.validada_por, firma.validada_en = actor.etiqueta, timezone.now()
+        firma.save()
+        if imagen is not None and anterior:
+            eventos.registrar(actor, "archivo.reemplazado", implementacion, seccion="firma", datos={
+                "campo": "imagen_firma", "anterior": anterior,
+                "nuevo": {"ruta": firma.imagen.name, "sha256": firma.imagen_sha256},
+            })
+    return firma
+
+
+def contexto_del_editor_de_firma(implementacion, firma, form=None):
+    """Lo que necesita el editor de firma (el del cliente, el de la ficha del panel y el de solo lectura)."""
+    return {
+        "form": form or FirmaForm(firma=firma),
+        "form_lectura": FirmaForm(firma=firma, auto_id="lectura_%s"),
+        "firma": firma,
+        "modelo_url": implementacion.modelo_recibo.url if implementacion.modelo_recibo else "",
+        "imagen_url": firma.imagen.url if firma and firma.imagen else "",
+    }
 
 
 def guardar_documentos(implementacion, form, todos_qs, actor):
@@ -296,7 +427,7 @@ def importar_archivo_empleados(implementacion, archivo, actor):
     sirve (ilegible, sin columnas obligatorias, demasiado grande) levanta ArchivoInvalido ANTES de
     tocar nada. Solo se registra el resultado de la importación: el archivo no se guarda (tiene
     datos personales y no se vuelve a usar)."""
-    lectura = leer_archivo_empleados(archivo)
+    lectura = leer_archivo_empleados(archivo, ingreso_obligatorio=implementacion.usa_modulo(Modulo.RECIBO_DIGITAL))
     with transaction.atomic():
         return _cargar_empleados(implementacion, archivo, lectura, actor)
 
@@ -343,6 +474,7 @@ def _cargar_empleados(implementacion, archivo, lectura, actor):
         actualizados, CAMPOS_EMPLEADO_IMPORTADOS + ["import_batch", "actualizado"], batch_size=LOTE_ACTUALIZACION,
     )
     jerarquias = _resolver_jerarquia_importada(implementacion, filas, advertencias)
+    vincular_roles_con_nomina(implementacion)
 
     # El alta de empleados nuevos se cuenta (cada uno ya queda en `Empleado`); lo que se PISA
     # (valores que cambiaron en empleados existentes) se detalla, porque la base no lo conserva.
@@ -388,6 +520,7 @@ def agregar_empleado(implementacion, empleado_form, actor):
             empleado = empleado_form.save(commit=False)
             empleado.implementacion = implementacion
             empleado.save()
+            vincular_roles_con_nomina(implementacion)
             eventos.registrar(actor, "empleado.agregado", implementacion, seccion="empleados",
                               datos={"empleado_id": empleado.pk})
     except IntegrityError:
@@ -411,6 +544,7 @@ def editar_empleado(implementacion, empleado_form, actor):
         with transaction.atomic():
             guardar_version(implementacion, "empleados", actor)
             empleado = empleado_form.save()
+            vincular_roles_con_nomina(implementacion)
             eventos.registrar(actor, "empleado.editado", implementacion, seccion="empleados",
                               datos={"empleado_id": empleado.pk, "cambios": cambios})
     except IntegrityError:

@@ -7,7 +7,7 @@ from django.utils.dateparse import parse_date
 
 from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
-from clients.models import Cliente, Implementacion, Modulo
+from clients.models import Cliente, Implementacion, Modulo, UbicacionFirma
 from clients.services import (
     COLUMNAS_ORDENABLES,
     filtrar_y_ordenar_implementaciones,
@@ -20,8 +20,10 @@ from onboarding import services as onboarding_services
 from onboarding.forms import (
     CondicionesForm,
     DocumentosLegajoForm,
+    FirmaForm,
     ImplementacionDatosForm,
     LicenciasNovedadesForm,
+    LiquidacionesForm,
     RolFormSet,
     SucursalFormSet,
 )
@@ -255,6 +257,41 @@ def _accion_actualizar_documentos(request, implementacion, actor):
     return {"documentos_form": form}
 
 
+def _accion_actualizar_liquidaciones(request, implementacion, actor):
+    form = LiquidacionesForm(request.POST, implementacion=implementacion)
+    if form.is_valid():
+        onboarding_services.guardar_liquidaciones(implementacion, form.cleaned_data["tipos_liquidacion"], actor)
+        messages.success(request, "Tipos de liquidación actualizados.")
+        return _volver(implementacion)
+    return {"liquidaciones_form": form}
+
+
+def _accion_validar_firma(request, implementacion, actor):
+    _mostrar(request, acciones.validar_firma(actor, implementacion))
+    return _volver(implementacion)
+
+
+def _accion_observar_firma(request, implementacion, actor):
+    _mostrar(request, acciones.observar_firma(
+        actor, implementacion, request.POST.getlist("motivos"), request.POST.get("comentario", ""),
+        base_url=_base_url(request),
+    ))
+    return _volver(implementacion)
+
+
+def _accion_corregir_firma(request, implementacion, actor):
+    firma = implementacion.firma
+    form = FirmaForm(request.POST, request.FILES, firma=firma)
+    if form.is_valid():
+        onboarding_services.guardar_firma(
+            implementacion, actor, pagina=form.cleaned_data["pagina"], geometria=form.geometria(),
+            imagen=form.cleaned_data["imagen"],
+        )
+        messages.success(request, "Firma corregida y validada.")
+        return _volver(implementacion)
+    return {"firma_form": form}
+
+
 def _accion_agregar_empleado(request, implementacion, actor):
     empleado_form = EmpleadoForm(request.POST, implementacion=implementacion)
     if onboarding_services.agregar_empleado(implementacion, empleado_form, actor):
@@ -331,6 +368,21 @@ def _accion_marcar_cumplida(request, implementacion, actor):
     return _volver(implementacion)
 
 
+def _accion_aprobar_para_configurar(request, implementacion, actor):
+    _mostrar(request, acciones.aprobar_para_configurar(actor, implementacion))
+    return _volver(implementacion)
+
+
+def _accion_devolver_al_cliente(request, implementacion, actor):
+    observaciones = {
+        codigo: request.POST.get(f"obs_{codigo}", "") for codigo in onboarding_services.CODIGO_DE_PASO.values()
+    }
+    _mostrar(request, acciones.devolver_al_cliente(
+        actor, implementacion, request.POST.get("motivo", ""), observaciones, base_url=_base_url(request),
+    ))
+    return _volver(implementacion)
+
+
 def _accion_atender_revision(request, implementacion, actor):
     _mostrar(request, acciones.atender_revision(actor, implementacion))
     return _volver(implementacion)
@@ -366,6 +418,10 @@ ACCIONES_DE_LA_FICHA = {
     "actualizar_sucursales": _accion_actualizar_sucursales,
     "actualizar_licencias_novedades": _accion_actualizar_licencias_novedades,
     "actualizar_documentos": _accion_actualizar_documentos,
+    "actualizar_liquidaciones": _accion_actualizar_liquidaciones,
+    "validar_firma": _accion_validar_firma,
+    "observar_firma": _accion_observar_firma,
+    "corregir_firma": _accion_corregir_firma,
     "agregar_empleado": _accion_agregar_empleado,
     "editar_empleado": _accion_editar_empleado,
     "eliminar_empleado": _accion_eliminar_empleado,
@@ -375,6 +431,8 @@ ACCIONES_DE_LA_FICHA = {
     "regenerar_link": _accion_regenerar_link,
     "anular": _accion_anular,
     "marcar_cumplida": _accion_marcar_cumplida,
+    "aprobar_para_configurar": _accion_aprobar_para_configurar,
+    "devolver_al_cliente": _accion_devolver_al_cliente,
     "atender_revision": _accion_atender_revision,
     "actualizar_fecha_productivo": _accion_actualizar_fecha_productivo,
     "regenerar_acceso": _accion_regenerar_acceso,
@@ -447,6 +505,11 @@ def implementacion_detalle(request, pk):
     contexto = resumen_implementacion(implementacion)
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
+        "rondas": implementacion.rondas.all(),
+        "pasos_observables": [
+            (onboarding_services.CODIGO_DE_PASO[n], onboarding_services.TITULOS_PASO[n])
+            for n in onboarding_services.pasos_activos(implementacion) if n != onboarding_services.PASO_REVISION
+        ],
         "asignables": cuentas.asignables(),
         "condiciones_form": formularios_con_error.get("condiciones_form")
         or CondicionesForm(implementacion=implementacion),
@@ -458,6 +521,12 @@ def implementacion_detalle(request, pk):
         "licencias_novedades_form": licencias_novedades_form,
         "documentos_rows": [(t, documentos_form[f"tipo_{t.id}_activo"]) for t in tipos_documento_qs],
         "documentos_form": documentos_form,
+        **onboarding_services.contexto_del_editor_de_firma(
+            implementacion, implementacion.firma, formularios_con_error.get("firma_form") or FirmaForm(firma=implementacion.firma),
+        ),
+        "motivos_de_firma": UbicacionFirma.MOTIVOS,
+        "usa_recibo_digital": implementacion.usa_modulo(Modulo.RECIBO_DIGITAL),
+        "liquidaciones_form": formularios_con_error.get("liquidaciones_form") or LiquidacionesForm(implementacion=implementacion),
         "empleado_form": formularios_con_error.get("empleado_form") or EmpleadoForm(implementacion=implementacion),
         "empleado_editando": empleado_editando,
         "empleado_edit_form": empleado_edit_form,

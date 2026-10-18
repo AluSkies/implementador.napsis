@@ -29,7 +29,7 @@ el superusuario inicial (`DJANGO_SUPERUSER_*`). Los tres pasos son idempotentes.
 | `MYSQL_DB`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST` | La base. Sin ellas, la app guardaría los datos en un archivo dentro del contenedor y los perdería al reiniciar. |
 
 **Opcionales:** `DJANGO_SUPERUSER_USERNAME/PASSWORD/EMAIL` (superusuario inicial), `MYSQL_PORT`
-(3306 por defecto), `IMPLEMENTATION_TEAM_EMAILS` y `GOOGLE_SHEETS_WEBHOOK_URL`, y
+(3306 por defecto), `IMPLEMENTATION_TEAM_EMAILS`,
 `TRUSTED_PROXY_COUNT`, `DJANGO_FORCE_HTTPS`, `SECURE_HSTS_SECONDS` y `ERROR_ALERT_EMAILS` (ver abajo). El **correo saliente** (`EMAIL_*`, `DEFAULT_FROM_EMAIL`) va
 aparte, en `.env.mail`: ver [CORREO.md](CORREO.md). Sin él la app funciona pero no envía mails.
 `DJANGO_DEBUG` debe quedar en `false`.

@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .codigos import AdminConCodigo
-from .models import CampoDocumento, TipoDocumento, TipoLicencia, TipoNovedad
+from .models import CampoDocumento, TipoDocumento, TipoLicencia, TipoLiquidacion, TipoNovedad
 
 
 class CampoDocumentoInline(admin.TabularInline):
@@ -18,6 +18,11 @@ class TipoDocumentoAdmin(AdminConCodigo, admin.ModelAdmin):
 
 @admin.register(TipoLicencia)
 class TipoLicenciaAdmin(AdminConCodigo, admin.ModelAdmin):
+    list_display = ("nombre", "codigo", "automatica", "orden")
+
+
+@admin.register(TipoLiquidacion)
+class TipoLiquidacionAdmin(AdminConCodigo, admin.ModelAdmin):
     list_display = ("nombre", "codigo", "orden")
 
 

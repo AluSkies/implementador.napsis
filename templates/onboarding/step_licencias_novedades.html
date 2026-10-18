@@ -9,7 +9,7 @@
         {% for licencia, campo_activo in licencias_rows %}
             <tr>
                 <td>{{ campo_activo }}</td>
-                <td>{{ licencia.nombre }}</td>
+                <td>{{ licencia.nombre }}{% if licencia.automatica %} <span class="muted">(Napsis la crea sola al finalizar la configuración)</span>{% endif %}</td>
             </tr>
         {% endfor %}
         </tbody>

@@ -2,7 +2,7 @@ from contextlib import contextmanager
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Case, DateField, IntegerField, Value, When
+from django.db.models import Case, DateField, IntegerField, OuterRef, Subquery, Value, When
 from django.db.models.functions import Cast, Coalesce
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date
@@ -10,7 +10,7 @@ from django.utils.text import slugify
 
 from automatizacion import eventos
 
-from .models import Implementacion, ImplementacionVersion
+from .models import Implementacion, ImplementacionVersion, RondaRevision
 
 
 def generar_password():
@@ -61,11 +61,16 @@ def filtrar_y_ordenar_implementaciones(queryset, params):
     """
     queryset = queryset.annotate(
         estado_orden=Case(
-            When(estado=Implementacion.ESTADO_CANCELADA, then=Value(3)),
-            When(estado=Implementacion.ESTADO_CUMPLIDA, then=Value(2)),
+            When(estado=Implementacion.ESTADO_CANCELADA, then=Value(4)),
+            When(estado=Implementacion.ESTADO_CUMPLIDA, then=Value(3)),
+            When(validada_en__isnull=False, then=Value(2)),
             When(enviado__isnull=False, then=Value(1)),
             default=Value(0),
             output_field=IntegerField(),
+        ),
+        ronda_abierta_numero=Subquery(
+            RondaRevision.objects.filter(implementacion=OuterRef("pk"), respondida_en__isnull=True)
+            .order_by("-numero").values("numero")[:1]
         ),
         fecha_implementacion=Coalesce(
             Cast("cumplida_en", DateField()), "fecha_salida_productivo", output_field=DateField()
@@ -116,6 +121,8 @@ def resumen_implementacion(implementacion):
         "sucursales": implementacion.sucursales.all(),
         "licencias_activas": implementacion.licencias.filter(activo=True).select_related("tipo_licencia"),
         "novedades_activas": implementacion.novedades.filter(activo=True).select_related("tipo_novedad"),
+        "liquidaciones_activas": implementacion.liquidaciones.filter(activo=True).select_related("tipo_liquidacion").order_by("tipo_liquidacion__orden", "tipo_liquidacion__nombre"),
+        "firma": implementacion.firma,
         "documentos_activos": implementacion.documentos_legajo.filter(activo=True).select_related("tipo_documento"),
         "empleados": implementacion.empleados.select_related("sucursal", "reporta_a", "aprobador"),
         "versiones": implementacion.versiones.all()[:50],
@@ -137,6 +144,7 @@ def _snapshot_datos_contacto(implementacion):
         "Nomenclatura de PDFs": implementacion.nomenclatura_pdf,
         "Cantidad de capitas": implementacion.cantidad_capitas,
         "Segmentación liquidador": implementacion.segmentacion_liquidador,
+        "Logo": implementacion.logo.url if implementacion.logo else None,
         "Banner": implementacion.banner.url if implementacion.banner else None,
         "Modelo de recibo": implementacion.modelo_recibo.url if implementacion.modelo_recibo else None,
     }
@@ -171,6 +179,31 @@ def _snapshot_licencias_novedades(implementacion):
     }
 
 
+def _snapshot_liquidaciones(implementacion):
+    return {
+        liq.tipo_liquidacion.nombre: liq.activo for liq in implementacion.liquidaciones.select_related("tipo_liquidacion")
+    }
+
+
+def _snapshot_firma(implementacion):
+    firma = implementacion.firma
+    if firma is None:
+        return {}
+    foto = {
+        "Estado": firma.get_estado_display(),
+        "Página": firma.get_pagina_display(),
+        "Imagen": firma.imagen.url if firma.imagen else None,
+        "Imagen (sha256)": firma.imagen_sha256,
+    }
+    for codigo, nombre in firma.ELEMENTOS:
+        recuadro = firma.geometria.get(codigo, {})
+        foto[nombre] = {campo: recuadro.get(campo) for campo in ("x", "y", "ancho", "alto")}
+    if firma.motivos:
+        foto["Motivos"] = firma.motivos_texto
+        foto["Comentario"] = firma.comentario
+    return foto
+
+
 def _snapshot_documentos(implementacion):
     return {d.tipo_documento.nombre: d.activo for d in implementacion.documentos_legajo.select_related("tipo_documento")}
 
@@ -203,6 +236,8 @@ _SNAPSHOT_BUILDERS = {
     "roles": _snapshot_roles,
     "sucursales": _snapshot_sucursales,
     "licencias_novedades": _snapshot_licencias_novedades,
+    "liquidaciones": _snapshot_liquidaciones,
+    "firma": _snapshot_firma,
     "documentos": _snapshot_documentos,
     "fecha_implementacion": _snapshot_fecha_implementacion,
     "condiciones": _snapshot_condiciones,

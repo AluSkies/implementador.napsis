@@ -29,7 +29,7 @@ class CamposCompartidosTests(TestCase):
         self.assertEqual(list(EmpresaForm().fields.keys()), CAMPOS_EMPRESA + CAMPOS_DATOS_CONTACTO)
 
     def test_configuracion_form_expone_exactamente_sus_campos(self):
-        self.assertEqual(list(ConfiguracionForm().fields.keys()), CAMPOS_CONFIGURACION)
+        self.assertEqual(list(ConfiguracionForm().fields.keys()), ["tipos_liquidacion"] + CAMPOS_CONFIGURACION)
 
     def test_no_hay_campos_repetidos_entre_los_dos_grupos(self):
         self.assertEqual(set(CAMPOS_DATOS_CONTACTO) & set(CAMPOS_CONFIGURACION), set())

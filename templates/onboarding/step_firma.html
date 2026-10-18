@@ -1,0 +1,16 @@
+{% extends "onboarding/base_wizard.html" %}
+{% block step_content %}
+{% if sin_modelo %}
+<p>Para ubicar tu firma primero necesitamos ver tu modelo de recibo.</p>
+<p><a class="btn" href="{% url 'onboarding:wizard_step' token=implementacion.token step=paso_configuracion %}">Subir el modelo de recibo</a></p>
+{% else %}
+<p>Subí la imagen de la firma del apoderado y ubicala sobre tu recibo: arrastrá cada recuadro hasta donde va y estirá la esquina para cambiar su tamaño. Esto nos dice cómo la querés; después la revisa el equipo de Napsis.</p>
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {% include "onboarding/_editor_firma.html" %}
+    <div class="actions">
+        <button class="btn" type="submit">Continuar</button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

@@ -2,8 +2,10 @@ from django import forms
 from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
-from clients.models import Implementacion, PersonaRol, Sucursal
-from clients.validators import normalizar_cuits
+from catalog.models import TipoLiquidacion
+from clients.models import Implementacion, PersonaRol, Sucursal, UbicacionFirma, geometria_inicial_de_firma
+from clients.validators import normalizar_cuits, validar_medidas_banner, validar_medidas_logo, validar_tamanio_archivo
+from employees.services import CUIL_RE, normalizar_cuil
 
 # Campos de Implementacion que completa el cliente en distintos pasos del wizard.
 # Única fuente de verdad: ImplementacionDatosForm (edición completa desde el panel)
@@ -16,8 +18,25 @@ CAMPOS_CONFIGURACION = [
     "cantidad_capitas",
     "segmentacion_liquidador",
     "banner",
+    "logo",
     "modelo_recibo",
 ]
+
+AYUDA_BANNER = "Opcional. Tiene que medir entre 1500 × 200 y 1600 × 400 px: si no, Napsis lo rechaza."
+AYUDA_LOGO = "Opcional. Puede medir hasta 200 × 200 px: si no, Napsis lo rechaza."
+
+
+class ImagenesConMedidasMixin:
+    """El banner y el logo se validan contra las medidas que acepta el wizard de Napsis, y se
+    avisa cuáles son antes de subirlos (nunca se acepta en silencio algo que el destino rechaza)."""
+
+    def _validar_medidas_de_las_imagenes(self):
+        for nombre, validador, ayuda in (
+            ("banner", validar_medidas_banner, AYUDA_BANNER), ("logo", validar_medidas_logo, AYUDA_LOGO),
+        ):
+            if nombre in self.fields:
+                self.fields[nombre].validators.append(validador)
+                self.fields[nombre].help_text = ayuda
 
 
 class CamposEmpresaMixin:
@@ -67,13 +86,17 @@ class EmpresaForm(CamposEmpresaMixin, forms.ModelForm):
         fields = CAMPOS_DATOS_CONTACTO
 
 
-class ImplementacionDatosForm(CamposEmpresaMixin, forms.ModelForm):
+class ImplementacionDatosForm(ImagenesConMedidasMixin, CamposEmpresaMixin, forms.ModelForm):
     """Edición completa de los datos de contacto/configuración, para uso del
     equipo de implementación desde el panel (no del cliente vía el wizard)."""
 
     class Meta:
         model = Implementacion
         fields = CAMPOS_DATOS_CONTACTO + CAMPOS_CONFIGURACION
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._validar_medidas_de_las_imagenes()
 
 
 class ModulosForm(forms.Form):
@@ -93,6 +116,12 @@ class RolForm(forms.Form):
     cuil = forms.CharField(max_length=20, required=False, label="CUIL")
     mail = forms.EmailField(required=False, label="Mail")
 
+    def clean_cuil(self):
+        cuil = normalizar_cuil(self.cleaned_data.get("cuil", ""))
+        if cuil and not CUIL_RE.match(cuil):
+            raise forms.ValidationError("El CUIL tiene que tener 11 dígitos.")
+        return cuil
+
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("apellido_nombre") and not cleaned.get("rol"):
@@ -106,12 +135,20 @@ RolFormSet = formset_factory(RolForm, extra=6, can_delete=True)
 class _RolesObligatoriosFormSet(BaseFormSet):
     """Variante para el wizard del cliente: no se puede avanzar sin al menos un
     Apoderado/Firmante, un Liquidador y un Admin. de RRHH (los tres son elementales).
-    El panel interno usa RolFormSet, sin esta exigencia."""
+    Además, el Apoderado/Firmante y el Liquidador tienen que ser empleados de la nómina (Napsis los
+    elige de esa lista): se verifica por CUIL contra `cuils_nomina`, si se la pasa. El panel interno
+    usa RolFormSet, sin esta exigencia."""
+
+    cuils_nomina = None  # conjunto de CUIL de la nómina cargada; None = no se verifica
 
     def clean(self):
         super().clean()
         if any(self.errors):
             return
+        if self.cuils_nomina is not None:
+            self._verificar_en_la_nomina()
+            if any(self.errors):
+                return
         presentes = {
             f.cleaned_data["rol"] for f in self.forms
             if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("apellido_nombre")
@@ -122,17 +159,60 @@ class _RolesObligatoriosFormSet(BaseFormSet):
                 "Falta cargar al menos una persona para cada rol. Te falta: " + ", ".join(faltan) + "."
             )
 
+    def _verificar_en_la_nomina(self):
+        for form in self.forms:
+            datos = form.cleaned_data
+            if not datos or datos.get("DELETE") or not datos.get("apellido_nombre"):
+                continue
+            if datos.get("rol") not in PersonaRol.ROLES_EN_NOMINA:
+                continue
+            if not datos.get("cuil"):
+                form.add_error("cuil", "Este rol sale de la nómina: elegí a la persona de la lista o escribí su CUIL.")
+            elif datos["cuil"] not in self.cuils_nomina:
+                form.add_error(
+                    "cuil",
+                    "Este CUIL no está en la nómina. Cargá primero a la persona como empleado (paso de empleados)."
+                    if self.cuils_nomina else
+                    "Todavía no cargaste la nómina: hacelo primero (paso de empleados) y volvé a elegir a la persona.",
+                )
 
-def rol_formset_obligatorio(max_roles):
+
+def rol_formset_obligatorio(max_roles, cuils_nomina=None):
     """El formset de roles del wizard, con tantas filas como personas puede cargar el
-    cliente en esta implementación (max_roles) y rechazando que se manden más."""
-    return formset_factory(
+    cliente en esta implementación (max_roles) y rechazando que se manden más.
+    Con `cuils_nomina`, el Apoderado/Firmante y el Liquidador tienen que figurar en esa nómina."""
+    formset = formset_factory(
         RolForm, formset=_RolesObligatoriosFormSet, extra=max_roles, max_num=max_roles,
         validate_max=True, can_delete=True,
     )
+    formset.cuils_nomina = None if cuils_nomina is None else set(cuils_nomina)
+    return formset
 
 
-class ConfiguracionForm(forms.ModelForm):
+class LiquidacionesForm(forms.Form):
+    """Qué tipos de liquidación usa la empresa (al menos uno)."""
+
+    tipos_liquidacion = forms.ModelMultipleChoiceField(
+        label="Tipos de liquidación que usa la empresa", queryset=TipoLiquidacion.objects.all(),
+        widget=forms.CheckboxSelectMultiple, required=False,
+        help_text="Elegí todos los que usan. Por cada uno hay que configurar después la firma del recibo.",
+    )
+
+    def __init__(self, *args, implementacion=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if implementacion is not None:
+            self.fields["tipos_liquidacion"].initial = list(
+                implementacion.liquidaciones.filter(activo=True).values_list("tipo_liquidacion_id", flat=True)
+            )
+
+    def clean_tipos_liquidacion(self):
+        tipos = self.cleaned_data["tipos_liquidacion"]
+        if not tipos:
+            raise forms.ValidationError("Elegí al menos un tipo de liquidación.")
+        return tipos
+
+
+class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelForm):
     class Meta:
         model = Implementacion
         fields = CAMPOS_CONFIGURACION
@@ -144,7 +224,9 @@ class ConfiguracionForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, implementacion=kwargs.get("instance"), **kwargs)
+        self.order_fields(["tipos_liquidacion"] + CAMPOS_CONFIGURACION)
+        self._validar_medidas_de_las_imagenes()
         # Lo que el implementador dejó fijo se muestra pero no se puede cambiar. Con
         # disabled=True Django ignora lo que llegue por POST y conserva el valor guardado,
         # así que tampoco se puede evadir editando el formulario a mano.
@@ -164,6 +246,91 @@ class ConfiguracionForm(forms.ModelForm):
             campo.label = "Modelo de recibo (PDF, obligatorio)"
 
 
+# La firma tiene que verse bien sobre el recibo: por debajo de esto queda borrosa.
+FIRMA_RESOLUCION_MINIMA = (200, 60)
+FIRMA_FORMATOS = ("JPEG", "PNG")
+CAMPOS_DE_RECUADRO = ("x", "y", "ancho", "alto")
+NOMBRES_DE_RECUADRO = {"x": "izquierda", "y": "arriba", "ancho": "ancho", "alto": "alto"}
+
+
+class FirmaForm(forms.Form):
+    """Imagen de la firma y dónde va sobre el recibo. Los recuadros llegan en % de la página (0 a 100)
+    —así los edita una persona—; se guardan como fracciones (0 a 1) para que no dependan del tamaño del PDF."""
+
+    imagen = forms.FileField(
+        required=False, label="Imagen de la firma del apoderado", validators=[validar_tamanio_archivo],
+        widget=forms.ClearableFileInput(attrs={"accept": "image/png,image/jpeg"}),
+        help_text="JPG o PNG. Lo ideal es la firma sobre fondo blanco liso, o un PNG con fondo transparente.",
+    )
+    pagina = forms.ChoiceField(choices=UbicacionFirma.PAGINA_CHOICES, label="¿En qué página va la firma?")
+
+    def __init__(self, *args, firma=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.firma = firma
+        geometria = firma.geometria if firma else geometria_inicial_de_firma()
+        for codigo, nombre in UbicacionFirma.ELEMENTOS:
+            for campo in CAMPOS_DE_RECUADRO:
+                self.fields[f"{codigo}_{campo}"] = forms.FloatField(
+                    min_value=0, max_value=100, label=f"{nombre}: {NOMBRES_DE_RECUADRO[campo]}",
+                    initial=round(geometria[codigo][campo] * 100, 1),
+                    widget=forms.NumberInput(attrs={"step": "0.1", "min": "0", "max": "100"}),
+                )
+        self.fields["pagina"].initial = firma.pagina if firma else UbicacionFirma.PAGINA_PRIMERA
+
+    @property
+    def filas_de_recuadros(self):
+        """Para dibujar los campos numéricos de respaldo: [(nombre, [campo x, y, ancho, alto])]."""
+        return [
+            (nombre, [self[f"{codigo}_{campo}"] for campo in CAMPOS_DE_RECUADRO])
+            for codigo, nombre in UbicacionFirma.ELEMENTOS
+        ]
+
+    def clean_imagen(self):
+        imagen = self.cleaned_data.get("imagen")
+        if not imagen:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(imagen) as foto:
+                formato, (ancho, alto) = foto.format, foto.size
+                foto.verify()
+        except Exception:
+            raise forms.ValidationError("No pudimos leer la imagen. Subí un archivo JPG o PNG.") from None
+        finally:
+            imagen.seek(0)
+        if formato not in FIRMA_FORMATOS:
+            raise forms.ValidationError("La imagen tiene que ser JPG o PNG.")
+        minimo = FIRMA_RESOLUCION_MINIMA
+        if ancho < minimo[0] or alto < minimo[1]:
+            raise forms.ValidationError(
+                f"La imagen es muy chica ({ancho} × {alto} px): tiene que medir al menos {minimo[0]} × {minimo[1]} px "
+                "para que la firma no se vea borrosa."
+            )
+        return imagen
+
+    def clean(self):
+        datos = super().clean()
+        if not datos.get("imagen") and not (self.firma and self.firma.imagen):
+            self.add_error("imagen", "Subí la imagen de la firma.")
+        for codigo, nombre in UbicacionFirma.ELEMENTOS:
+            recuadro = {campo: datos.get(f"{codigo}_{campo}") for campo in CAMPOS_DE_RECUADRO}
+            if None in recuadro.values():
+                continue  # ya tiene su error de campo
+            if recuadro["ancho"] < 1 or recuadro["alto"] < 1:
+                self.add_error(None, f"{nombre}: el recuadro tiene que medir al menos 1% de la página de ancho y de alto.")
+            elif recuadro["x"] + recuadro["ancho"] > 100.05 or recuadro["y"] + recuadro["alto"] > 100.05:
+                self.add_error(None, f"{nombre}: el recuadro se sale de la página.")
+        return datos
+
+    def geometria(self):
+        """Los recuadros como los guarda el modelo: fracciones de 0 a 1."""
+        return {
+            codigo: {campo: round(self.cleaned_data[f"{codigo}_{campo}"] / 100, 4) for campo in CAMPOS_DE_RECUADRO}
+            for codigo, _ in UbicacionFirma.ELEMENTOS
+        }
+
+
 class SucursalForm(forms.ModelForm):
     class Meta:
         model = Sucursal
@@ -178,7 +345,8 @@ SucursalFormSet = formset_factory(SucursalForm, extra=5, can_delete=True)
 
 class LicenciasNovedadesForm(forms.Form):
     """El cliente solo elige qué licencias/novedades activar. La fecha de puesta en
-    vigencia la define después el equipo de implementación, no el cliente."""
+    vigencia la define después el equipo de implementación, no el cliente. Las licencias que
+    Napsis crea solas (Vacaciones) se muestran tildadas y no se pueden cambiar."""
 
     def __init__(self, *args, licencias_qs=None, novedades_qs=None, estado_por_licencia=None, estado_por_novedad=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -188,7 +356,8 @@ class LicenciasNovedadesForm(forms.Form):
         for licencia in licencias_qs:
             estado = estado_por_licencia.get(licencia.id, {})
             self.fields[f"licencia_{licencia.id}_activo"] = forms.BooleanField(
-                label=licencia.nombre, required=False, initial=estado.get("activo", False)
+                label=licencia.nombre, required=False, initial=licencia.automatica or estado.get("activo", False),
+                disabled=licencia.automatica,
             )
 
         for novedad in novedades_qs:
