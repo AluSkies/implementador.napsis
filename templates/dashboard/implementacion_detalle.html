@@ -28,6 +28,12 @@
         {% endif %}
     </p>
 
+    {% if implementacion.sin_movimiento %}
+        <div class="messages"><li class="warning" style="list-style:none;padding:10px 14px;border-radius:6px;">
+            <strong>Implementación sin movimiento:</strong> hace {{ implementacion.dias_sin_movimiento }} días que nadie hace nada en ella (última actividad el {{ implementacion.ultimo_movimiento|date:"d/m/Y" }}). Cualquier acción, comentario o envío de documentación la saca de acá.
+        </li></div>
+    {% endif %}
+
     {% if implementacion.revision_solicitada and not implementacion.revision_atendida_en %}
         <div class="messages"><li class="warning" style="list-style:none;padding:10px 14px;border-radius:6px;">
             El cliente pidió que lo contacten ({{ implementacion.revision_solicitada_en|date:"d/m/Y H:i" }}){% if implementacion.revision_mensaje %}: "{{ implementacion.revision_mensaje }}"{% endif %}
@@ -138,6 +144,26 @@
     {% endif %}
 </div>
 {% endif %}
+
+<div class="card">
+    <h2>Comentarios del equipo</h2>
+    <p class="muted">Notas internas: el cliente nunca las ve. Solo se agregan (no se editan ni se borran).</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="agregar_comentario">
+        <label for="texto_comentario" class="muted">Nuevo comentario</label>
+        <textarea name="texto" id="texto_comentario" rows="3" maxlength="{{ max_largo_comentario }}" required></textarea>
+        <div class="actions"><button class="btn secondary" type="submit">Agregar comentario</button></div>
+    </form>
+    {% for comentario in comentarios %}
+        <div style="border-top:1px solid var(--border);padding:10px 0;">
+            <strong>{{ comentario.autor_nombre }}</strong> <span class="muted">{{ comentario.creado|date:"d/m/Y H:i" }}</span>
+            <div>{{ comentario.texto|linebreaksbr }}</div>
+        </div>
+    {% empty %}
+        <p class="muted">Todavía no hay comentarios.</p>
+    {% endfor %}
+</div>
 
 {% if congeladas %}
 <div class="card section-readonly">

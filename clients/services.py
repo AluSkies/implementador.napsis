@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Case, DateField, IntegerField, OuterRef, Subquery, Value, When
-from django.db.models.functions import Cast, Coalesce
+from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
@@ -55,11 +55,21 @@ COLUMNAS_ORDENABLES = {
 }
 
 
+def con_ultimo_movimiento(queryset):
+    """Agrega `movimiento_en` (cuándo fue lo último que pasó) a cada implementación, sin una consulta por fila."""
+    from automatizacion.models import EventoImplementacion
+
+    ultimo_evento = Subquery(
+        EventoImplementacion.objects.filter(implementacion=OuterRef("pk")).order_by("-momento").values("momento")[:1]
+    )
+    return queryset.annotate(movimiento_en=Greatest(Coalesce(ultimo_evento, "creado"), "creado"))
+
+
 def filtrar_y_ordenar_implementaciones(queryset, params):
     """Aplica al listado del panel los filtros y el orden que vengan por querystring
     (?cliente=&estado=&creado_desde=&creado_hasta=&fecha_impl_desde=&fecha_impl_hasta=&ordenar=&direccion=).
     """
-    queryset = queryset.annotate(
+    queryset = con_ultimo_movimiento(queryset).annotate(
         estado_orden=Case(
             When(estado=Implementacion.ESTADO_CANCELADA, then=Value(4)),
             When(estado=Implementacion.ESTADO_CUMPLIDA, then=Value(3)),
@@ -84,6 +94,10 @@ def filtrar_y_ordenar_implementaciones(queryset, params):
     estado = params.get("estado", "")
     if estado in Implementacion.VISUAL_LABELS:
         queryset = queryset.filter(Implementacion.filtro_visual(estado))
+    elif estado == Implementacion.SIN_MOVIMIENTO:
+        queryset = queryset.filter(
+            estado=Implementacion.ESTADO_PENDIENTE, movimiento_en__lte=Implementacion.limite_sin_movimiento(),
+        )
 
     creado_desde = parse_date(params.get("creado_desde", ""))
     if creado_desde:

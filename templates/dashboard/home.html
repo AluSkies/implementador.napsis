@@ -68,7 +68,7 @@
             <tr>
                 <td><a href="{% url 'dashboard:cliente_detalle' pk=imp.cliente_id %}">{{ imp.cliente.nombre }}</a></td>
                 <td>
-                    {% if imp.marca_de_devolucion %}{{ imp.marca_de_devolucion }}{% else %}{{ imp.estado_visual_label }}{% endif %}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/{% total_pasos %})</span>{% endif %}
+                    {% if imp.sin_movimiento %}<strong title="Sin actividad hace {{ imp.dias_sin_movimiento }} días">Implementación sin movimiento</strong><br><span class="muted">{% endif %}{% if imp.marca_de_devolucion %}{{ imp.marca_de_devolucion }}{% else %}{{ imp.estado_visual_label }}{% endif %}{% if imp.sin_movimiento %}</span>{% endif %}{% if imp.estado_visual == "a_completar" %} <span class="muted">(paso {{ imp.paso_actual }}/{% total_pasos %})</span>{% endif %}
                     {% if imp.revision_solicitada and not imp.revision_atendida_en %}<span title="Pidió que lo contacten">⚠️</span>{% endif %}
                 </td>
                 <td>

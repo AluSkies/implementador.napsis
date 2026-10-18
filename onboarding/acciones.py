@@ -20,8 +20,8 @@ from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 
-from automatizacion import congelada, eventos
-from clients.models import Cliente, Implementacion, Modulo, RondaRevision, UbicacionFirma
+from automatizacion import actores, congelada, eventos
+from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, RondaRevision, UbicacionFirma
 from clients.services import cambio_de_seccion, crear_o_resetear_acceso, foto_de_seccion
 from clients.validators import normalizar_cuits
 from notifications import services as notificaciones
@@ -441,6 +441,29 @@ def marcar_cumplida(actor, implementacion, base_url=None):
     if falla:
         avisos.append(falla)
     return Resultado(implementacion=implementacion, avisos=avisos)
+
+
+def agregar_comentario(actor, implementacion, texto, autor=None):
+    """El equipo deja una nota privada en la implementación. Cuenta como movimiento: el evento queda
+    registrado (solo con el id: el texto ya lo guarda el comentario)."""
+    if actor.tipo not in actores.TIPOS_DEL_EQUIPO:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo el equipo de implementación puede dejar comentarios."),
+        ])
+    texto = (texto or "").strip()
+    if not texto:
+        return Resultado(implementacion=implementacion, avisos=[Aviso(messages.ERROR, "Escribí el comentario.")])
+    if len(texto) > ComentarioInterno.MAX_LARGO:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, f"El comentario puede tener hasta {ComentarioInterno.MAX_LARGO} caracteres."),
+        ])
+    nombre = (autor.get_full_name() or autor.get_username()) if autor else actor.ref
+    with transaction.atomic():
+        comentario = ComentarioInterno.objects.create(
+            implementacion=implementacion, autor=autor, autor_nombre=nombre, texto=texto,
+        )
+        eventos.registrar(actor, "comentario.agregado", implementacion, datos={"comentario_id": comentario.pk})
+    return Resultado(implementacion=implementacion, avisos=[Aviso(messages.SUCCESS, "Comentario guardado.")])
 
 
 def atender_revision(actor, implementacion):

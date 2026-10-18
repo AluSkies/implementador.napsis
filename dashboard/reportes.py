@@ -7,6 +7,7 @@ from django.db.models import Count
 from django.utils import timezone
 
 from clients.models import Implementacion
+from clients.services import con_ultimo_movimiento
 from clients.xlsx import escribir_celda
 
 COLUMNAS = [
@@ -15,6 +16,7 @@ COLUMNAS = [
     ("Fecha de solicitud", 18), ("Fecha de envío del cliente", 22), ("Fecha de implementación", 22),
     ("Tipo de fecha de implementación", 24), ("Módulos", 40), ("Empleados", 12), ("Sucursales", 12),
     ("Pidió contacto sin atender", 18), ("Fecha de validación", 20), ("Rondas de devolución", 14),
+    ("Última actividad", 18), ("Sin movimiento", 14),
 ]
 
 
@@ -26,7 +28,7 @@ def generar_reporte_implementaciones_xlsx():
     """Un .xlsx con una fila por implementación (todas, sin filtros), de la más nueva a la más
     vieja. La fecha de implementación es la real si ya está cumplida, o la estimada si no."""
     implementaciones = (
-        Implementacion.objects.select_related("cliente", "implementador_asignado", "creado_por")
+        con_ultimo_movimiento(Implementacion.objects).select_related("cliente", "implementador_asignado", "creado_por")
         .prefetch_related("modulos__modulo")
         .annotate(
             cant_empleados=Count("empleados", distinct=True), cant_sucursales=Count("sucursales", distinct=True),
@@ -61,6 +63,7 @@ def generar_reporte_implementaciones_xlsx():
             imp.cant_empleados, imp.cant_sucursales,
             "Sí" if imp.revision_solicitada and not imp.revision_atendida_en else "No",
             _fecha(imp.validada_en), imp.cant_rondas,
+            _fecha(imp.ultimo_movimiento), "Sí" if imp.sin_movimiento else "No",
         ]
         for col, valor in enumerate(valores, start=1):
             escribir_celda(ws, fila, col, valor)
