@@ -98,6 +98,7 @@ class EdicionDeEmpleadosEnElWizardTests(BaseWizard):
         respuesta = self.client.post(_url(self.implementacion, 4), {
             "accion": "guardar_edicion", "empleado_id": self.empleado.pk,
             "cuil": "20111111112", "nombre": "Juan Carlos", "apellido": "Pérez", "puesto": "Analista",
+            "fecha_ingreso": "2020-01-01",
         })
         self.assertRedirects(respuesta, _url(self.implementacion, 4), fetch_redirect_response=False)
         self.empleado.refresh_from_db()

@@ -1,4 +1,5 @@
 import tempfile
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -33,6 +34,7 @@ class BaseWizard(TestCase):
     def agregar_empleado(self):
         return Empleado.objects.create(
             implementacion=self.implementacion, cuil="20111111112", nombre="JUAN", apellido="PEREZ",
+            fecha_ingreso=date(2020, 1, 1),  # obligatoria con Recibo Digital
         )
 
     def cargar_roles_completos(self):

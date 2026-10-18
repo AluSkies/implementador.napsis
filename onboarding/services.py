@@ -122,6 +122,14 @@ def pendientes_de_envio(implementacion):
 
     if not implementacion.empleados.exists():
         pendientes.append({"paso": PASO_NOMINA, "mensaje": "Cargar la nómina de empleados (al menos una persona)."})
+    elif implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
+        sin_ingreso = implementacion.empleados.filter(fecha_ingreso__isnull=True).count()
+        if sin_ingreso:
+            pendientes.append({
+                "paso": PASO_NOMINA,
+                "mensaje": f"Completar la fecha de ingreso de {sin_ingreso} empleado{'s' if sin_ingreso != 1 else ''} "
+                           "(es obligatoria para Recibo Digital).",
+            })
 
     return sorted(pendientes, key=lambda p: p["paso"])
 
@@ -296,7 +304,7 @@ def importar_archivo_empleados(implementacion, archivo, actor):
     sirve (ilegible, sin columnas obligatorias, demasiado grande) levanta ArchivoInvalido ANTES de
     tocar nada. Solo se registra el resultado de la importación: el archivo no se guarda (tiene
     datos personales y no se vuelve a usar)."""
-    lectura = leer_archivo_empleados(archivo)
+    lectura = leer_archivo_empleados(archivo, ingreso_obligatorio=implementacion.usa_modulo(Modulo.RECIBO_DIGITAL))
     with transaction.atomic():
         return _cargar_empleados(implementacion, archivo, lectura, actor)
 

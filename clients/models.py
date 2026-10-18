@@ -251,6 +251,10 @@ class Implementacion(models.Model):
         asignado = self.implementador_asignado
         return (asignado.get_full_name() or asignado.get_username()) if asignado else ""
 
+    def usa_modulo(self, codigo):
+        """¿Tiene contratado (y activo) el módulo con ese código?"""
+        return self.modulos.filter(activo=True, modulo__codigo=codigo).exists()
+
     def get_absolute_url(self):
         return reverse("onboarding:wizard_step", kwargs={"token": self.token, "step": 1})
 
