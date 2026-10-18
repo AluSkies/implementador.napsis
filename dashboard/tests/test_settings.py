@@ -205,13 +205,13 @@ class LogDeErroresTests(SimpleTestCase):
     def test_un_error_500_queda_en_el_archivo_con_fecha_y_traceback(self):
         salida, contenido = self._correr(self.REGISTRAR_ERROR)
         self.assertEqual(salida.returncode, 0, salida.stderr)
-        self.assertIn("ERROR django.request: Internal Server Error: /panel/", contenido)
+        self.assertIn("ERROR [-] django.request: Internal Server Error: /panel/", contenido)
         self.assertIn("ZeroDivisionError", contenido)
         self.assertRegex(contenido, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
 
     def test_tambien_guarda_lo_que_el_codigo_registra_como_error(self):
         _salida, contenido = self._correr(self.REGISTRAR_ERROR)
-        self.assertIn("ERROR onboarding.views: No se pudo avisar al equipo", contenido)
+        self.assertIn("ERROR [-] onboarding.views: No se pudo avisar al equipo", contenido)
 
     def test_no_guarda_avisos_ni_informacion_normal(self):
         _salida, contenido = self._correr(self.REGISTRAR_ERROR)

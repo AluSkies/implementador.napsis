@@ -71,10 +71,12 @@ INSTALLED_APPS = [
     "employees",
     "notifications",
     "dashboard",
+    "automatizacion",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "automatizacion.correlacion.CorrelacionMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -252,8 +254,11 @@ if _log_a_archivo:
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "correlacion": {"()": "automatizacion.correlacion.CorrelacionFilter"},
+    },
     "formatters": {
-        "con_fecha": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"},
+        "con_fecha": {"format": "%(asctime)s %(levelname)s [%(correlacion)s] %(name)s: %(message)s"},
     },
     "handlers": {
         "console": {"class": "logging.StreamHandler"},
@@ -292,6 +297,7 @@ if _log_a_archivo:
         "delay": True,  # el archivo se crea con el primer error
         "level": "ERROR",
         "formatter": "con_fecha",
+        "filters": ["correlacion"],
     }
     LOGGING["root"]["handlers"].append("errores_archivo")
     LOGGING["loggers"]["django.request"]["handlers"].append("errores_archivo")
