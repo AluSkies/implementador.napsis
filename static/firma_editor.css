@@ -1,0 +1,32 @@
+.firma-editor { margin: 12px 0; }
+.firma-escenario {
+    position: relative; width: 100%; max-width: 640px; aspect-ratio: 210 / 297; background: #fff;
+    border: 1px solid var(--border, #dcdce6); border-radius: 6px; overflow: hidden; user-select: none; touch-action: pan-y;
+}
+.firma-escenario.sin-recibo { background: repeating-linear-gradient(45deg, #fafafc, #fafafc 10px, #f2f2f5 10px, #f2f2f5 20px); }
+.firma-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.firma-caja {
+    position: absolute; box-sizing: border-box; border: 2px dashed #6b6f8c; background: rgba(107, 111, 140, .12);
+    display: flex; align-items: flex-start; justify-content: flex-start; overflow: hidden; touch-action: none;
+}
+.firma-caja:focus-visible { outline: 3px solid #1c1699; }
+.firma-caja-empresa { border-color: #aa00ff; background: rgba(170, 0, 255, .10); }
+.firma-caja-conforme { border-color: #1e9e5a; background: rgba(30, 158, 90, .12); }
+.firma-caja-disconforme { border-color: #d92b6b; background: rgba(217, 43, 107, .10); }
+.firma-caja.moviendo { opacity: .85; }
+.firma-etiqueta { position: absolute; top: 1px; left: 3px; font-size: 10px; line-height: 1.1; color: #0a1543; pointer-events: none; z-index: 2; }
+.firma-imagen { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; pointer-events: none; }
+.firma-caja.con-imagen .firma-imagen { display: block; }
+.firma-editor:not([data-solo-lectura]) .firma-caja { cursor: move; }
+.firma-asa {
+    position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; z-index: 3;
+    background: linear-gradient(135deg, transparent 50%, #0a1543 50%);
+}
+.firma-aviso { min-height: 1.2em; margin: 8px 0; }
+.firma-numeros table { width: auto; }
+.firma-numeros input[type=number] { width: 90px; }
+.firma-leyenda { display: flex; flex-wrap: wrap; gap: 12px; font-size: .85rem; margin: 8px 0; }
+.firma-leyenda span::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 5px; border: 2px dashed; vertical-align: -2px; }
+.firma-leyenda .l-empresa::before { border-color: #aa00ff; }
+.firma-leyenda .l-conforme::before { border-color: #1e9e5a; }
+.firma-leyenda .l-disconforme::before { border-color: #d92b6b; }

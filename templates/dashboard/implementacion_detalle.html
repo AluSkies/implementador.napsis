@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pasos %}
 {% block content %}
 <div class="card">
     <p><a href="{% url 'dashboard:cliente_detalle' pk=cliente.pk %}">&larr; Volver a {{ cliente.nombre }}</a></p>
@@ -20,7 +21,7 @@
     <p>
         <strong>Estado:</strong> {{ implementacion.estado_visual_label }}
         {% if implementacion.marca_de_devolucion %} · <strong>{{ implementacion.marca_de_devolucion }}</strong>{% endif %}
-        {% if implementacion.estado_visual == "a_completar" %} · <span class="muted">paso {{ implementacion.paso_actual }}/9</span>
+        {% if implementacion.estado_visual == "a_completar" %} · <span class="muted">paso {{ implementacion.paso_actual }}/{% total_pasos %}</span>
         {% elif implementacion.estado_visual == "completado_cliente" %} · <span class="muted">enviado el {{ implementacion.enviado|date:"d/m/Y H:i" }}</span>
         {% elif implementacion.estado_visual == "validada" %} · <span class="muted">validada el {{ implementacion.validada_en|date:"d/m/Y H:i" }}</span>
         {% elif implementacion.estado_visual == "completo" %} · <span class="muted">terminada el {{ implementacion.cumplida_en|date:"d/m/Y H:i" }}</span>
@@ -267,6 +268,62 @@
         </form>
     </details>
 </div>
+
+{% if usa_recibo_digital %}
+<div class="card section-readonly">
+    <h2>Firma del recibo</h2>
+    {% if firma and firma.imagen %}
+        <p>
+            <strong>Estado:</strong> {{ firma.get_estado_display }}
+            {% if firma.estado == "validada" %}<span class="muted">· por {{ firma.validada_por }} el {{ firma.validada_en|date:"d/m/Y H:i" }}</span>{% endif %}
+            {% if firma.estado == "observada" %}<span class="muted">· {{ firma.motivos_texto|join:"; " }}{% if firma.comentario %} — {{ firma.comentario }}{% endif %}</span>{% endif %}
+            · <a href="{{ imagen_url }}">Ver imagen</a>
+        </p>
+        {% include "onboarding/_editor_firma.html" with form=form_lectura solo_lectura=True %}
+        <div class="actions">
+            {% if firma.estado != "validada" %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="validar_firma">
+                <button class="btn" type="submit">Validar firma</button>
+            </form>
+            {% endif %}
+        </div>
+        {% if implementacion.enviado and implementacion.estado == "pendiente" %}
+        <details class="section-edit">
+            <summary class="btn secondary">Observar y devolver al cliente</summary>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="observar_firma">
+                <p class="muted">Elegí qué pasa con la firma: se la devolvemos al cliente para que la ubique de nuevo.</p>
+                {% for codigo, nombre in motivos_de_firma %}
+                <div class="checkbox-row"><input type="checkbox" name="motivos" value="{{ codigo }}" id="motivo_{{ codigo }}"><label for="motivo_{{ codigo }}">{{ nombre }}</label></div>
+                {% endfor %}
+                <label for="comentario_firma">Comentario <span class="muted">(opcional)</span></label>
+                <textarea name="comentario" id="comentario_firma" rows="2"></textarea>
+                <div class="actions"><button class="btn secondary" type="submit" onclick="return confirm('Esto saca la implementación del envío y le avisa al cliente por mail. ¿Seguro?')">Observar y devolver</button></div>
+            </form>
+        </details>
+        {% endif %}
+    {% else %}
+        <p class="muted">El cliente todavía no cargó la firma.</p>
+    {% endif %}
+    <details class="section-edit" {% if form.errors %}open{% endif %}>
+        <summary class="btn secondary">Corregir la firma desde acá</summary>
+        {% if not modelo_url %}
+            <p class="muted">Primero tiene que haber un modelo de recibo cargado.</p>
+        {% else %}
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="corregir_firma">
+            <p class="muted">Lo que guardes queda registrado como corrección del equipo (con el antes y el después) y deja la firma validada.</p>
+            {% include "onboarding/_editor_firma.html" with diferido=True %}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar corrección</button></div>
+        </form>
+        {% endif %}
+    </details>
+</div>
+{% endif %}
 
 <div class="card section-readonly">
     <h2>Licencias y Novedades</h2>

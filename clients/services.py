@@ -122,6 +122,7 @@ def resumen_implementacion(implementacion):
         "licencias_activas": implementacion.licencias.filter(activo=True).select_related("tipo_licencia"),
         "novedades_activas": implementacion.novedades.filter(activo=True).select_related("tipo_novedad"),
         "liquidaciones_activas": implementacion.liquidaciones.filter(activo=True).select_related("tipo_liquidacion").order_by("tipo_liquidacion__orden", "tipo_liquidacion__nombre"),
+        "firma": implementacion.firma,
         "documentos_activos": implementacion.documentos_legajo.filter(activo=True).select_related("tipo_documento"),
         "empleados": implementacion.empleados.select_related("sucursal", "reporta_a", "aprobador"),
         "versiones": implementacion.versiones.all()[:50],
@@ -184,6 +185,25 @@ def _snapshot_liquidaciones(implementacion):
     }
 
 
+def _snapshot_firma(implementacion):
+    firma = implementacion.firma
+    if firma is None:
+        return {}
+    foto = {
+        "Estado": firma.get_estado_display(),
+        "Página": firma.get_pagina_display(),
+        "Imagen": firma.imagen.url if firma.imagen else None,
+        "Imagen (sha256)": firma.imagen_sha256,
+    }
+    for codigo, nombre in firma.ELEMENTOS:
+        recuadro = firma.geometria.get(codigo, {})
+        foto[nombre] = {campo: recuadro.get(campo) for campo in ("x", "y", "ancho", "alto")}
+    if firma.motivos:
+        foto["Motivos"] = firma.motivos_texto
+        foto["Comentario"] = firma.comentario
+    return foto
+
+
 def _snapshot_documentos(implementacion):
     return {d.tipo_documento.nombre: d.activo for d in implementacion.documentos_legajo.select_related("tipo_documento")}
 
@@ -217,6 +237,7 @@ _SNAPSHOT_BUILDERS = {
     "sucursales": _snapshot_sucursales,
     "licencias_novedades": _snapshot_licencias_novedades,
     "liquidaciones": _snapshot_liquidaciones,
+    "firma": _snapshot_firma,
     "documentos": _snapshot_documentos,
     "fecha_implementacion": _snapshot_fecha_implementacion,
     "condiciones": _snapshot_condiciones,

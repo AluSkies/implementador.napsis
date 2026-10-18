@@ -293,6 +293,11 @@ class Implementacion(models.Model):
     def get_absolute_url(self):
         return reverse("onboarding:wizard_step", kwargs={"token": self.token, "step": 1})
 
+    @property
+    def firma(self):
+        """La ubicación de la firma que vale para todos los tipos de liquidación (None si todavía no se cargó)."""
+        return self.firmas.filter(tipo_liquidacion__isnull=True).first()
+
     def pedir_revision(self, mensaje=""):
         """El cliente pide que el equipo de implementación se contacte con él."""
         self.revision_solicitada = True
@@ -323,6 +328,97 @@ class Implementacion(models.Model):
         self.estado = self.ESTADO_CUMPLIDA
         self.cumplida_en = timezone.now()
         self.save(update_fields=["estado", "cumplida_en"])
+
+
+def geometria_inicial_de_firma():
+    """Dónde arrancan las tres firmas sobre el recibo (fracciones de la página, de 0 a 1)."""
+    return {
+        "empresa": {"x": 0.08, "y": 0.82, "ancho": 0.25, "alto": 0.08},
+        "conforme": {"x": 0.38, "y": 0.82, "ancho": 0.25, "alto": 0.08},
+        "disconforme": {"x": 0.68, "y": 0.82, "ancho": 0.25, "alto": 0.08},
+    }
+
+
+class UbicacionFirma(models.Model):
+    """Dónde quiere el cliente que vaya su firma sobre su modelo de recibo.
+
+    Es solo la **intención del cliente**: la imagen de la firma del apoderado y, sobre la página del
+    recibo, tres recuadros (la firma de la empresa y los del empleado en conformidad y en
+    disconformidad), con posición y tamaño relativos a la página. El portal no la traduce a Napsis:
+    el equipo la valida, la devuelve o la corrige, y quien configura la lleva a Napsis.
+
+    Los archivos no se pisan ni se borran: al subir otra imagen la anterior sigue guardada."""
+
+    PAGINA_PRIMERA = "primera"
+    PAGINA_ULTIMA = "ultima"
+    PAGINA_TODAS = "todas"
+    PAGINA_CHOICES = [
+        (PAGINA_PRIMERA, "Primera página"),
+        (PAGINA_ULTIMA, "Última página"),
+        (PAGINA_TODAS, "Todas las páginas"),
+    ]
+
+    ESTADO_PROPUESTA = "propuesta"
+    ESTADO_VALIDADA = "validada"
+    ESTADO_OBSERVADA = "observada"
+    ESTADO_CHOICES = [
+        (ESTADO_PROPUESTA, "Propuesta por el cliente"),
+        (ESTADO_VALIDADA, "Validada"),
+        (ESTADO_OBSERVADA, "Observada"),
+    ]
+
+    ELEMENTOS = [
+        ("empresa", "Firma de la empresa"),
+        ("conforme", "Empleado en conformidad"),
+        ("disconforme", "Empleado en disconformidad"),
+    ]
+
+    # Catálogo cerrado de motivos: lo que se registra es el código (estable), no el texto.
+    MOTIVOS = [
+        ("ilegible", "La firma no se lee bien"),
+        ("baja_calidad", "La imagen es de baja calidad"),
+        ("tamano_excesivo", "La firma quedó demasiado grande o demasiado chica"),
+        ("superpone_texto", "Se superpone con el texto del recibo"),
+        ("no_replicable", "No se puede replicar así en Napsis"),
+        ("otro", "Otro motivo"),
+    ]
+
+    implementacion = models.ForeignKey(Implementacion, on_delete=models.CASCADE, related_name="firmas")
+    # Vacío = vale para todos los tipos de liquidación (hoy es el único caso que ofrece la pantalla).
+    tipo_liquidacion = models.ForeignKey(
+        "catalog.TipoLiquidacion", on_delete=models.CASCADE, null=True, blank=True, related_name="+",
+    )
+    pagina = models.CharField(max_length=10, choices=PAGINA_CHOICES, default=PAGINA_PRIMERA)
+    imagen = models.ImageField(
+        "Imagen de la firma", upload_to="implementaciones/firmas/", blank=True, null=True,
+        validators=[validar_tamanio_archivo],
+    )
+    imagen_sha256 = models.CharField(max_length=64, blank=True)
+    # {"empresa": {"x", "y", "ancho", "alto"}, "conforme": {...}, "disconforme": {...}}, de 0 a 1.
+    geometria = models.JSONField(default=geometria_inicial_de_firma)
+    estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default=ESTADO_PROPUESTA)
+    motivos = models.JSONField(default=list, blank=True, help_text="Códigos del catálogo, si fue observada.")
+    comentario = models.TextField(blank=True)
+    propuesta_por = models.CharField(max_length=150, blank=True)
+    validada_por = models.CharField(max_length=150, blank=True)
+    validada_en = models.DateTimeField(null=True, blank=True)
+    creada = models.DateTimeField(auto_now_add=True)
+    actualizada = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Ubicación de la firma"
+        verbose_name_plural = "Ubicaciones de la firma"
+        constraints = [
+            models.UniqueConstraint(fields=["implementacion", "tipo_liquidacion"], name="firma_unica_por_tipo"),
+        ]
+
+    def __str__(self):
+        return f"{self.implementacion} - firma ({self.get_estado_display()})"
+
+    @property
+    def motivos_texto(self):
+        nombres = dict(self.MOTIVOS)
+        return [nombres.get(codigo, codigo) for codigo in self.motivos]
 
 
 class RondaRevision(models.Model):
@@ -510,6 +606,7 @@ class ImplementacionVersion(models.Model):
         ("sucursales", "Sucursales"),
         ("licencias_novedades", "Licencias y Novedades"),
         ("liquidaciones", "Tipos de liquidación"),
+        ("firma", "Firma del recibo"),
         ("documentos", "Documentos de Legajo"),
         ("empleados", "Empleados"),
         ("fecha_implementacion", "Fecha de implementación"),

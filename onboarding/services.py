@@ -5,6 +5,7 @@ Cada función de guardado registra primero una versión anterior (clients.servic
 con el estado previo de la sección, así el cliente y el equipo pueden consultarlas después.
 """
 
+import hashlib
 from datetime import timedelta
 
 from django.contrib import messages
@@ -21,19 +22,22 @@ from clients.models import (
     Modulo,
     PersonaRol,
     Sucursal,
+    UbicacionFirma,
 )
-from automatizacion import eventos
+from automatizacion import actores, eventos
 from clients.services import cambio_de_seccion, guardar_version
 from employees.models import Empleado, ImportBatch
 from employees.services import COLUMNAS, leer_archivo_empleados, normalizar_cuil
 
-TOTAL_PASOS = 9
+from .forms import FirmaForm
+
+TOTAL_PASOS = 10
 
 # Orden del wizard. La nómina va antes que los roles (para poder elegir de ahí a las personas
 # con rol) y las sucursales antes que la nómina (para poder asignar a cada empleado la suya).
 (
     PASO_DATOS, PASO_MODULOS, PASO_SUCURSALES, PASO_NOMINA, PASO_ROLES,
-    PASO_CONFIGURACION, PASO_LICENCIAS, PASO_DOCUMENTOS, PASO_REVISION,
+    PASO_CONFIGURACION, PASO_FIRMA, PASO_LICENCIAS, PASO_DOCUMENTOS, PASO_REVISION,
 ) = range(1, TOTAL_PASOS + 1)
 
 # El cliente solo puede pedir una fecha de implementación a partir de tantos días hábiles
@@ -49,7 +53,8 @@ TITULOS_PASO = {
     PASO_SUCURSALES: "Sucursales",
     PASO_NOMINA: "Carga de empleados",
     PASO_ROLES: "Apoderado/s, Liquidador y Admin. de RRHH",
-    PASO_CONFIGURACION: "Configuración de firma y adjuntos",
+    PASO_CONFIGURACION: "Configuración y adjuntos",
+    PASO_FIRMA: "Firma del recibo",
     PASO_LICENCIAS: "Licencias y Novedades",
     PASO_DOCUMENTOS: "Documentos de Legajo Digital",
     PASO_REVISION: "Revisión y envío",
@@ -59,14 +64,15 @@ TITULOS_PASO = {
 # pierden aunque cambie el número de orden de los pasos.
 CODIGO_DE_PASO = {
     PASO_DATOS: "datos", PASO_MODULOS: "modulos", PASO_SUCURSALES: "sucursales", PASO_NOMINA: "nomina",
-    PASO_ROLES: "roles", PASO_CONFIGURACION: "configuracion", PASO_LICENCIAS: "licencias",
+    PASO_ROLES: "roles", PASO_CONFIGURACION: "configuracion", PASO_FIRMA: "firma", PASO_LICENCIAS: "licencias",
     PASO_DOCUMENTOS: "documentos", PASO_REVISION: "revision",
 }
 
 PASO_REQUIERE_MODULO = {
     PASO_SUCURSALES: {Modulo.FICHADA},                          # Sucursales (fichada por ubicación)
     PASO_ROLES: {Modulo.RECIBO_DIGITAL, Modulo.LEGAJOS},        # Apoderado/Liquidador (recibos) o Admin RRHH (legajo)
-    PASO_CONFIGURACION: {Modulo.RECIBO_DIGITAL},                # Configuración de firma y adjuntos del recibo
+    PASO_CONFIGURACION: {Modulo.RECIBO_DIGITAL},                # Configuración y adjuntos del recibo
+    PASO_FIRMA: {Modulo.RECIBO_DIGITAL},                        # Dónde va la firma sobre el recibo
     PASO_LICENCIAS: {Modulo.NOVEDADES},                         # Licencias y Novedades
     PASO_DOCUMENTOS: {Modulo.LEGAJOS},                          # Documentos de Legajo Digital
 }
@@ -153,6 +159,13 @@ def pendientes_de_envio(implementacion):
         pendientes.append({
             "paso": PASO_CONFIGURACION, "mensaje": "Elegir al menos un tipo de liquidación.",
         })
+
+    if PASO_FIRMA in activos:
+        firma = implementacion.firma
+        if firma is None or not firma.imagen:
+            pendientes.append({
+                "paso": PASO_FIRMA, "mensaje": "Subir la imagen de la firma y ubicarla sobre el recibo.",
+            })
 
     if not implementacion.empleados.exists():
         pendientes.append({"paso": PASO_NOMINA, "mensaje": "Cargar la nómina de empleados (al menos una persona)."})
@@ -286,6 +299,60 @@ def guardar_liquidaciones(implementacion, tipos, actor):
             ImplementacionLiquidacion.objects.update_or_create(
                 implementacion=implementacion, tipo_liquidacion=tipo, defaults={"activo": tipo.pk in elegidos},
             )
+
+
+def guardar_firma(implementacion, actor, *, pagina, geometria, imagen=None):
+    """Guarda la intención del cliente sobre su firma: página, recuadros y (si se sube una) la imagen.
+
+    - La imagen anterior no se borra: queda en el disco y el evento `archivo.reemplazado` apunta a las dos.
+    - Si guarda el cliente, la firma queda «propuesta» cuando algo cambió (o si estaba observada: es
+      su respuesta). Si guarda el equipo, es una corrección posterior al envío y queda validada.
+    """
+    del_cliente = actor.tipo == actores.CLIENTE
+    accion = "firma.propuesta" if del_cliente else "firma.corregida_por_implementador"
+    with cambio_de_seccion(implementacion, "firma", actor, accion=accion):
+        firma = implementacion.firmas.filter(tipo_liquidacion__isnull=True).first() or UbicacionFirma(
+            implementacion=implementacion,
+        )
+        anterior = {"ruta": firma.imagen.name, "sha256": firma.imagen_sha256} if firma.imagen else None
+        cambio = firma.pk is None or firma.pagina != pagina or firma.geometria != geometria or imagen is not None
+        firma.pagina = pagina
+        firma.geometria = geometria
+        if imagen is not None:
+            hash_imagen = hashlib.sha256()
+            for trozo in imagen.chunks():
+                hash_imagen.update(trozo)
+            imagen.seek(0)
+            firma.imagen.save(imagen.name, imagen, save=False)
+            firma.imagen_sha256 = hash_imagen.hexdigest()
+        if del_cliente:
+            if cambio or firma.estado == UbicacionFirma.ESTADO_OBSERVADA:
+                firma.estado = UbicacionFirma.ESTADO_PROPUESTA
+                firma.motivos, firma.comentario = [], ""
+                firma.validada_por, firma.validada_en = "", None
+            firma.propuesta_por = firma.propuesta_por or actor.etiqueta
+        else:
+            firma.estado = UbicacionFirma.ESTADO_VALIDADA
+            firma.motivos, firma.comentario = [], ""
+            firma.validada_por, firma.validada_en = actor.etiqueta, timezone.now()
+        firma.save()
+        if imagen is not None and anterior:
+            eventos.registrar(actor, "archivo.reemplazado", implementacion, seccion="firma", datos={
+                "campo": "imagen_firma", "anterior": anterior,
+                "nuevo": {"ruta": firma.imagen.name, "sha256": firma.imagen_sha256},
+            })
+    return firma
+
+
+def contexto_del_editor_de_firma(implementacion, firma, form=None):
+    """Lo que necesita el editor de firma (el del cliente, el de la ficha del panel y el de solo lectura)."""
+    return {
+        "form": form or FirmaForm(firma=firma),
+        "form_lectura": FirmaForm(firma=firma, auto_id="lectura_%s"),
+        "firma": firma,
+        "modelo_url": implementacion.modelo_recibo.url if implementacion.modelo_recibo else "",
+        "imagen_url": firma.imagen.url if firma and firma.imagen else "",
+    }
 
 
 def guardar_documentos(implementacion, form, todos_qs, actor):

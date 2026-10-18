@@ -80,6 +80,14 @@
     </table>
 </div>
 
+{% if firma and firma.imagen %}
+<div class="card">
+    <h2>Firma del recibo</h2>
+    <p class="muted">Así quedó ubicada la firma sobre tu recibo.{% if firma.estado == "validada" %} El equipo de Napsis ya la validó.{% endif %}</p>
+    {% include "onboarding/_editor_firma.html" with form=form_lectura solo_lectura=True %}
+</div>
+{% endif %}
+
 {% if liquidaciones_activas %}
 <div class="card">
     <h2>Tipos de liquidación</h2>

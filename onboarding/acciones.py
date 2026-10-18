@@ -21,8 +21,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from automatizacion import eventos
-from clients.models import Cliente, Implementacion, Modulo, RondaRevision
-from clients.services import crear_o_resetear_acceso, foto_de_seccion
+from clients.models import Cliente, Implementacion, Modulo, RondaRevision, UbicacionFirma
+from clients.services import cambio_de_seccion, crear_o_resetear_acceso, foto_de_seccion
 from clients.validators import normalizar_cuits
 from notifications import services as notificaciones
 
@@ -299,11 +299,14 @@ def aprobar_para_configurar(actor, implementacion):
         return Resultado(implementacion=implementacion, avisos=[
             Aviso(messages.ERROR, "Solo se puede validar una implementación enviada por el cliente y todavía sin validar."),
         ])
-    pendientes = services.pendientes_de_envio(implementacion)
+    pendientes = [p["mensaje"] for p in services.pendientes_de_envio(implementacion)]
+    if implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
+        firma = implementacion.firma
+        if firma is not None and firma.imagen and firma.estado != UbicacionFirma.ESTADO_VALIDADA:
+            pendientes.append("Falta validar la firma del recibo.")
     if pendientes:
-        faltantes = " ".join(p["mensaje"] for p in pendientes)
         return Resultado(implementacion=implementacion, avisos=[
-            Aviso(messages.ERROR, f"No se puede validar: todavía falta completar datos obligatorios. {faltantes}"),
+            Aviso(messages.ERROR, "No se puede validar: todavía falta completar datos obligatorios. " + " ".join(pendientes)),
         ])
     with transaction.atomic():
         implementacion.validada_en = timezone.now()
@@ -313,6 +316,55 @@ def aprobar_para_configurar(actor, implementacion):
         implementacion=implementacion,
         avisos=[Aviso(messages.SUCCESS, "Documentación validada: la implementación quedó lista para configurar.")],
     )
+
+
+def validar_firma(actor, implementacion):
+    """El equipo da por buena la ubicación de la firma que propuso el cliente."""
+    firma = implementacion.firma
+    if firma is None or not firma.imagen:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Todavía no hay una firma cargada para validar."),
+        ])
+    if firma.estado == UbicacionFirma.ESTADO_VALIDADA:
+        return Resultado(implementacion=implementacion)
+    with cambio_de_seccion(implementacion, "firma", actor, accion="firma.validada"):
+        firma.estado = UbicacionFirma.ESTADO_VALIDADA
+        firma.motivos, firma.comentario = [], ""
+        firma.validada_por, firma.validada_en = actor.etiqueta, timezone.now()
+        firma.save()
+    return Resultado(implementacion=implementacion, avisos=[Aviso(messages.SUCCESS, "Firma validada.")])
+
+
+def observar_firma(actor, implementacion, motivos, comentario="", base_url=None):
+    """El equipo no acepta la firma: la marca como observada (con motivos del catálogo cerrado) y la
+    devuelve al cliente para que la ubique de nuevo, con el mismo recorrido que cualquier devolución."""
+    firma = implementacion.firma
+    if firma is None or not firma.imagen:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Todavía no hay una firma cargada para observar."),
+        ])
+    nombres = dict(UbicacionFirma.MOTIVOS)
+    motivos = [m for m in dict.fromkeys(motivos or []) if m in nombres]
+    if not motivos:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Elegí al menos un motivo de la lista."),
+        ])
+    if not _puede_revisarse(implementacion):
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo se puede devolver una implementación que el cliente ya envió."),
+        ])
+    comentario = (comentario or "").strip()
+    texto = "Hay que ajustar la firma del recibo: " + "; ".join(nombres[m].lower() for m in motivos) + "."
+    if comentario:
+        texto += f" {comentario}"
+    with cambio_de_seccion(
+        implementacion, "firma", actor, accion="firma.observada", datos={"motivos": motivos, "comentario": comentario},
+    ):
+        firma.estado = UbicacionFirma.ESTADO_OBSERVADA
+        firma.motivos, firma.comentario = motivos, comentario
+        firma.validada_por, firma.validada_en = "", None
+        firma.save()
+    return devolver_al_cliente(actor, implementacion, texto, {"firma": texto}, base_url=base_url)
 
 
 def devolver_al_cliente(actor, implementacion, motivo, observaciones=None, base_url=None):

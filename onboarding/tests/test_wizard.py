@@ -1,15 +1,17 @@
+import io
 import tempfile
 from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from catalog.models import TipoLiquidacion
 from clients.models import (
-    Cliente, Implementacion, ImplementacionLiquidacion, ImplementacionModulo, Modulo, PersonaRol,
+    Cliente, Implementacion, ImplementacionLiquidacion, ImplementacionModulo, Modulo, PersonaRol, UbicacionFirma,
 )
 from employees.models import Empleado
 
@@ -66,6 +68,18 @@ class BaseWizard(TestCase):
         )
         self.implementacion.modelo_recibo.save("m.pdf", SimpleUploadedFile("m.pdf", b"%PDF-1.4"))
         self.agregar_empleado()
+        self.cargar_firma()
+
+    def cargar_firma(self, estado=UbicacionFirma.ESTADO_VALIDADA):
+        """La firma ya subida y ubicada (por defecto, también validada por el equipo)."""
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (300, 100), "white").save(buffer, format="PNG")
+        firma = UbicacionFirma(implementacion=self.implementacion, estado=estado, propuesta_por="cliente_a")
+        firma.imagen.save("firma.png", ContentFile(buffer.getvalue()), save=False)
+        firma.save()
+        return firma
 
 
 class AccesoAlWizardTests(BaseWizard):
@@ -224,7 +238,7 @@ class PasoNominaTests(BaseWizard):
 
 class Paso9EnvioTests(BaseWizard):
     def _enviar(self):
-        return self.client.post(_url(self.implementacion, 9), {"accion": "enviar"})
+        return self.client.post(_url(self.implementacion, 10), {"accion": "enviar"})
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_con_pendientes_no_se_envia_y_se_los_muestra(self):
@@ -280,7 +294,7 @@ class Paso9FechaDeImplementacionTests(BaseWizard):
 
     def _enviar_con_fecha(self, fecha):
         return self.client.post(
-            _url(self.implementacion, 9), {"accion": "enviar", "fecha_salida_productivo": fecha.isoformat() if fecha else ""},
+            _url(self.implementacion, 10), {"accion": "enviar", "fecha_salida_productivo": fecha.isoformat() if fecha else ""},
         )
 
     def test_es_opcional(self):
@@ -329,7 +343,7 @@ class Paso9FechaDeImplementacionTests(BaseWizard):
     def test_viene_precargada_con_la_fecha_ya_definida(self):
         self.implementacion.fecha_salida_productivo = self.minima
         self.implementacion.save()
-        self.assertContains(self.client.get(_url(self.implementacion, 9)), self.minima.isoformat())
+        self.assertContains(self.client.get(_url(self.implementacion, 10)), self.minima.isoformat())
 
     def test_el_campo_avisa_cual_es_la_fecha_minima(self):
-        self.assertContains(self.client.get(_url(self.implementacion, 9)), f'min="{self.minima.isoformat()}"')
+        self.assertContains(self.client.get(_url(self.implementacion, 10)), f'min="{self.minima.isoformat()}"')

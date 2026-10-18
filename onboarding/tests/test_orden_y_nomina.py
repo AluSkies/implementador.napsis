@@ -16,11 +16,11 @@ class OrdenDelWizardTests(BaseWizard):
     def test_el_orden_de_los_pasos(self):
         self.assertEqual(
             (services.PASO_DATOS, services.PASO_MODULOS, services.PASO_SUCURSALES, services.PASO_NOMINA,
-             services.PASO_ROLES, services.PASO_CONFIGURACION, services.PASO_LICENCIAS,
+             services.PASO_ROLES, services.PASO_CONFIGURACION, services.PASO_FIRMA, services.PASO_LICENCIAS,
              services.PASO_DOCUMENTOS, services.PASO_REVISION),
-            tuple(range(1, 10)),
+            tuple(range(1, 11)),
         )
-        self.assertEqual(services.pasos_activos(self.implementacion), list(range(1, 10)))
+        self.assertEqual(services.pasos_activos(self.implementacion), list(range(1, 11)))
 
     def test_la_nomina_viene_antes_que_los_roles_y_las_sucursales_antes_que_la_nomina(self):
         self.assertLess(services.PASO_NOMINA, services.PASO_ROLES)

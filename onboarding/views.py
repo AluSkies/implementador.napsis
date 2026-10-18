@@ -18,6 +18,7 @@ from .forms import (
     DocumentosLegajoForm,
     EmpresaForm,
     FechaImplementacionForm,
+    FirmaForm,
     LicenciasNovedadesForm,
     ModulosForm,
     PedirRevisionForm,
@@ -25,7 +26,7 @@ from .forms import (
     SucursalFormSet,
 )
 from .services import (
-    PASO_CONFIGURACION, PASO_DATOS, PASO_DOCUMENTOS, PASO_LICENCIAS, PASO_MODULOS, PASO_NOMINA,
+    PASO_CONFIGURACION, PASO_DATOS, PASO_DOCUMENTOS, PASO_FIRMA, PASO_LICENCIAS, PASO_MODULOS, PASO_NOMINA,
     PASO_REVISION, PASO_ROLES, PASO_SUCURSALES, TITULOS_PASO, TOTAL_PASOS,
 )
 
@@ -40,7 +41,7 @@ def _errores_de(formulario):
             "filas": [_errores_de(f) for f in formulario.forms if f.errors],
             "generales": [str(e) for e in formulario.non_form_errors()],
         }
-    return {campo: [str(e) for e in errores] for campo, errores in formulario.errors.items()}
+    return {campo: [str(e) for e in errores] for campo, errores in formulario.errors.items()}  # `__all__` incluido
 
 
 def _invalido(request, implementacion, paso, formulario):
@@ -140,6 +141,7 @@ def _vista_solo_lectura(request, implementacion, recien_enviado=False):
         form = PedirRevisionForm()
 
     contexto = resumen_implementacion(implementacion)
+    contexto.update(services.contexto_del_editor_de_firma(implementacion, implementacion.firma))
     contexto["recien_enviado"] = recien_enviado
     contexto["pedir_revision_form"] = form
     return render(request, "onboarding/ya_enviado.html", contexto)
@@ -256,6 +258,29 @@ def _step_configuracion(request, implementacion, step):
     else:
         form = ConfiguracionForm(instance=implementacion)
     return render(request, "onboarding/step_configuracion.html", _wizard_context(implementacion, step, {"form": form}))
+
+
+def _step_firma(request, implementacion, step):
+    firma = implementacion.firma
+    if not implementacion.modelo_recibo:
+        # Sin el recibo no hay dónde ubicar la firma: se lo pedimos en el paso anterior.
+        return render(request, "onboarding/step_firma.html", _wizard_context(implementacion, step, {
+            "sin_modelo": True, "paso_configuracion": PASO_CONFIGURACION,
+        }))
+    if request.method == "POST":
+        form = FirmaForm(request.POST, request.FILES, firma=firma)
+        if form.is_valid():
+            services.guardar_firma(
+                implementacion, _actor(request), pagina=form.cleaned_data["pagina"],
+                geometria=form.geometria(), imagen=form.cleaned_data["imagen"],
+            )
+            return _redirect_next(implementacion, step)
+        _invalido(request, implementacion, step, form)
+    else:
+        form = FirmaForm(firma=firma)
+    return render(request, "onboarding/step_firma.html", _wizard_context(
+        implementacion, step, services.contexto_del_editor_de_firma(implementacion, firma, form),
+    ))
 
 
 def _step_sucursales(request, implementacion, step):
@@ -484,6 +509,7 @@ _HANDLERS = {
     PASO_NOMINA: _step_empleados,
     PASO_ROLES: _step_roles,
     PASO_CONFIGURACION: _step_configuracion,
+    PASO_FIRMA: _step_firma,
     PASO_LICENCIAS: _step_licencias_novedades,
     PASO_DOCUMENTOS: _step_documentos,
     PASO_REVISION: _step_revision,

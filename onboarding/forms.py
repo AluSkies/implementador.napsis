@@ -3,8 +3,8 @@ from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
 from catalog.models import TipoLiquidacion
-from clients.models import Implementacion, PersonaRol, Sucursal
-from clients.validators import normalizar_cuits, validar_medidas_banner, validar_medidas_logo
+from clients.models import Implementacion, PersonaRol, Sucursal, UbicacionFirma, geometria_inicial_de_firma
+from clients.validators import normalizar_cuits, validar_medidas_banner, validar_medidas_logo, validar_tamanio_archivo
 from employees.services import CUIL_RE, normalizar_cuil
 
 # Campos de Implementacion que completa el cliente en distintos pasos del wizard.
@@ -244,6 +244,91 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
         if not self.instance.modelo_recibo:
             campo.required = True
             campo.label = "Modelo de recibo (PDF, obligatorio)"
+
+
+# La firma tiene que verse bien sobre el recibo: por debajo de esto queda borrosa.
+FIRMA_RESOLUCION_MINIMA = (200, 60)
+FIRMA_FORMATOS = ("JPEG", "PNG")
+CAMPOS_DE_RECUADRO = ("x", "y", "ancho", "alto")
+NOMBRES_DE_RECUADRO = {"x": "izquierda", "y": "arriba", "ancho": "ancho", "alto": "alto"}
+
+
+class FirmaForm(forms.Form):
+    """Imagen de la firma y dónde va sobre el recibo. Los recuadros llegan en % de la página (0 a 100)
+    —así los edita una persona—; se guardan como fracciones (0 a 1) para que no dependan del tamaño del PDF."""
+
+    imagen = forms.FileField(
+        required=False, label="Imagen de la firma del apoderado", validators=[validar_tamanio_archivo],
+        widget=forms.ClearableFileInput(attrs={"accept": "image/png,image/jpeg"}),
+        help_text="JPG o PNG. Lo ideal es la firma sobre fondo blanco liso, o un PNG con fondo transparente.",
+    )
+    pagina = forms.ChoiceField(choices=UbicacionFirma.PAGINA_CHOICES, label="¿En qué página va la firma?")
+
+    def __init__(self, *args, firma=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.firma = firma
+        geometria = firma.geometria if firma else geometria_inicial_de_firma()
+        for codigo, nombre in UbicacionFirma.ELEMENTOS:
+            for campo in CAMPOS_DE_RECUADRO:
+                self.fields[f"{codigo}_{campo}"] = forms.FloatField(
+                    min_value=0, max_value=100, label=f"{nombre}: {NOMBRES_DE_RECUADRO[campo]}",
+                    initial=round(geometria[codigo][campo] * 100, 1),
+                    widget=forms.NumberInput(attrs={"step": "0.1", "min": "0", "max": "100"}),
+                )
+        self.fields["pagina"].initial = firma.pagina if firma else UbicacionFirma.PAGINA_PRIMERA
+
+    @property
+    def filas_de_recuadros(self):
+        """Para dibujar los campos numéricos de respaldo: [(nombre, [campo x, y, ancho, alto])]."""
+        return [
+            (nombre, [self[f"{codigo}_{campo}"] for campo in CAMPOS_DE_RECUADRO])
+            for codigo, nombre in UbicacionFirma.ELEMENTOS
+        ]
+
+    def clean_imagen(self):
+        imagen = self.cleaned_data.get("imagen")
+        if not imagen:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(imagen) as foto:
+                formato, (ancho, alto) = foto.format, foto.size
+                foto.verify()
+        except Exception:
+            raise forms.ValidationError("No pudimos leer la imagen. Subí un archivo JPG o PNG.") from None
+        finally:
+            imagen.seek(0)
+        if formato not in FIRMA_FORMATOS:
+            raise forms.ValidationError("La imagen tiene que ser JPG o PNG.")
+        minimo = FIRMA_RESOLUCION_MINIMA
+        if ancho < minimo[0] or alto < minimo[1]:
+            raise forms.ValidationError(
+                f"La imagen es muy chica ({ancho} × {alto} px): tiene que medir al menos {minimo[0]} × {minimo[1]} px "
+                "para que la firma no se vea borrosa."
+            )
+        return imagen
+
+    def clean(self):
+        datos = super().clean()
+        if not datos.get("imagen") and not (self.firma and self.firma.imagen):
+            self.add_error("imagen", "Subí la imagen de la firma.")
+        for codigo, nombre in UbicacionFirma.ELEMENTOS:
+            recuadro = {campo: datos.get(f"{codigo}_{campo}") for campo in CAMPOS_DE_RECUADRO}
+            if None in recuadro.values():
+                continue  # ya tiene su error de campo
+            if recuadro["ancho"] < 1 or recuadro["alto"] < 1:
+                self.add_error(None, f"{nombre}: el recuadro tiene que medir al menos 1% de la página de ancho y de alto.")
+            elif recuadro["x"] + recuadro["ancho"] > 100.05 or recuadro["y"] + recuadro["alto"] > 100.05:
+                self.add_error(None, f"{nombre}: el recuadro se sale de la página.")
+        return datos
+
+    def geometria(self):
+        """Los recuadros como los guarda el modelo: fracciones de 0 a 1."""
+        return {
+            codigo: {campo: round(self.cleaned_data[f"{codigo}_{campo}"] / 100, 4) for campo in CAMPOS_DE_RECUADRO}
+            for codigo, _ in UbicacionFirma.ELEMENTOS
+        }
 
 
 class SucursalForm(forms.ModelForm):

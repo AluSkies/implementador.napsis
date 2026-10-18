@@ -158,10 +158,10 @@ class VacacionesAutomaticasTests(BaseWizard):
         self.assertFalse(campo.initial)
 
     def test_el_paso_explica_que_se_crea_sola(self):
-        self.assertContains(self.client.get(_url(self.implementacion, 7)), "Napsis la crea sola")
+        self.assertContains(self.client.get(_url(self.implementacion, 8)), "Napsis la crea sola")
 
     def test_guardar_el_paso_la_deja_activa(self):
-        self.client.post(_url(self.implementacion, 7), {f"licencia_{self.otra.id}_activo": "on"})
+        self.client.post(_url(self.implementacion, 8), {f"licencia_{self.otra.id}_activo": "on"})
         self.assertTrue(self.implementacion.licencias.get(tipo_licencia=self.vacaciones).activo)
 
 

@@ -329,9 +329,9 @@ class ValidacionesDelWizardQuedanRegistradasTests(BaseWizard):
         self.assertNotIn("011-1", str(errores))  # los valores cargados no se guardan
 
     def test_intentar_enviar_con_pendientes_registra_cuales(self):
-        self.client.post(self.url(9), {"accion": "enviar"})
+        self.client.post(self.url(10), {"accion": "enviar"})
         datos = _eventos("validacion.fallida").get().datos
-        self.assertEqual(datos["paso"], 9)
+        self.assertEqual(datos["paso"], 10)
         self.assertTrue(datos["errores"]["pendientes"])
         self.implementacion.refresh_from_db()
         self.assertIsNone(self.implementacion.enviado)
@@ -358,6 +358,6 @@ class ValidacionesDelWizardQuedanRegistradasTests(BaseWizard):
 
     def test_el_envio_del_cliente_deja_su_evento_con_el_actor_cliente(self):
         self.completar_todo()
-        self.client.post(self.url(9), {"accion": "enviar", "fecha_salida_productivo": ""})
+        self.client.post(self.url(10), {"accion": "enviar", "fecha_salida_productivo": ""})
         evento = _eventos("envio.confirmado").get()
         self.assertEqual((evento.actor_tipo, evento.actor_ref), ("cliente", self.usuario.username))
