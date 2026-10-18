@@ -66,6 +66,12 @@
     <div class="actions">
         {% if implementacion.estado != "cancelada" %}
         {% if implementacion.enviado and implementacion.estado == "pendiente" %}
+        {% if not implementacion.validada_en and pendientes_de_validacion %}
+        <div class="messages"><li class="warning" style="list-style:none;padding:10px 14px;border-radius:6px;">
+            <strong>Para poder validar falta:</strong>
+            <ul>{% for mensaje in pendientes_de_validacion %}<li>{{ mensaje }}</li>{% endfor %}</ul>
+        </li></div>
+        {% endif %}
         {% if not implementacion.validada_en %}
         <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
             {% csrf_token %}
@@ -73,11 +79,13 @@
             <button class="btn" type="submit">Validar documentación y dejar lista para configurar</button>
         </form>
         {% endif %}
+        {% if implementacion.validada_en %}
         <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
             {% csrf_token %}
             <input type="hidden" name="accion" value="marcar_cumplida">
-            <button class="btn{% if not implementacion.validada_en %} secondary{% endif %}" type="submit">Marcar implementación como cumplida</button>
+            <button class="btn" type="submit">Marcar implementación como cumplida</button>
         </form>
+        {% endif %}
         {% endif %}
         <form method="post" action="{% url 'dashboard:implementacion_detalle' pk=implementacion.pk %}">
             {% csrf_token %}
@@ -188,8 +196,8 @@
             <input type="hidden" name="accion" value="actualizar_modulos">
             {% for im in implementacion.modulos.all %}
                 <div class="checkbox-row">
-                    <input type="checkbox" name="modulos" value="{{ im.modulo_id }}" id="det_modulo_{{ im.modulo_id }}" {% if im.activo %}checked{% endif %}>
-                    <label for="det_modulo_{{ im.modulo_id }}">{{ im.modulo.nombre }}</label>
+                    <input type="checkbox" name="modulos" value="{{ im.modulo_id }}" id="det_modulo_{{ im.modulo_id }}" {% if im.modulo.codigo == "recibo_digital" %}checked onclick="return false"{% elif im.activo %}checked{% endif %}>
+                    <label for="det_modulo_{{ im.modulo_id }}">{{ im.modulo.nombre }}{% if im.modulo.codigo == "recibo_digital" %} <span class="muted">(obligatorio)</span>{% endif %}</label>
                 </div>
             {% endfor %}
             <div class="checkbox-row">

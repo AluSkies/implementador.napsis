@@ -270,8 +270,8 @@ class PendientesDeEnvioTests(TestCase):
     def _pasos(self):
         return [p["paso"] for p in services.pendientes_de_envio(self.implementacion)]
 
-    def test_sin_modulos_solo_pide_empresa_y_nomina(self):
-        self.assertEqual(self._pasos(), [1, 4])
+    def test_sin_modulos_pide_empresa_nomina_y_el_modulo_obligatorio(self):
+        self.assertEqual(self._pasos(), [1, 2, 4])  # el paso 2 es Recibo Digital, obligatorio
 
     def test_con_recibo_digital_pide_tambien_roles_y_modelo_de_recibo(self):
         self._activar("Recibo Digital")
@@ -279,23 +279,26 @@ class PendientesDeEnvioTests(TestCase):
 
     def test_con_legajos_pide_roles_pero_no_modelo_de_recibo(self):
         self._activar("Legajos")
-        self.assertEqual(self._pasos(), [1, 4, 5])
+        self.assertEqual(self._pasos(), [1, 2, 4, 5])
 
-    def test_con_fichada_no_pide_nada_extra(self):
+    def test_con_fichada_pide_al_menos_una_sucursal(self):
         self._activar("Fichada")
-        self.assertEqual(self._pasos(), [1, 4])
+        self.assertEqual(self._pasos(), [1, 2, 3, 4])
 
     def test_la_razon_social_sola_no_alcanza_hace_falta_el_cuit(self):
         self.cliente.razon_social = "Empresa S.A."
         self.cliente.save()
         self.assertIn(1, self._pasos())
 
-    def test_todo_completo_no_deja_pendientes(self):
+    def test_sin_recibo_digital_lo_unico_que_falta_con_todo_lo_demas_cargado_es_el_modulo(self):
         self.cliente.razon_social = "Empresa S.A."
         self.cliente.cuits = "30-50001091-2"
         self.cliente.save()
         Empleado.objects.create(implementacion=self.implementacion, cuil="20111111112", nombre="A", apellido="B")
-        self.assertEqual(services.pendientes_de_envio(self.implementacion), [])
+        self.assertEqual(
+            services.pendientes_de_envio(self.implementacion),
+            [{"paso": 2, "mensaje": "Recibo Digital es obligatorio en toda implementación."}],
+        )
 
     def test_un_rol_sin_nombre_no_cuenta(self):
         self._activar("Legajos")

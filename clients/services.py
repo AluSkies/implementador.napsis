@@ -271,6 +271,24 @@ def guardar_version(implementacion, seccion, actor):
     )
 
 
+# Estas secciones no forman parte de lo que se configura: cambiarlas no invalida una validación.
+SECCIONES_QUE_NO_INVALIDAN = {"fecha_implementacion"}
+
+
+def revocar_validacion(implementacion, actor, seccion):
+    """Si la implementación ya estaba validada y alguien cambia algo de lo que se va a configurar, vuelve
+    a «Documentación completa - Pendiente de validación»: no se configura con datos distintos a los que
+    se aprobaron. (La `ConfiguracionCongelada` anterior queda como historia.) Devuelve si revocó."""
+    revocadas = Implementacion.objects.filter(
+        pk=implementacion.pk, estado=Implementacion.ESTADO_PENDIENTE, validada_en__isnull=False,
+    ).update(validada_en=None)
+    if not revocadas:
+        return False
+    implementacion.validada_en = None
+    eventos.registrar(actor, "estado.validacion_revocada", implementacion, seccion=seccion)
+    return True
+
+
 @contextmanager
 def cambio_de_seccion(implementacion, seccion, actor, accion="paso.guardado", datos=None):
     """Envuelve el guardado de una sección: deja la foto anterior en el historial, deja que el
@@ -280,7 +298,7 @@ def cambio_de_seccion(implementacion, seccion, actor, accion="paso.guardado", da
         antes = guardar_version(implementacion, seccion, actor).datos
         yield
         despues = _SNAPSHOT_BUILDERS[seccion](_fresca(implementacion))
-        eventos.registrar(
-            actor, accion, implementacion, seccion=seccion,
-            datos={**(datos or {}), "cambios": eventos.diferencias(antes, despues)},
-        )
+        cambios = eventos.diferencias(antes, despues)
+        eventos.registrar(actor, accion, implementacion, seccion=seccion, datos={**(datos or {}), "cambios": cambios})
+        if cambios and seccion not in SECCIONES_QUE_NO_INVALIDAN:
+            revocar_validacion(implementacion, actor, seccion)

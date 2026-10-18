@@ -25,7 +25,7 @@ from clients.models import (
     UbicacionFirma,
 )
 from automatizacion import actores, eventos
-from clients.services import cambio_de_seccion, guardar_version
+from clients.services import cambio_de_seccion, guardar_version, revocar_validacion
 from employees.models import Empleado, ImportBatch
 from employees.services import COLUMNAS, leer_archivo_empleados, normalizar_cuil
 
@@ -135,6 +135,12 @@ def pendientes_de_envio(implementacion):
     if not (cliente.razon_social and cliente.cuits):
         pendientes.append({"paso": PASO_DATOS, "mensaje": "Completar la razón social y el CUIT de la empresa."})
 
+    if not implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
+        pendientes.append({"paso": PASO_MODULOS, "mensaje": "Recibo Digital es obligatorio en toda implementación."})
+
+    if PASO_SUCURSALES in activos and not implementacion.sucursales.exclude(nombre="").exists():
+        pendientes.append({"paso": PASO_SUCURSALES, "mensaje": "Cargar al menos una sucursal (el módulo Fichada la necesita)."})
+
     if PASO_ROLES in activos:
         roles = list(implementacion.roles.exclude(apellido_nombre=""))
         faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in {r.rol for r in roles}]
@@ -166,6 +172,10 @@ def pendientes_de_envio(implementacion):
             pendientes.append({
                 "paso": PASO_FIRMA, "mensaje": "Subir la imagen de la firma y ubicarla sobre el recibo.",
             })
+        elif firma.estado == UbicacionFirma.ESTADO_OBSERVADA:
+            pendientes.append({
+                "paso": PASO_FIRMA, "mensaje": "Ajustar la firma según lo que pidió el equipo de Napsis.",
+            })
 
     if not implementacion.empleados.exists():
         pendientes.append({"paso": PASO_NOMINA, "mensaje": "Cargar la nómina de empleados (al menos una persona)."})
@@ -179,6 +189,19 @@ def pendientes_de_envio(implementacion):
             })
 
     return sorted(pendientes, key=lambda p: p["paso"])
+
+
+def pendientes_de_validacion(implementacion):
+    """Los textos de lo que le impide al equipo validar la documentación: lo mismo que impide el envío
+    más que la firma tiene que estar validada. Es lo que se le muestra en la ficha antes de validar."""
+    mensajes = [p["mensaje"] for p in pendientes_de_envio(implementacion)]
+    firma = implementacion.firma
+    if (
+        implementacion.usa_modulo(Modulo.RECIBO_DIGITAL) and firma is not None and firma.imagen
+        and firma.estado == UbicacionFirma.ESTADO_PROPUESTA
+    ):
+        mensajes.append("Falta validar la firma del recibo.")
+    return mensajes
 
 
 def tipos_documento_disponibles(implementacion):
@@ -207,9 +230,12 @@ def guardar_datos_contacto(implementacion, form, actor):
 
 
 def guardar_modulos(implementacion, modulos_qs, activos_ids, actor):
+    """Guarda qué módulos tiene la implementación. Recibo Digital es el corazón del producto: va en
+    todas, no se puede sacar (ni el cliente ni el equipo)."""
     with cambio_de_seccion(implementacion, "modulos", actor):
         for modulo in modulos_qs:
-            implementacion.modulos.update_or_create(modulo=modulo, defaults={"activo": modulo.id in activos_ids})
+            activo = modulo.id in activos_ids or modulo.codigo == Modulo.RECIBO_DIGITAL
+            implementacion.modulos.update_or_create(modulo=modulo, defaults={"activo": activo})
 
 
 def vincular_roles_con_nomina(implementacion):
@@ -478,6 +504,8 @@ def _cargar_empleados(implementacion, archivo, lectura, actor):
 
     # El alta de empleados nuevos se cuenta (cada uno ya queda en `Empleado`); lo que se PISA
     # (valores que cambiaron en empleados existentes) se detalla, porque la base no lo conserva.
+    if nuevos or actualizados:
+        revocar_validacion(implementacion, actor, "empleados")
     eventos.registrar(
         actor, "nomina.importada", implementacion, seccion="empleados",
         datos={
@@ -523,6 +551,7 @@ def agregar_empleado(implementacion, empleado_form, actor):
             vincular_roles_con_nomina(implementacion)
             eventos.registrar(actor, "empleado.agregado", implementacion, seccion="empleados",
                               datos={"empleado_id": empleado.pk})
+            revocar_validacion(implementacion, actor, "empleados")
     except IntegrityError:
         # Doble clic o dos personas cargando al mismo tiempo: el CUIL ya está.
         empleado_form.add_error("cuil", "Ya hay un empleado cargado con ese CUIL.")
@@ -547,6 +576,8 @@ def editar_empleado(implementacion, empleado_form, actor):
             vincular_roles_con_nomina(implementacion)
             eventos.registrar(actor, "empleado.editado", implementacion, seccion="empleados",
                               datos={"empleado_id": empleado.pk, "cambios": cambios})
+            if cambios:
+                revocar_validacion(implementacion, actor, "empleados")
     except IntegrityError:
         empleado_form.add_error("cuil", "Ya hay un empleado cargado con ese CUIL.")
         return False
@@ -566,3 +597,4 @@ def eliminar_empleado(implementacion, empleado_id, actor):
         empleado.delete()
         eventos.registrar(actor, "empleado.eliminado", implementacion, seccion="empleados",
                           datos={"empleado_id": int(empleado_id), "foto": foto})
+        revocar_validacion(implementacion, actor, "empleados")

@@ -172,7 +172,7 @@
                 <div class="modulos-grid">
                     {% for modulo in modulos %}
                         <div class="checkbox-row">
-                            <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}" {% if modulo.id|stringformat:"s" in alta.modulos %}checked{% endif %}>
+                            <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}" {% if modulo.codigo == "recibo_digital" %}checked onclick="return false"{% elif modulo.id|stringformat:"s" in alta.modulos %}checked{% endif %}>
                             <label for="modulo_{{ modulo.id }}">{{ modulo.nombre }}</label>
                         </div>
                     {% endfor %}

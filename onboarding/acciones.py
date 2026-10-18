@@ -299,11 +299,7 @@ def aprobar_para_configurar(actor, implementacion):
         return Resultado(implementacion=implementacion, avisos=[
             Aviso(messages.ERROR, "Solo se puede validar una implementación enviada por el cliente y todavía sin validar."),
         ])
-    pendientes = [p["mensaje"] for p in services.pendientes_de_envio(implementacion)]
-    if implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
-        firma = implementacion.firma
-        if firma is not None and firma.imagen and firma.estado != UbicacionFirma.ESTADO_VALIDADA:
-            pendientes.append("Falta validar la firma del recibo.")
+    pendientes = services.pendientes_de_validacion(implementacion)
     if pendientes:
         return Resultado(implementacion=implementacion, avisos=[
             Aviso(messages.ERROR, "No se puede validar: todavía falta completar datos obligatorios. " + " ".join(pendientes)),
@@ -413,7 +409,12 @@ def devolver_al_cliente(actor, implementacion, motivo, observaciones=None, base_
 
 
 def marcar_cumplida(actor, implementacion, base_url=None):
-    """El equipo terminó de implementar. Se le avisa al cliente por mail (si falla, queda cumplida igual)."""
+    """El equipo terminó de implementar. Se le avisa al cliente por mail (si falla, queda cumplida igual).
+    Solo se puede cumplir lo que ya está validado: la configuración parte de lo que se aprobó."""
+    if not (_puede_revisarse(implementacion) and implementacion.validada_en):
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo se puede marcar como cumplida una implementación ya validada."),
+        ])
     estado_anterior = implementacion.estado
     with transaction.atomic():
         implementacion.marcar_cumplida()

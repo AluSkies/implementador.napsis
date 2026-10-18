@@ -184,7 +184,7 @@ class EstadoDeLaImplementacionTests(TestCase):
     def setUp(self):
         self.cliente = Cliente.objects.create(nombre="Empresa A")
         self.implementacion = Implementacion.objects.create(
-            cliente=self.cliente, mail_contacto="contacto@a.com", enviado=timezone.now(),
+            cliente=self.cliente, mail_contacto="contacto@a.com", enviado=timezone.now(), validada_en=timezone.now(),
         )
 
     def test_reasignar_registra_de_quien_a_quien(self):

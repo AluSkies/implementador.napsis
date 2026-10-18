@@ -506,6 +506,10 @@ def implementacion_detalle(request, pk):
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
         "rondas": implementacion.rondas.all(),
+        "pendientes_de_validacion": (
+            onboarding_services.pendientes_de_validacion(implementacion)
+            if implementacion.enviado and not implementacion.validada_en else []
+        ),
         "pasos_observables": [
             (onboarding_services.CODIGO_DE_PASO[n], onboarding_services.TITULOS_PASO[n])
             for n in onboarding_services.pasos_activos(implementacion) if n != onboarding_services.PASO_REVISION

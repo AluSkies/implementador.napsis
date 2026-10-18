@@ -107,6 +107,11 @@ El cliente no puede enviar el relevamiento hasta completar (el paso 10 lista lo 
 - **Modelo de recibo** en PDF (paso 6; si hay Recibo Digital).
 - **Firma del recibo** (paso 7; si hay Recibo Digital): la imagen de la firma y su ubicación sobre el recibo.
 - **Nómina** (paso 4): al menos un empleado.
+- **Recibo Digital**: es obligatorio en toda implementación (no se puede desmarcar, ni el cliente ni el equipo).
+- **Sucursales** (paso 3; si hay Fichada): al menos una con nombre.
+- **Firma observada**: si el equipo la observó, el cliente tiene que ajustarla antes de volver a enviar.
+
+**Validar y cumplir.** «Validar documentación» repite este mismo control y además exige la firma validada; la ficha muestra qué falta antes de apretar el botón. Solo se puede marcar como **cumplida** una implementación ya validada. Si después de validar el equipo cambia algo de lo que se va a configurar (datos, módulos, roles, sucursales, liquidaciones, firma, nómina…), la validación **se pierde** y vuelve a «Documentación completa - Pendiente de validación» (queda el evento `estado.validacion_revocada`); cambiar solo la fecha de implementación no la invalida.
 
 **Condiciones del proceso.** Al crear la implementación (y después desde su ficha) el equipo decide qué deja fijo y qué decide el cliente. Cada dato se bloquea **al completarlo**; si se deja vacío, lo decide el cliente:
 
