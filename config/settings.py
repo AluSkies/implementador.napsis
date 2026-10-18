@@ -229,9 +229,6 @@ IMPLEMENTATION_TEAM_EMAILS = [
 # definiendo ERROR_ALERT_EMAILS (lista separada por comas); necesita el SMTP de .env.mail.
 ERROR_ALERT_EMAILS = [e.strip() for e in os.environ.get("ERROR_ALERT_EMAILS", "").split(",") if e.strip()]
 
-# Google Apps Script Web App URL que appendea una fila al Sheet de seguimiento.
-GOOGLE_SHEETS_WEBHOOK_URL = os.environ.get("GOOGLE_SHEETS_WEBHOOK_URL", "")
-
 # Base pública del portal, usada para armar los links únicos de implementación.
 SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://localhost:8000")
 

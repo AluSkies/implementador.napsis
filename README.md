@@ -11,7 +11,7 @@ Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis.
 - `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Se cargan con `manage.py seed_catalogos` (a partir del relevamiento original), no con una migración.
 - `onboarding/` — el wizard público (9 pasos) y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
 - `employees/` — Empleado, ImportBatch (ambos FK a Implementacion), parser/validador de la plantilla masiva (`employees/services.py`) y generador de la plantilla vacía descargable.
-- `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones), y el POST a un webhook de Google Apps Script para el dump a Sheets.
+- `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones).
 - `dashboard/` — panel interno con login: listado de implementaciones, ficha de cliente con su historial, generación de links, anular/reiniciar una implementación, atender pedidos de revisión.
 
 Todos los datos que se completan en el wizard (roles, sucursales, módulos, licencias, novedades, documentos de legajo, empleados) cuelgan de `Implementacion`, no de `Cliente` — así una misma empresa puede repetir el proceso en el futuro sin arrastrar datos de una ronda anterior.
@@ -62,18 +62,9 @@ Al correr los tests `settings.py` cambia el hasher de contraseñas a uno rápido
 - `DJANGO_EMAIL_BACKEND` (usa el backend de consola en dev; en producción el SMTP — `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, etc. — va en un archivo aparte, `.env.mail`, que maneja deploy: ver `deploy/CORREO.md`)
 - `IMPLEMENTATION_TEAM_EMAILS` — lista separada por comas que recibe el mail de resumen al completarse una implementación.
 - `TRUSTED_PROXY_COUNT` — cuántos proxies reverso propios hay delante de la app (default `1` en producción, `0` en desarrollo). Lo usa el límite de intentos de login para saber la IP real del cliente.
-- `GOOGLE_SHEETS_WEBHOOK_URL` — URL del Google Apps Script Web App que appendea la fila al Sheet de seguimiento (ver abajo). Si queda vacío, ese paso se omite (se loggea, no rompe el flujo).
 - `SITE_BASE_URL` — usado para armar links absolutos en los mails cuando no hay `request` disponible.
 - `MYSQL_DB`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_HOST`, `MYSQL_PORT` — la base en producción. Si `MYSQL_DB` no está seteado, la app usa SQLite (desarrollo y tests).
 - `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_PASSWORD`, `DJANGO_SUPERUSER_EMAIL` — opcionales; `manage.py ensure_superuser` crea ese superusuario si no existe (útil donde no hay shell).
-
-## Integración con Google Sheets
-
-El envío final hace un `POST` con JSON al `GOOGLE_SHEETS_WEBHOOK_URL`. Para armarlo:
-
-1. Crear un Google Sheet de seguimiento.
-2. Extensiones → Apps Script, y publicar un `doPost(e)` que parsee `e.postData.contents` (JSON) y haga `sheet.appendRow([...])` con los campos que se necesiten (el payload incluye: razón social, CUIT, mail/teléfono de contacto, módulos, licencias, novedades, documentos activos, cantidad de empleados/sucursales, roles).
-3. Implementar como aplicación web (acceso "Cualquier usuario"), copiar la URL del deployment y pegarla en `GOOGLE_SHEETS_WEBHOOK_URL`.
 
 ## Producción
 
@@ -123,7 +114,7 @@ Cada implementación tiene un **implementador asignado** (por defecto quien la c
 
 ## Reporte exportable
 
-Al pie del panel (`/panel/`), el botón **Exportar (.xlsx)** descarga todas las implementaciones, sin filtros: empresa, razón social, CUIT(s), estado, paso actual, implementador asignado, quién la creó, mail y teléfono de contacto, fecha de solicitud, de envío del cliente y de implementación (real si está cumplida, estimada si no), módulos, cantidad de empleados y sucursales, y si hay un pedido de contacto sin atender. Los textos que parecen fórmulas (`=...`) se escriben como texto para que no se ejecuten al abrir el archivo en Excel (lo mismo en la nómina descargable y en el envío a Google Sheets).
+Al pie del panel (`/panel/`), el botón **Exportar (.xlsx)** descarga todas las implementaciones, sin filtros: empresa, razón social, CUIT(s), estado, paso actual, implementador asignado, quién la creó, mail y teléfono de contacto, fecha de solicitud, de envío del cliente y de implementación (real si está cumplida, estimada si no), módulos, cantidad de empleados y sucursales, y si hay un pedido de contacto sin atender. Los textos que parecen fórmulas (`=...`) se escriben como texto para que no se ejecuten al abrir el archivo en Excel (lo mismo en la nómina descargable).
 
 ## Seguridad y operación (producción)
 
@@ -152,6 +143,6 @@ Un mail que falla (SMTP caído) nunca rompe el flujo: queda en el log y, en el p
 1. Entrar a `/panel/`, loguearse, crear una implementación (elegís un Cliente existente o cargás uno nuevo con Nombre + CUIT(s); esto genera el link único).
 2. Abrir el link generado en una pestaña sin sesión (simula al cliente) y completar los 9 pasos.
 3. En el paso de empleados, se puede descargar la plantilla vacía, completarla y subirla, o cargar empleados a mano.
-4. Al enviar el paso 9, la implementación queda "Pendiente - Completo por cliente" (el cliente ya cargó todo; sigue pendiente porque el trabajo de implementar es del equipo), se dispara el mail (visible en consola en dev) y el POST a Sheets si está configurado. Pasa a "Cumplida" recién cuando el equipo la marca como cumplida desde el panel.
+4. Al enviar el paso 9, la implementación queda "Pendiente - Completo por cliente" (el cliente ya cargó todo; sigue pendiente porque el trabajo de implementar es del equipo), se disparan los mails (visibles en consola en dev). Pasa a "Cumplida" recién cuando el equipo la marca como cumplida desde el panel.
 5. Con el mismo link, el cliente puede volver a entrar y ver todo en solo lectura, y pedir que lo contacten ("Pedir que me contacten") — eso también manda un mail al equipo.
 6. Desde `/panel/`, en la ficha de la implementación, se puede reiniciar el link, anular la implementación (pasa a "Cancelada" y el cliente ya no puede completarla), y marcar como atendido un pedido de contacto.

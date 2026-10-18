@@ -1,6 +1,5 @@
 import logging
 
-import requests
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -90,15 +89,13 @@ def _enviar_mail_equipo(asunto, template, contexto, destinatarios):
 
 
 def notificar_implementacion_completa(implementacion, base_url=None):
-    """Dispara el mail al equipo de implementación y el dump a Google Sheets.
+    """Le avisa por mail al equipo de implementación que un cliente envió su relevamiento.
     Devuelve los destinatarios del mail (vacía si no se envió)."""
     contexto = {"detalle_url": _detalle_url(implementacion, base_url), **_resumen_dict(implementacion)}
-    enviados = _enviar_mail_equipo(
+    return _enviar_mail_equipo(
         f"Nueva implementación completada: {implementacion.cliente.nombre}",
         "notifications/mail_resumen.txt", contexto, _destinatarios(implementacion),
     )
-    _enviar_a_google_sheets(implementacion)
-    return enviados
 
 
 def notificar_revision_solicitada(implementacion, base_url=None):
@@ -169,26 +166,3 @@ def notificar_cliente_implementacion_cumplida(implementacion, base_url=None):
          "link": _base_url(base_url) + reverse("login")},
         mail_del_cliente(implementacion),
     )
-
-
-def _sin_formulas(valor):
-    """Google Sheets interpreta como fórmula un texto que empiece con = + - @ (y esos datos los
-    escribe el cliente). Con un apóstrofo adelante se guarda como texto."""
-    if isinstance(valor, str) and valor[:1] in ("=", "+", "-", "@"):
-        return "'" + valor
-    return valor
-
-
-def _enviar_a_google_sheets(implementacion):
-    if not settings.GOOGLE_SHEETS_WEBHOOK_URL:
-        logger.info("GOOGLE_SHEETS_WEBHOOK_URL no configurado; se omite el dump a Sheets.")
-        return
-
-    payload = {clave: _sin_formulas(valor) for clave, valor in _resumen_dict(implementacion).items()}
-    try:
-        response = requests.post(settings.GOOGLE_SHEETS_WEBHOOK_URL, json=payload, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException:
-        logger.exception(
-            "Falló el POST al webhook de Google Sheets para la implementación %s", implementacion.pk
-        )
