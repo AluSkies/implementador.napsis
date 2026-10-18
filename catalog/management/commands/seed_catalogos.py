@@ -13,7 +13,7 @@ existen, y no revierte activaciones/tipos "Otros" que haya cargado un cliente.
 from django.core.management.base import BaseCommand
 
 from catalog.codigos import codigo_desde_nombre
-from catalog.models import CampoDocumento, TipoDocumento, TipoLicencia, TipoNovedad
+from catalog.models import CampoDocumento, TipoDocumento, TipoLicencia, TipoLiquidacion, TipoNovedad
 
 LICENCIAS = [
     "Día de Cumpleaños",
@@ -32,6 +32,23 @@ LICENCIAS = [
     "Licencia por reserva de puesto",
     "Licencia SIN Goce de Sueldo",
     "Vacaciones",
+]
+
+# Napsis las crea solas al finalizar la configuración: el cliente no las elige.
+LICENCIAS_AUTOMATICAS = {"Vacaciones"}
+
+# En el orden del wizard de Napsis.
+LIQUIDACIONES = [
+    "Liquidación Normal",
+    "Aguinaldo",
+    "Anticipos",
+    "Formulario 1357",
+    "Ajustes",
+    "Liquidación Final",
+    "Primera Quincena",
+    "Segunda Quincena",
+    "Gratificación - Bono",
+    "Formulario 1357 Anual",
 ]
 
 NOVEDADES = [
@@ -136,10 +153,19 @@ class Command(BaseCommand):
         completar = options["completar"]
         sembrar_licencias = completar or not TipoLicencia.objects.exists()
         sembrar_novedades = completar or not TipoNovedad.objects.exists()
+        sembrar_liquidaciones = completar or not TipoLiquidacion.objects.exists()
         sembrar_documentos = completar or not TipoDocumento.objects.filter(implementacion=None).exists()
 
         for i, nombre in enumerate(LICENCIAS if sembrar_licencias else []):
-            TipoLicencia.objects.get_or_create(codigo=codigo_desde_nombre(nombre), defaults={"nombre": nombre, "orden": i})
+            TipoLicencia.objects.get_or_create(
+                codigo=codigo_desde_nombre(nombre),
+                defaults={"nombre": nombre, "orden": i, "automatica": nombre in LICENCIAS_AUTOMATICAS},
+            )
+
+        for i, nombre in enumerate(LIQUIDACIONES if sembrar_liquidaciones else []):
+            TipoLiquidacion.objects.get_or_create(
+                codigo=codigo_desde_nombre(nombre), defaults={"nombre": nombre, "orden": i},
+            )
 
         for i, nombre in enumerate(NOVEDADES if sembrar_novedades else []):
             TipoNovedad.objects.get_or_create(codigo=codigo_desde_nombre(nombre), defaults={"nombre": nombre, "orden": i})
@@ -165,11 +191,13 @@ class Command(BaseCommand):
 
         omitidos = [
             nombre for nombre, sembro in (
-                ("licencias", sembrar_licencias), ("novedades", sembrar_novedades), ("documentos", sembrar_documentos),
+                ("licencias", sembrar_licencias), ("novedades", sembrar_novedades), ("liquidaciones", sembrar_liquidaciones),
+                ("documentos", sembrar_documentos),
             ) if not sembro
         ]
         self.stdout.write(self.style.SUCCESS(
             f"Catálogo listo: {len(LICENCIAS)} licencias, {len(NOVEDADES)} novedades, "
+            f"{len(LIQUIDACIONES)} tipos de liquidación, "
             f"{len(TIPOS_DOCUMENTO)} tipos de documento."
             + (f" Ya tenían datos y no se tocaron: {', '.join(omitidos)}." if omitidos else "")
         ))

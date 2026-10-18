@@ -22,6 +22,7 @@ from onboarding.forms import (
     DocumentosLegajoForm,
     ImplementacionDatosForm,
     LicenciasNovedadesForm,
+    LiquidacionesForm,
     RolFormSet,
     SucursalFormSet,
 )
@@ -255,6 +256,15 @@ def _accion_actualizar_documentos(request, implementacion, actor):
     return {"documentos_form": form}
 
 
+def _accion_actualizar_liquidaciones(request, implementacion, actor):
+    form = LiquidacionesForm(request.POST, implementacion=implementacion)
+    if form.is_valid():
+        onboarding_services.guardar_liquidaciones(implementacion, form.cleaned_data["tipos_liquidacion"], actor)
+        messages.success(request, "Tipos de liquidación actualizados.")
+        return _volver(implementacion)
+    return {"liquidaciones_form": form}
+
+
 def _accion_agregar_empleado(request, implementacion, actor):
     empleado_form = EmpleadoForm(request.POST, implementacion=implementacion)
     if onboarding_services.agregar_empleado(implementacion, empleado_form, actor):
@@ -366,6 +376,7 @@ ACCIONES_DE_LA_FICHA = {
     "actualizar_sucursales": _accion_actualizar_sucursales,
     "actualizar_licencias_novedades": _accion_actualizar_licencias_novedades,
     "actualizar_documentos": _accion_actualizar_documentos,
+    "actualizar_liquidaciones": _accion_actualizar_liquidaciones,
     "agregar_empleado": _accion_agregar_empleado,
     "editar_empleado": _accion_editar_empleado,
     "eliminar_empleado": _accion_eliminar_empleado,
@@ -458,6 +469,7 @@ def implementacion_detalle(request, pk):
         "licencias_novedades_form": licencias_novedades_form,
         "documentos_rows": [(t, documentos_form[f"tipo_{t.id}_activo"]) for t in tipos_documento_qs],
         "documentos_form": documentos_form,
+        "liquidaciones_form": formularios_con_error.get("liquidaciones_form") or LiquidacionesForm(implementacion=implementacion),
         "empleado_form": formularios_con_error.get("empleado_form") or EmpleadoForm(implementacion=implementacion),
         "empleado_editando": empleado_editando,
         "empleado_edit_form": empleado_edit_form,

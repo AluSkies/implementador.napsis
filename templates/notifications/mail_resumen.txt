@@ -6,6 +6,7 @@ Contacto: {{ mail_contacto }} / {{ telefono }}
 Módulos contratados: {{ modulos }}
 Roles cargados: {{ roles }}
 Sucursales: {{ cantidad_sucursales }}
+Tipos de liquidación: {{ liquidaciones|default:"-" }}
 Licencias activadas: {{ licencias }}
 Novedades activadas: {{ novedades }}
 Documentos de legajo activados: {{ documentos_legajo }}

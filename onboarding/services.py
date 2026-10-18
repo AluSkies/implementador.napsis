@@ -12,9 +12,10 @@ from django.forms.models import model_to_dict
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from catalog.models import TipoDocumento
+from catalog.models import TipoDocumento, TipoLiquidacion
 from clients.models import (
     ImplementacionLicencia,
+    ImplementacionLiquidacion,
     ImplementacionNovedad,
     ImplementacionTipoDocumento,
     Modulo,
@@ -127,6 +128,11 @@ def pendientes_de_envio(implementacion):
 
     if PASO_CONFIGURACION in activos and not implementacion.modelo_recibo:
         pendientes.append({"paso": PASO_CONFIGURACION, "mensaje": "Subir el modelo de recibo (PDF)."})
+
+    if PASO_CONFIGURACION in activos and not implementacion.liquidaciones.filter(activo=True).exists():
+        pendientes.append({
+            "paso": PASO_CONFIGURACION, "mensaje": "Elegir al menos un tipo de liquidación.",
+        })
 
     if not implementacion.empleados.exists():
         pendientes.append({"paso": PASO_NOMINA, "mensaje": "Cargar la nómina de empleados (al menos una persona)."})
@@ -249,6 +255,16 @@ def guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_
             ImplementacionNovedad.objects.update_or_create(
                 implementacion=implementacion, tipo_novedad=novedad,
                 defaults={"activo": form.cleaned_data.get(f"novedad_{novedad.id}_activo", False)},
+            )
+
+
+def guardar_liquidaciones(implementacion, tipos, actor):
+    """Guarda qué tipos de liquidación usa la empresa (`tipos`: los elegidos; el resto queda inactivo)."""
+    elegidos = {t.pk for t in tipos}
+    with cambio_de_seccion(implementacion, "liquidaciones", actor):
+        for tipo in TipoLiquidacion.objects.all():
+            ImplementacionLiquidacion.objects.update_or_create(
+                implementacion=implementacion, tipo_liquidacion=tipo, defaults={"activo": tipo.pk in elegidos},
             )
 
 

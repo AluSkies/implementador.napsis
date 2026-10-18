@@ -44,10 +44,10 @@ class OrdenDelWizardTests(BaseWizard):
         self.assertRedirects(respuesta, _url(self.implementacion, 5), fetch_redirect_response=False)
 
     def test_los_pendientes_de_envio_apuntan_al_paso_correcto(self):
-        pendientes = {p["paso"]: p["mensaje"] for p in services.pendientes_de_envio(self.implementacion)}
-        self.assertIn("Cargar la nómina", pendientes[4])
-        self.assertIn("rol", pendientes[5])
-        self.assertIn("modelo de recibo", pendientes[6])
+        pendientes = [(p["paso"], p["mensaje"]) for p in services.pendientes_de_envio(self.implementacion)]
+        for paso, texto in ((4, "Cargar la nómina"), (5, "rol"), (6, "modelo de recibo"), (6, "tipo de liquidación")):
+            with self.subTest(texto=texto):
+                self.assertTrue(any(p == paso and texto in m for p, m in pendientes), pendientes)
 
 
 class RolesDesdeLaNominaTests(BaseWizard):

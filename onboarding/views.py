@@ -251,6 +251,7 @@ def _step_configuracion(request, implementacion, step):
         form = ConfiguracionForm(request.POST, request.FILES, instance=implementacion)
         if form.is_valid():
             services.guardar_datos_contacto(implementacion, form, _actor(request))
+            services.guardar_liquidaciones(implementacion, form.cleaned_data["tipos_liquidacion"], _actor(request))
             return _redirect_next(implementacion, step)
         _invalido(request, implementacion, step, form)
     else:
@@ -456,6 +457,9 @@ def _step_revision(request, implementacion, step):
             _invalido(request, implementacion, PASO_REVISION, fecha_form)
 
     resumen = {
+        "liquidaciones_activas": ", ".join(
+            implementacion.liquidaciones.filter(activo=True).order_by("tipo_liquidacion__orden", "tipo_liquidacion__nombre").values_list("tipo_liquidacion__nombre", flat=True)
+        ),
         "licencias_activas": implementacion.licencias.filter(activo=True).count(),
         "novedades_activas": implementacion.novedades.filter(activo=True).count(),
         "documentos_activos": implementacion.documentos_legajo.filter(activo=True).count(),

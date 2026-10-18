@@ -207,6 +207,20 @@
 </div>
 
 <div class="card section-readonly">
+    <h2>Tipos de liquidación</h2>
+    <p>{% for l in liquidaciones_activas %}{{ l.tipo_liquidacion.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguno elegido</span>{% endfor %}</p>
+    <details class="section-edit" {% if liquidaciones_form.errors %}open{% endif %}>
+        <summary class="btn secondary">Modificar sección</summary>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="actualizar_liquidaciones">
+            {{ liquidaciones_form.as_p }}
+            <div class="actions"><button class="btn secondary" type="submit">Guardar tipos de liquidación</button></div>
+        </form>
+    </details>
+</div>
+
+<div class="card section-readonly">
     <h2>Licencias y Novedades</h2>
     <dl>
         <dt>Licencias activas</dt>

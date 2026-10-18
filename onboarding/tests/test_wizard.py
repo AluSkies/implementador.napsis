@@ -7,7 +7,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from clients.models import Cliente, Implementacion, ImplementacionModulo, Modulo, PersonaRol
+from catalog.models import TipoLiquidacion
+from clients.models import (
+    Cliente, Implementacion, ImplementacionLiquidacion, ImplementacionModulo, Modulo, PersonaRol,
+)
 from employees.models import Empleado
 
 CUIT = "30-50001091-2"
@@ -29,6 +32,7 @@ class BaseWizard(TestCase):
         for nombre in self.modulos:
             modulo, _ = Modulo.objects.get_or_create(nombre=nombre)
             ImplementacionModulo.objects.create(implementacion=self.implementacion, modulo=modulo, activo=True)
+        self.liquidacion = TipoLiquidacion.objects.create(nombre="Liquidación Normal")
         self.client.force_login(self.usuario)
 
     CUIL_APODERADO = "20111111112"
@@ -57,6 +61,9 @@ class BaseWizard(TestCase):
         self.cliente.cuits = CUIT
         self.cliente.save()
         self.cargar_roles_completos()
+        ImplementacionLiquidacion.objects.update_or_create(
+            implementacion=self.implementacion, tipo_liquidacion=self.liquidacion, defaults={"activo": True},
+        )
         self.implementacion.modelo_recibo.save("m.pdf", SimpleUploadedFile("m.pdf", b"%PDF-1.4"))
         self.agregar_empleado()
 
@@ -176,7 +183,7 @@ class PasoRolesTests(BaseWizard):
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class PasoConfiguracionModeloDeReciboTests(BaseWizard):
     def _post(self, archivo=None):
-        datos = {"tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA"}
+        datos = {"tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA", "tipos_liquidacion": [self.liquidacion.pk]}
         if archivo:
             datos["modelo_recibo"] = archivo
         return self.client.post(_url(self.implementacion, 6), datos)

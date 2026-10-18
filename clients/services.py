@@ -116,6 +116,7 @@ def resumen_implementacion(implementacion):
         "sucursales": implementacion.sucursales.all(),
         "licencias_activas": implementacion.licencias.filter(activo=True).select_related("tipo_licencia"),
         "novedades_activas": implementacion.novedades.filter(activo=True).select_related("tipo_novedad"),
+        "liquidaciones_activas": implementacion.liquidaciones.filter(activo=True).select_related("tipo_liquidacion").order_by("tipo_liquidacion__orden", "tipo_liquidacion__nombre"),
         "documentos_activos": implementacion.documentos_legajo.filter(activo=True).select_related("tipo_documento"),
         "empleados": implementacion.empleados.select_related("sucursal", "reporta_a", "aprobador"),
         "versiones": implementacion.versiones.all()[:50],
@@ -171,6 +172,12 @@ def _snapshot_licencias_novedades(implementacion):
     }
 
 
+def _snapshot_liquidaciones(implementacion):
+    return {
+        liq.tipo_liquidacion.nombre: liq.activo for liq in implementacion.liquidaciones.select_related("tipo_liquidacion")
+    }
+
+
 def _snapshot_documentos(implementacion):
     return {d.tipo_documento.nombre: d.activo for d in implementacion.documentos_legajo.select_related("tipo_documento")}
 
@@ -203,6 +210,7 @@ _SNAPSHOT_BUILDERS = {
     "roles": _snapshot_roles,
     "sucursales": _snapshot_sucursales,
     "licencias_novedades": _snapshot_licencias_novedades,
+    "liquidaciones": _snapshot_liquidaciones,
     "documentos": _snapshot_documentos,
     "fecha_implementacion": _snapshot_fecha_implementacion,
     "condiciones": _snapshot_condiciones,

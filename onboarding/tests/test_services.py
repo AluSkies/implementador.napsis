@@ -275,7 +275,7 @@ class PendientesDeEnvioTests(TestCase):
 
     def test_con_recibo_digital_pide_tambien_roles_y_modelo_de_recibo(self):
         self._activar("Recibo Digital")
-        self.assertEqual(self._pasos(), [1, 4, 5, 6])
+        self.assertEqual(self._pasos(), [1, 4, 5, 6, 6])  # el modelo de recibo y los tipos de liquidación
 
     def test_con_legajos_pide_roles_pero_no_modelo_de_recibo(self):
         self._activar("Legajos")

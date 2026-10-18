@@ -6,6 +6,7 @@ from .models import (
     Cliente,
     Implementacion,
     ImplementacionLicencia,
+    ImplementacionLiquidacion,
     ImplementacionModulo,
     ImplementacionNovedad,
     ImplementacionTipoDocumento,
@@ -59,6 +60,7 @@ class ModuloAdmin(AdminConCodigo, admin.ModelAdmin):
     list_display = ("nombre", "codigo", "orden")
     # Renombrar un módulo es seguro (los pasos dependen del código); borrarlo no lo es.
 admin.site.register(ImplementacionLicencia)
+admin.site.register(ImplementacionLiquidacion)
 admin.site.register(ImplementacionNovedad)
 admin.site.register(ImplementacionTipoDocumento)
 

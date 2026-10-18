@@ -80,7 +80,7 @@ class ConfiguracionRespetaLosBloqueosTests(test_wizard.BaseWizard):
     def _post(self, **extra):
         datos = {
             "tipo_firma": "electronica", "nomenclatura_pdf": "mi_formato.pdf",
-            "segmentacion_liquidador": "POR SUCURSAL",
+            "segmentacion_liquidador": "POR SUCURSAL", "tipos_liquidacion": [self.liquidacion.pk],
             "modelo_recibo": SimpleUploadedFile("m.pdf", b"%PDF-1.4"),
             **extra,
         }

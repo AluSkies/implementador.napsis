@@ -18,6 +18,9 @@ def _resumen_dict(implementacion):
         implementacion_modulo.modulo.nombre
         for implementacion_modulo in implementacion.modulos.filter(activo=True)
     ]
+    liquidaciones_activas = [
+        liq.tipo_liquidacion.nombre for liq in implementacion.liquidaciones.filter(activo=True).select_related("tipo_liquidacion").order_by("tipo_liquidacion__orden", "tipo_liquidacion__nombre")
+    ]
     licencias_activas = [
         implementacion_licencia.tipo_licencia.nombre
         for implementacion_licencia in implementacion.licencias.filter(activo=True)
@@ -38,6 +41,7 @@ def _resumen_dict(implementacion):
         "mail_contacto": implementacion.mail_contacto,
         "telefono": implementacion.telefono,
         "modulos": ", ".join(modulos_activos),
+        "liquidaciones": ", ".join(liquidaciones_activas),
         "licencias": ", ".join(licencias_activas),
         "novedades": ", ".join(novedades_activas),
         "documentos_legajo": ", ".join(documentos_activos),

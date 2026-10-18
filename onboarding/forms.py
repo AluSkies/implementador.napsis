@@ -2,6 +2,7 @@ from django import forms
 from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
+from catalog.models import TipoLiquidacion
 from clients.models import Implementacion, PersonaRol, Sucursal
 from clients.validators import normalizar_cuits
 from employees.services import CUIL_RE, normalizar_cuil
@@ -167,7 +168,30 @@ def rol_formset_obligatorio(max_roles, cuils_nomina=None):
     return formset
 
 
-class ConfiguracionForm(forms.ModelForm):
+class LiquidacionesForm(forms.Form):
+    """Qué tipos de liquidación usa la empresa (al menos uno)."""
+
+    tipos_liquidacion = forms.ModelMultipleChoiceField(
+        label="Tipos de liquidación que usa la empresa", queryset=TipoLiquidacion.objects.all(),
+        widget=forms.CheckboxSelectMultiple, required=False,
+        help_text="Elegí todos los que usan. Por cada uno hay que configurar después la firma del recibo.",
+    )
+
+    def __init__(self, *args, implementacion=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if implementacion is not None:
+            self.fields["tipos_liquidacion"].initial = list(
+                implementacion.liquidaciones.filter(activo=True).values_list("tipo_liquidacion_id", flat=True)
+            )
+
+    def clean_tipos_liquidacion(self):
+        tipos = self.cleaned_data["tipos_liquidacion"]
+        if not tipos:
+            raise forms.ValidationError("Elegí al menos un tipo de liquidación.")
+        return tipos
+
+
+class ConfiguracionForm(LiquidacionesForm, forms.ModelForm):
     class Meta:
         model = Implementacion
         fields = CAMPOS_CONFIGURACION
@@ -179,7 +203,8 @@ class ConfiguracionForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, implementacion=kwargs.get("instance"), **kwargs)
+        self.order_fields(["tipos_liquidacion"] + CAMPOS_CONFIGURACION)
         # Lo que el implementador dejó fijo se muestra pero no se puede cambiar. Con
         # disabled=True Django ignora lo que llegue por POST y conserva el valor guardado,
         # así que tampoco se puede evadir editando el formulario a mano.
@@ -213,7 +238,8 @@ SucursalFormSet = formset_factory(SucursalForm, extra=5, can_delete=True)
 
 class LicenciasNovedadesForm(forms.Form):
     """El cliente solo elige qué licencias/novedades activar. La fecha de puesta en
-    vigencia la define después el equipo de implementación, no el cliente."""
+    vigencia la define después el equipo de implementación, no el cliente. Las licencias que
+    Napsis crea solas (Vacaciones) se muestran tildadas y no se pueden cambiar."""
 
     def __init__(self, *args, licencias_qs=None, novedades_qs=None, estado_por_licencia=None, estado_por_novedad=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -223,7 +249,8 @@ class LicenciasNovedadesForm(forms.Form):
         for licencia in licencias_qs:
             estado = estado_por_licencia.get(licencia.id, {})
             self.fields[f"licencia_{licencia.id}_activo"] = forms.BooleanField(
-                label=licencia.nombre, required=False, initial=estado.get("activo", False)
+                label=licencia.nombre, required=False, initial=licencia.automatica or estado.get("activo", False),
+                disabled=licencia.automatica,
             )
 
         for novedad in novedades_qs:

@@ -378,6 +378,24 @@ class ImplementacionLicencia(models.Model):
         return f"{self.implementacion} - {self.tipo_licencia}"
 
 
+class ImplementacionLiquidacion(models.Model):
+    """Qué tipos de liquidación usa la empresa (Recibo Digital)."""
+
+    implementacion = models.ForeignKey(
+        Implementacion, on_delete=models.CASCADE, related_name="liquidaciones"
+    )
+    tipo_liquidacion = models.ForeignKey("catalog.TipoLiquidacion", on_delete=models.PROTECT)
+    activo = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Tipo de liquidación de la implementación"
+        verbose_name_plural = "Tipos de liquidación de la implementación"
+        unique_together = ("implementacion", "tipo_liquidacion")
+
+    def __str__(self):
+        return f"{self.implementacion} - {self.tipo_liquidacion}"
+
+
 class ImplementacionNovedad(models.Model):
     implementacion = models.ForeignKey(
         Implementacion, on_delete=models.CASCADE, related_name="novedades"
@@ -426,6 +444,7 @@ class ImplementacionVersion(models.Model):
         ("roles", "Roles"),
         ("sucursales", "Sucursales"),
         ("licencias_novedades", "Licencias y Novedades"),
+        ("liquidaciones", "Tipos de liquidación"),
         ("documentos", "Documentos de Legajo"),
         ("empleados", "Empleados"),
         ("fecha_implementacion", "Fecha de implementación"),

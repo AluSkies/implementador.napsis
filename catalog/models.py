@@ -8,6 +8,9 @@ class TipoLicencia(ConCodigo):
 
     nombre = models.CharField(max_length=150, unique=True)
     orden = models.PositiveIntegerField(default=0)
+    automatica = models.BooleanField(
+        default=False, help_text="Napsis la crea sola al finalizar la configuración: no hay que elegirla.",
+    )
 
     class Meta:
         verbose_name = "Tipo de licencia"
@@ -27,6 +30,23 @@ class TipoNovedad(ConCodigo):
     class Meta:
         verbose_name = "Tipo de novedad"
         verbose_name_plural = "Tipos de novedad"
+        ordering = ["orden", "nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+class TipoLiquidacion(ConCodigo):
+    """Tipos de liquidación que puede usar una empresa con Recibo Digital (Liquidación Normal, Aguinaldo...).
+    El orden es el del wizard de Napsis. La cantidad de tipos activos define cuántas veces hay que
+    configurar la firma en el recibo."""
+
+    nombre = models.CharField(max_length=150, unique=True)
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Tipo de liquidación"
+        verbose_name_plural = "Tipos de liquidación"
         ordering = ["orden", "nombre"]
 
     def __str__(self):

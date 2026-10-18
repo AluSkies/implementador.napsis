@@ -79,6 +79,13 @@
     </table>
 </div>
 
+{% if liquidaciones_activas %}
+<div class="card">
+    <h2>Tipos de liquidación</h2>
+    <ul>{% for l in liquidaciones_activas %}<li>{{ l.tipo_liquidacion.nombre }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
 <div class="card">
     <h2>Licencias activas</h2>
     <ul>{% for l in licencias_activas %}<li>{{ l.tipo_licencia.nombre }}</li>{% empty %}<li class="muted">Ninguna</li>{% endfor %}</ul>
