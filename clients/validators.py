@@ -1,11 +1,49 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.images import get_image_dimensions
 
 
 def validar_tamanio_archivo(archivo):
     if archivo.size > settings.MAX_UPLOAD_SIZE_BYTES:
         limite_mb = settings.MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)
         raise ValidationError(f"El archivo no puede pesar más de {limite_mb}MB.")
+
+
+# Medidas que acepta el wizard de Napsis: fuera de rango rechaza la imagen y el paso se traba.
+LOGO_MAX = (200, 200)
+BANNER_MIN = (1500, 200)
+BANNER_MAX = (1600, 400)
+
+
+def _medidas(imagen):
+    ancho, alto = get_image_dimensions(imagen)
+    if hasattr(imagen, "seek"):
+        imagen.seek(0)
+    return ancho, alto
+
+
+def validar_medidas_logo(imagen):
+    """El logo puede medir hasta 200 × 200 px."""
+    ancho, alto = _medidas(imagen)
+    if ancho is None:
+        return  # no se pudo leer: ya lo rechaza el campo de imagen
+    if ancho > LOGO_MAX[0] or alto > LOGO_MAX[1]:
+        raise ValidationError(
+            f"El logo puede medir como máximo {LOGO_MAX[0]} × {LOGO_MAX[1]} px y el tuyo mide {ancho} × {alto} px. "
+            "Achicalo y volvé a subirlo."
+        )
+
+
+def validar_medidas_banner(imagen):
+    """El banner tiene que medir entre 1500 × 200 px y 1600 × 400 px."""
+    ancho, alto = _medidas(imagen)
+    if ancho is None:
+        return
+    if not (BANNER_MIN[0] <= ancho <= BANNER_MAX[0] and BANNER_MIN[1] <= alto <= BANNER_MAX[1]):
+        raise ValidationError(
+            f"El banner tiene que medir entre {BANNER_MIN[0]} × {BANNER_MIN[1]} y {BANNER_MAX[0]} × {BANNER_MAX[1]} px "
+            f"y el tuyo mide {ancho} × {alto} px. Ajustalo y volvé a subirlo."
+        )
 
 
 def _digito_verificador(base):

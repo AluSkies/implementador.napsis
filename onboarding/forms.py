@@ -4,7 +4,7 @@ from django.forms import BaseFormSet, formset_factory
 
 from catalog.models import TipoLiquidacion
 from clients.models import Implementacion, PersonaRol, Sucursal
-from clients.validators import normalizar_cuits
+from clients.validators import normalizar_cuits, validar_medidas_banner, validar_medidas_logo
 from employees.services import CUIL_RE, normalizar_cuil
 
 # Campos de Implementacion que completa el cliente en distintos pasos del wizard.
@@ -18,8 +18,25 @@ CAMPOS_CONFIGURACION = [
     "cantidad_capitas",
     "segmentacion_liquidador",
     "banner",
+    "logo",
     "modelo_recibo",
 ]
+
+AYUDA_BANNER = "Opcional. Tiene que medir entre 1500 × 200 y 1600 × 400 px: si no, Napsis lo rechaza."
+AYUDA_LOGO = "Opcional. Puede medir hasta 200 × 200 px: si no, Napsis lo rechaza."
+
+
+class ImagenesConMedidasMixin:
+    """El banner y el logo se validan contra las medidas que acepta el wizard de Napsis, y se
+    avisa cuáles son antes de subirlos (nunca se acepta en silencio algo que el destino rechaza)."""
+
+    def _validar_medidas_de_las_imagenes(self):
+        for nombre, validador, ayuda in (
+            ("banner", validar_medidas_banner, AYUDA_BANNER), ("logo", validar_medidas_logo, AYUDA_LOGO),
+        ):
+            if nombre in self.fields:
+                self.fields[nombre].validators.append(validador)
+                self.fields[nombre].help_text = ayuda
 
 
 class CamposEmpresaMixin:
@@ -69,13 +86,17 @@ class EmpresaForm(CamposEmpresaMixin, forms.ModelForm):
         fields = CAMPOS_DATOS_CONTACTO
 
 
-class ImplementacionDatosForm(CamposEmpresaMixin, forms.ModelForm):
+class ImplementacionDatosForm(ImagenesConMedidasMixin, CamposEmpresaMixin, forms.ModelForm):
     """Edición completa de los datos de contacto/configuración, para uso del
     equipo de implementación desde el panel (no del cliente vía el wizard)."""
 
     class Meta:
         model = Implementacion
         fields = CAMPOS_DATOS_CONTACTO + CAMPOS_CONFIGURACION
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._validar_medidas_de_las_imagenes()
 
 
 class ModulosForm(forms.Form):
@@ -191,7 +212,7 @@ class LiquidacionesForm(forms.Form):
         return tipos
 
 
-class ConfiguracionForm(LiquidacionesForm, forms.ModelForm):
+class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelForm):
     class Meta:
         model = Implementacion
         fields = CAMPOS_CONFIGURACION
@@ -205,6 +226,7 @@ class ConfiguracionForm(LiquidacionesForm, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, implementacion=kwargs.get("instance"), **kwargs)
         self.order_fields(["tipos_liquidacion"] + CAMPOS_CONFIGURACION)
+        self._validar_medidas_de_las_imagenes()
         # Lo que el implementador dejó fijo se muestra pero no se puede cambiar. Con
         # disabled=True Django ignora lo que llegue por POST y conserva el valor guardado,
         # así que tampoco se puede evadir editando el formulario a mano.

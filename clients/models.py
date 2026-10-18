@@ -198,6 +198,10 @@ class Implementacion(models.Model):
         "Banner de la Sociedad", upload_to="implementaciones/banners/", blank=True, null=True,
         validators=[validar_tamanio_archivo],
     )
+    logo = models.ImageField(
+        "Logo de la Sociedad", upload_to="implementaciones/logos/", blank=True, null=True,
+        validators=[validar_tamanio_archivo],
+    )
     modelo_recibo = models.FileField(
         "Modelo de recibo (PDF)", upload_to="implementaciones/modelos_recibo/", blank=True, null=True,
         validators=[validar_tamanio_archivo],

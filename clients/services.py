@@ -138,6 +138,7 @@ def _snapshot_datos_contacto(implementacion):
         "Nomenclatura de PDFs": implementacion.nomenclatura_pdf,
         "Cantidad de capitas": implementacion.cantidad_capitas,
         "Segmentación liquidador": implementacion.segmentacion_liquidador,
+        "Logo": implementacion.logo.url if implementacion.logo else None,
         "Banner": implementacion.banner.url if implementacion.banner else None,
         "Modelo de recibo": implementacion.modelo_recibo.url if implementacion.modelo_recibo else None,
     }

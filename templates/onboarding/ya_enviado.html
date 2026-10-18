@@ -45,6 +45,7 @@
                 {% endif %}
             </td>
         </tr>
+        <tr><th>Logo</th><td>{% if implementacion.logo %}<a href="{{ implementacion.logo.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
         <tr><th>Banner</th><td>{% if implementacion.banner %}<a href="{{ implementacion.banner.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
         <tr><th>Modelo de recibo</th><td>{% if implementacion.modelo_recibo %}<a href="{{ implementacion.modelo_recibo.url }}">Descargar</a>{% else %}—{% endif %}</td></tr>
     </table>

@@ -95,6 +95,7 @@
         <dt>Nomenclatura de PDFs</dt><dd>{{ implementacion.nomenclatura_pdf|default:"—" }}</dd>
         <dt>Cantidad de capitas</dt><dd>{{ implementacion.cantidad_capitas|default:"—" }}</dd>
         <dt>Segmentación liquidador</dt><dd>{{ implementacion.segmentacion_liquidador|default:"—" }}</dd>
+        <dt>Logo</dt><dd>{% if implementacion.logo %}<a href="{{ implementacion.logo.url }}">Descargar</a>{% else %}—{% endif %}</dd>
         <dt>Banner</dt><dd>{% if implementacion.banner %}<a href="{{ implementacion.banner.url }}">Descargar</a>{% else %}—{% endif %}</dd>
         <dt>Modelo de recibo</dt><dd>{% if implementacion.modelo_recibo %}<a href="{{ implementacion.modelo_recibo.url }}">Descargar</a>{% else %}—{% endif %}</dd>
     </dl>
