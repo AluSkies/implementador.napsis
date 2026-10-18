@@ -1,6 +1,6 @@
 # Arquitectura del Portal de Implementación
 
-Mapa del código para quien lo mantiene. Los diagramas están en [Mermaid](https://mermaid.js.org/): GitHub los dibuja directamente, y en VS Code se ven con la extensión *Markdown Preview Mermaid Support*. Describen la **versión del release**, pensada para implementadores humanos; lo que queda para la automatización está marcado en la última sección.
+Mapa del código para quien lo mantiene. Los diagramas están en [Mermaid](https://mermaid.js.org/): GitHub los dibuja directamente, y en VS Code se ven con la extensión *Markdown Preview Mermaid Support*. Describen la **versión del release**: una herramienta de **estado, control y trabajo del equipo de implementación**. **El portal no se conecta con Napsis**: no consume su API ni asume nada de ella. Configurar el producto es trabajo manual del equipo, fuera del portal; el portal releva, controla, registra el estado y guarda lo aprobado. Lo que podría venir con una automatización futura está marcado en la última sección.
 
 Índice: [1. Capas](#1-capas) · [2. Apps](#2-apps-y-dependencias) · [3. Modelo de datos](#3-modelo-de-datos) · [4. Wizard](#4-los-pasos-del-wizard) · [5. Estados](#5-estados-de-una-implementación) · [6. Recorrido completo](#6-recorrido-completo) · [7. Validar y congelar](#7-validar-y-congelar) · [8. Qué se registra](#8-qué-se-registra) · [9. Despliegue](#9-despliegue) · [10. Release y después](#10-qué-entra-en-el-release-y-qué-viene-después)
 
@@ -383,7 +383,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    subgraph Release["Release (implementadores humanos)"]
+    subgraph Release["Release: estado, control y trabajo del equipo"]
         direction TB
         R1["Wizard de 10 pasos"]
         R2["Editor de firma"]
@@ -393,10 +393,10 @@ flowchart LR
         R6["Configuración congelada"]
         R7["Panel, reporte .xlsx"]
     end
-    subgraph Despues["Después, con la automatización"]
+    subgraph Despues["Después, si se integra con Napsis"]
         direction TB
         D1["RF-07 archivo de 8 columnas"]
-        D2["RT-07 configuración ejecutada"]
+        D2["Registro de la configuración<br/>ejecutada en Napsis"]
         D3["RT-08 evaluación de automatizabilidad"]
         D4["RT-04 cola de tareas con reintentos"]
         D5["API y endpoint de HubSpot"]
@@ -405,6 +405,6 @@ flowchart LR
     Release --> Despues
 ```
 
-**La información se acumula desde el primer día**, sin necesidad de la cola: eventos con correcciones del equipo, rondas y sus motivos, firmas propuestas y corregidas, y configuraciones congeladas. La cola de tareas solo hace falta para *ejecutar* en segundo plano con reintentos.
+**Qué hace el portal en el release:** releva lo que el cliente informa, controla que esté completo y bien, deja el estado de cada caso visible para el equipo, registra quién hizo qué (eventos, rondas, correcciones) y guarda la configuración aprobada como foto inmutable. Esa foto es lo que el equipo usa como referencia al configurar a mano.
 
-**Qué se pierde sin el RT-07** (registro de la configuración ejecutada): el par «lo que pidió el cliente → cómo se configuró de verdad en Napsis». Hoy no hay dónde anotarlo. Es lo más valioso para entrenar a un agente y no necesita cola.
+**Lo que queda para más adelante** (nada de esto hace falta para el release, y varias piezas dependen de poder integrarse con Napsis): el archivo de 8 columnas, el registro de la configuración ejecutada en Napsis, la evaluación de automatizabilidad, la cola de tareas y la API para HubSpot. La arquitectura ya los admite —servicios sin `request`, códigos estables, eventos y configuración congelada—, pero hoy no se construyen.
