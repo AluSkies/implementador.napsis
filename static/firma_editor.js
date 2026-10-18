@@ -6,12 +6,12 @@
    numéricos (que son los que viajan en el formulario), así que sin JavaScript, sin poder arrastrar o si el
    recibo no se llega a mostrar, la firma se puede ubicar igual escribiendo los números.
 
-   Para mostrar el PDF se usa PDF.js (cdnjs, versión fija). */
+   Para mostrar el PDF se usa PDF.js, copiado en static/vendor/pdfjs/ (no se baja de ningún CDN). */
 (function () {
     "use strict";
     if (window.NapsisFirma) { return; }
 
-    var PDFJS = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    var PDFJS = document.currentScript.dataset.pdfjs;  // carpeta con pdf.min.js y pdf.worker.min.js
     var ELEMENTOS = [
         { codigo: "empresa", etiqueta: "Firma de la empresa" },
         { codigo: "conforme", etiqueta: "Empleado en conformidad" },

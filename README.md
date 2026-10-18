@@ -85,19 +85,26 @@ En ambos casos:
 
 ## Los pasos del wizard
 
-1. Datos de contacto · 2. Módulos · 3. Sucursales (con Fichada) · 4. **Nómina** · 5. **Roles** (con Recibo Digital o Legajos) · 6. Configuración de firma y adjuntos (con Recibo Digital) · 7. Licencias y Novedades (con Novedades) · 8. Documentos de legajo (con Legajos) · 9. Revisión y envío.
+1. Datos de contacto · 2. Módulos · 3. Sucursales (con Fichada) · 4. **Nómina** · 5. **Roles** (con Recibo Digital o Legajos) · 6. Configuración y adjuntos (con Recibo Digital) · 7. **Firma del recibo** (con Recibo Digital) · 8. Licencias y Novedades (con Novedades) · 9. Documentos de legajo (con Legajos) · 10. Revisión y envío.
 
 La nómina va **antes** que los roles para poder elegir a las personas con rol de esa lista (cada fila de roles tiene un buscador «Buscar en la nómina» que completa nombre, CUIL y mail), y las sucursales antes que la nómina para asignar a cada empleado la suya. En la nómina se puede **editar** a cada empleado (botón «Editar»; también desde la ficha del panel). Los números de paso están definidos una sola vez, como constantes, en `onboarding/services.py`.
 
 **Importar la nómina** (`.xlsx` o `.csv`, hasta 5.000 filas por archivo): se aceptan fechas reales de Excel o en texto (DD/MM/AAAA), CUIL con o sin guiones, y CSV de Excel en español (`;`, cp1252). Si el archivo no se puede leer, falta una columna obligatoria o es demasiado grande, se avisa con un mensaje claro y no se carga nada; las filas con error (CUIL inválido, fecha que no se entiende, valor demasiado largo, mail inválido) se informan con su número de fila y no impiden cargar las demás. La carga es todo-o-nada (una sola transacción) y en lote: 5.000 empleados tardan unos 4 segundos. Se avisa de las columnas desconocidas y de los «Reporta A / Aprobador» que no están en la nómina. **El archivo no se guarda** (tiene datos personales): solo queda el registro de la importación.
 
+**Firma del recibo.** El cliente sube la imagen de la firma del apoderado y, sobre su modelo de recibo, arrastra y redimensiona tres recuadros (firma de la empresa, empleado en conformidad y en disconformidad). Solo se guarda su **intención** (página y recuadros como fracciones de la página, más la imagen con su `sha256`): el portal no la traduce a Napsis. El equipo la **valida**, la **observa** (motivos de un catálogo cerrado; devuelve el relevamiento al cliente con una ronda) o la **corrige** desde la ficha, y no se puede validar la documentación con la firma sin validar. Las imágenes subidas nunca se borran ni se pisan. El recibo se dibuja en el navegador con PDF.js; si no se pudiera mostrar, la firma se ubica con los campos numéricos.
+
+## Decisiones deliberadas
+
+- **PDF.js viaja con el repositorio** (`static/vendor/pdfjs/`, ~1,4 MB) en lugar de cargarse desde un CDN. Es un peso a propósito: el cliente es corporativo y sus redes suelen bloquear dominios externos o exigir una lista de permitidos, y el editor de firma no puede quedar inutilizable por eso. La versión está fija (3.11.174, licencia Apache 2.0) y se actualiza a mano (`static/vendor/pdfjs/LEEME.md`).
+
 ## Qué exige el wizard antes de poder enviar
 
-El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo que falta, con link a cada paso, y el botón queda deshabilitado; el servidor lo valida igual):
+El cliente no puede enviar el relevamiento hasta completar (el paso 10 lista lo que falta, con link a cada paso, y el botón queda deshabilitado; el servidor lo valida igual):
 
 - **Razón social y CUIT** de la empresa (paso 1). El implementador puede cargarlos al crear la implementación; si no, los completa el cliente. Los CUIT se validan con su dígito verificador (acepta varios, separados por coma).
 - **Roles** (paso 5; si hay Recibo Digital o Legajos): al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.
 - **Modelo de recibo** en PDF (paso 6; si hay Recibo Digital).
+- **Firma del recibo** (paso 7; si hay Recibo Digital): la imagen de la firma y su ubicación sobre el recibo.
 - **Nómina** (paso 4): al menos un empleado.
 
 **Condiciones del proceso.** Al crear la implementación (y después desde su ficha) el equipo decide qué deja fijo y qué decide el cliente. Cada dato se bloquea **al completarlo**; si se deja vacío, lo decide el cliente:
@@ -108,7 +115,7 @@ El cliente no puede enviar el relevamiento hasta completar (el paso 9 lista lo q
 
 En el alta del panel estas condiciones están plegadas bajo **Opciones avanzadas**. El tipo de empresa (ART o comercial) no está: se agrega cuando se defina qué cambia en el proceso.
 
-**Fecha de implementación.** En el paso 9 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
+**Fecha de implementación.** En el paso 10 el cliente puede pedir una fecha (es opcional), pero no antes de **10 días hábiles** desde hoy (lunes a viernes; no se descuentan feriados). Si el equipo ya había puesto una fecha, esa se respeta tal cual. El equipo de implementación puede poner cualquier fecha desde el panel, sin ese mínimo.
 
 Cada implementación tiene un **implementador asignado** (por defecto quien la crea, se elige en el alta y se puede reasignar). Es quien lleva la implementación y, además de la lista `IMPLEMENTATION_TEAM_EMAILS`, recibe sus notificaciones.
 
