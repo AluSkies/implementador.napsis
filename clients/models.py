@@ -1,4 +1,5 @@
 import secrets
+import uuid
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -130,6 +131,24 @@ class Implementacion(models.Model):
 
     cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name="implementaciones")
     token = models.CharField(max_length=64, unique=True, default=generate_token, editable=False)
+
+    # Identificadores para integrar con otros sistemas. El `token` es secreto (es el link del cliente);
+    # el `uuid` es público y no revela nada; `origen` + `id_externo` identifican el caso en el sistema que
+    # lo originó (por ejemplo el ID del deal en el CRM) y evitan duplicarlo.
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    ORIGEN_PORTAL = "portal"
+    ORIGEN_HUBSPOT = "hubspot"
+    ORIGEN_API = "api"
+    ORIGEN_CHOICES = [
+        (ORIGEN_PORTAL, "Creada en el portal"),
+        (ORIGEN_HUBSPOT, "HubSpot"),
+        (ORIGEN_API, "API"),
+    ]
+    origen = models.CharField(max_length=20, choices=ORIGEN_CHOICES, default=ORIGEN_PORTAL)
+    id_externo = models.CharField(
+        "ID en el sistema de origen", max_length=100, null=True, blank=True,
+        help_text="Por ejemplo, el ID del deal en el CRM. Único por origen.",
+    )
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE)
     paso_actual = models.PositiveSmallIntegerField(default=1)
     modulos_editables_por_cliente = models.BooleanField(
@@ -217,6 +236,11 @@ class Implementacion(models.Model):
         verbose_name = "Implementación"
         verbose_name_plural = "Implementaciones"
         ordering = ["-creado"]
+        constraints = [
+            # Con NULL en `id_externo` no hay restricción (varios casos sin ID externo); MySQL no
+            # admite índices parciales, por eso es NULL y no una cadena vacía.
+            models.UniqueConstraint(fields=["origen", "id_externo"], name="implementacion_origen_id_externo_unico"),
+        ]
 
     def __str__(self):
         return f"{self.cliente} ({self.get_estado_display()})"

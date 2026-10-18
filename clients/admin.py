@@ -49,8 +49,8 @@ class SucursalInline(admin.TabularInline):
 @admin.register(Implementacion)
 class ImplementacionAdmin(admin.ModelAdmin):
     list_display = ("cliente", "estado", "paso_actual", "revision_solicitada", "creado", "enviado")
-    list_filter = ("estado", "revision_solicitada")
-    readonly_fields = ("token",)
+    list_filter = ("estado", "revision_solicitada", "origen")
+    readonly_fields = ("token", "uuid")
     inlines = [ImplementacionModuloInline, PersonaRolInline, SucursalInline]
 
 
