@@ -56,20 +56,24 @@ def _destinatarios(implementacion):
     return list(dict.fromkeys([*settings.IMPLEMENTATION_TEAM_EMAILS, *extra]))
 
 
-def _detalle_url(implementacion, request=None):
+def _base_url(base_url=None):
+    """La URL pública del portal: la que llegó en el pedido o, sin ella, la de la configuración."""
+    return (base_url or settings.SITE_BASE_URL).rstrip("/")
+
+
+def _detalle_url(implementacion, base_url=None):
     try:
-        path = reverse("dashboard:implementacion_detalle", kwargs={"pk": implementacion.pk})
-        base = request.build_absolute_uri("/") if request else settings.SITE_BASE_URL
-        return base.rstrip("/") + path
+        return _base_url(base_url) + reverse("dashboard:implementacion_detalle", kwargs={"pk": implementacion.pk})
     except Exception:
         return settings.SITE_BASE_URL
 
 
 def _enviar_mail_equipo(asunto, template, contexto, destinatarios):
-    """Envía un mail al equipo de implementación, o lo omite si no hay destinatarios."""
+    """Envía un mail al equipo de implementación, o lo omite si no hay destinatarios.
+    Devuelve la lista de destinatarios (vacía si no se envió)."""
     if not destinatarios:
         logger.warning("Sin destinatarios (IMPLEMENTATION_TEAM_EMAILS vacío y sin implementador asignado); se omite el mail.")
-        return
+        return []
 
     send_mail(
         subject=asunto,
@@ -78,33 +82,32 @@ def _enviar_mail_equipo(asunto, template, contexto, destinatarios):
         recipient_list=destinatarios,
         fail_silently=False,
     )
+    return destinatarios
 
 
-def notificar_implementacion_completa(implementacion, request=None):
-    """Dispara el mail al equipo de implementación y el dump a Google Sheets."""
-    contexto = {"detalle_url": _detalle_url(implementacion, request), **_resumen_dict(implementacion)}
-    _enviar_mail_equipo(
+def notificar_implementacion_completa(implementacion, base_url=None):
+    """Dispara el mail al equipo de implementación y el dump a Google Sheets.
+    Devuelve los destinatarios del mail (vacía si no se envió)."""
+    contexto = {"detalle_url": _detalle_url(implementacion, base_url), **_resumen_dict(implementacion)}
+    enviados = _enviar_mail_equipo(
         f"Nueva implementación completada: {implementacion.cliente.nombre}",
         "notifications/mail_resumen.txt", contexto, _destinatarios(implementacion),
     )
     _enviar_a_google_sheets(implementacion)
+    return enviados
 
 
-def notificar_revision_solicitada(implementacion, request=None):
+def notificar_revision_solicitada(implementacion, base_url=None):
     """El cliente pidió que lo contacten: avisa por mail al equipo de implementación."""
     contexto = {
         "razon_social": implementacion.cliente.razon_social or implementacion.cliente.nombre,
         "mensaje": implementacion.revision_mensaje,
-        "detalle_url": _detalle_url(implementacion, request),
+        "detalle_url": _detalle_url(implementacion, base_url),
     }
-    _enviar_mail_equipo(
+    return _enviar_mail_equipo(
         f"Pedido de contacto: {implementacion.cliente.nombre}",
         "notifications/mail_revision_solicitada.txt", contexto, _destinatarios(implementacion),
     )
-
-
-def _base_url(request=None):
-    return (request.build_absolute_uri("/") if request else settings.SITE_BASE_URL).rstrip("/")
 
 
 def mail_del_cliente(implementacion):
@@ -115,24 +118,26 @@ def mail_del_cliente(implementacion):
 
 
 def _enviar_mail_cliente(asunto, template, contexto, destinatario):
+    """Le escribe al cliente. Devuelve a quién (None si no hay mail cargado y no se mandó nada)."""
     if not destinatario:
         logger.info("El cliente no tiene mail cargado; se omite: %s", asunto)
-        return
+        return None
     send_mail(
         subject=asunto, message=render_to_string(template, contexto),
         from_email=settings.DEFAULT_FROM_EMAIL, recipient_list=[destinatario], fail_silently=False,
     )
+    return destinatario
 
 
-def enviar_invitacion(usuario, request=None):
+def enviar_invitacion(usuario, base_url=None):
     """Le manda al cliente un link para crear (o cambiar) su contraseña. El link vence a los
     `PASSWORD_RESET_TIMEOUT` segundos y se anula al usarlo. No toca la contraseña actual."""
-    base = _base_url(request)
+    base = _base_url(base_url)
     link = base + reverse("clave_confirmar", kwargs={
         "uidb64": urlsafe_base64_encode(force_bytes(usuario.pk)),
         "token": default_token_generator.make_token(usuario),
     })
-    _enviar_mail_cliente(
+    return _enviar_mail_cliente(
         "Tu acceso al Portal de Implementación de Napsis", "notifications/mail_invitacion.txt",
         {"usuario": usuario, "link": link, "login_url": base + reverse("login"),
          "dias": settings.PASSWORD_RESET_TIMEOUT // 86400},
@@ -140,24 +145,24 @@ def enviar_invitacion(usuario, request=None):
     )
 
 
-def notificar_cliente_relevamiento_recibido(implementacion, request=None):
-    """Confirma al cliente que Napsis recibió su relevamiento."""
+def notificar_cliente_relevamiento_recibido(implementacion, base_url=None):
+    """Confirma al cliente que Napsis recibió su relevamiento. Devuelve a quién se lo mandó."""
     cliente = implementacion.cliente
-    _enviar_mail_cliente(
+    return _enviar_mail_cliente(
         "Recibimos tu información", "notifications/mail_cliente_recibido.txt",
         {"razon_social": cliente.razon_social or cliente.nombre, "implementador": implementacion.asignado_nombre,
-         "link": _base_url(request) + reverse("login")},
+         "link": _base_url(base_url) + reverse("login")},
         mail_del_cliente(implementacion),
     )
 
 
-def notificar_cliente_implementacion_cumplida(implementacion, request=None):
-    """Le avisa al cliente que su implementación está lista."""
+def notificar_cliente_implementacion_cumplida(implementacion, base_url=None):
+    """Le avisa al cliente que su implementación está lista. Devuelve a quién se lo mandó."""
     cliente = implementacion.cliente
-    _enviar_mail_cliente(
+    return _enviar_mail_cliente(
         "Tu implementación está lista", "notifications/mail_cliente_cumplida.txt",
         {"razon_social": cliente.razon_social or cliente.nombre, "implementador": implementacion.asignado_nombre,
-         "link": _base_url(request) + reverse("login")},
+         "link": _base_url(base_url) + reverse("login")},
         mail_del_cliente(implementacion),
     )
 

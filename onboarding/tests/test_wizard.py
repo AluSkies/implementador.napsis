@@ -229,8 +229,8 @@ class Paso9EnvioTests(BaseWizard):
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
     def test_si_falla_el_mail_el_cliente_igual_queda_enviado(self):
         self.completar_todo()
-        with patch("onboarding.views.notificar_implementacion_completa", side_effect=OSError("SMTP caído")):
-            with self.assertLogs("onboarding.views", level="ERROR"):
+        with patch("onboarding.acciones.notificaciones.notificar_implementacion_completa", side_effect=OSError("SMTP caído")):
+            with self.assertLogs("onboarding.acciones", level="ERROR"):
                 respuesta = self._enviar()
         self.assertEqual(respuesta.status_code, 302)
         self.implementacion.refresh_from_db()

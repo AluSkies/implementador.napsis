@@ -1,12 +1,9 @@
-import logging
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
-from django.utils import timezone
 
 from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
@@ -14,13 +11,8 @@ from clients.models import Implementacion, Modulo
 from clients.services import resumen_implementacion
 from employees.forms import EmpleadoForm, ImportarArchivoForm
 from employees.services import ArchivoInvalido, generar_plantilla_xlsx
-from notifications.services import (
-    notificar_cliente_relevamiento_recibido,
-    notificar_implementacion_completa,
-    notificar_revision_solicitada,
-)
 
-from . import services
+from . import acciones, services
 from .forms import (
     ConfiguracionForm,
     DocumentosLegajoForm,
@@ -37,11 +29,23 @@ from .services import (
     PASO_REVISION, PASO_ROLES, PASO_SUCURSALES, TOTAL_PASOS,
 )
 
-logger = logging.getLogger(__name__)
-
-
 def _actor(request):
     return Actor.de_usuario(request.user)
+
+
+def _errores_de(formulario):
+    """Qué falló en un formulario o formset, sin los valores que se cargaron (solo campo y motivo)."""
+    if hasattr(formulario, "forms"):
+        return {
+            "filas": [_errores_de(f) for f in formulario.forms if f.errors],
+            "generales": [str(e) for e in formulario.non_form_errors()],
+        }
+    return {campo: [str(e) for e in errores] for campo, errores in formulario.errors.items()}
+
+
+def _invalido(request, implementacion, paso, formulario):
+    """El cliente intentó guardar un paso y algo no pasó la validación: queda registrado qué."""
+    acciones.registrar_validacion_fallida(_actor(request), implementacion, paso, _errores_de(formulario))
 
 
 TITULOS_PASO = {
@@ -140,12 +144,10 @@ def _vista_solo_lectura(request, implementacion, recien_enviado=False):
     if request.method == "POST" and request.POST.get("accion") == "pedir_revision":
         form = PedirRevisionForm(request.POST)
         if form.is_valid():
-            implementacion.pedir_revision(form.cleaned_data.get("mensaje", ""))
-            try:
-                notificar_revision_solicitada(implementacion, request=request)
-            except Exception:
-                logger.exception("No se pudo avisar al equipo el pedido de contacto de %s", implementacion.pk)
-            messages.success(request, "Le avisamos al equipo de Napsis que necesitás que te contacten.")
+            acciones.pedir_revision(
+                _actor(request), implementacion, form.cleaned_data.get("mensaje", ""),
+                base_url=request.build_absolute_uri("/"),
+            ).mostrar(request)
             return redirect("onboarding:wizard_step", token=implementacion.token, step=1)
     else:
         form = PedirRevisionForm()
@@ -184,6 +186,7 @@ def _step_empresa(request, implementacion, step):
         if form.is_valid():
             services.guardar_datos_contacto(implementacion, form, _actor(request))
             return _redirect_next(implementacion, step)
+        _invalido(request, implementacion, step, form)
     else:
         form = EmpresaForm(instance=implementacion)
     return render(request, "onboarding/step_empresa.html", _wizard_context(implementacion, step, {"form": form}))
@@ -225,6 +228,7 @@ def _step_roles(request, implementacion, step):
         if formset.is_valid():
             services.guardar_roles(implementacion, formset, _actor(request))
             return _redirect_next(implementacion, step)
+        _invalido(request, implementacion, step, formset)
     else:
         formset = RolesFormSet(initial=initial)
     nomina = [
@@ -246,6 +250,7 @@ def _step_configuracion(request, implementacion, step):
         if form.is_valid():
             services.guardar_datos_contacto(implementacion, form, _actor(request))
             return _redirect_next(implementacion, step)
+        _invalido(request, implementacion, step, form)
     else:
         form = ConfiguracionForm(instance=implementacion)
     return render(request, "onboarding/step_configuracion.html", _wizard_context(implementacion, step, {"form": form}))
@@ -267,6 +272,7 @@ def _step_sucursales(request, implementacion, step):
         if formset.is_valid():
             services.guardar_sucursales(implementacion, formset, _actor(request))
             return _redirect_next(implementacion, step)
+        _invalido(request, implementacion, step, formset)
     else:
         formset = SucursalFormSet(initial=initial)
     return render(request, "onboarding/step_sucursales.html", _wizard_context(implementacion, step, {"formset": formset}))
@@ -340,6 +346,9 @@ def _importar_archivo_empleados(request, implementacion):
             implementacion, import_form.cleaned_data["archivo"], _actor(request),
         )
     except ArchivoInvalido as error:
+        acciones.registrar_validacion_fallida(
+            _actor(request), implementacion, PASO_NOMINA, {"archivo": [str(error)]},
+        )
         return import_form, [{"fila": "-", "mensaje": str(error)}]
     for nivel, texto in services.resumen_importacion(filas, errores, advertencias):
         messages.add_message(request, nivel, texto)
@@ -352,6 +361,7 @@ def _agregar_empleado_manual(request, implementacion):
     if services.agregar_empleado(implementacion, empleado_form, _actor(request)):
         messages.success(request, "Empleado agregado.")
         return EmpleadoForm(implementacion=implementacion)
+    _invalido(request, implementacion, PASO_NOMINA, empleado_form)
     return empleado_form
 
 
@@ -375,6 +385,7 @@ def _step_empleados(request, implementacion, step):
             if services.editar_empleado(implementacion, edicion_form, _actor(request)):
                 messages.success(request, "Empleado actualizado.")
                 return redirect("onboarding:wizard_step", token=implementacion.token, step=step)
+            _invalido(request, implementacion, step, edicion_form)
         accion = None
     elif request.method == "GET":
         editando = _empleado_a_editar(implementacion, request.GET.get("editar"))
@@ -430,24 +441,17 @@ def _step_revision(request, implementacion, step):
     if enviando:
         if pendientes:
             messages.error(request, "Todavía falta completar algunos datos obligatorios para poder enviar.")
+            acciones.registrar_validacion_fallida(
+                _actor(request), implementacion, PASO_REVISION, {"pendientes": pendientes},
+            )
         elif fecha_form.is_valid():
-            fecha = fecha_form.cleaned_data["fecha_salida_productivo"]
-            if fecha != implementacion.fecha_salida_productivo:
-                services.guardar_fecha_implementacion(implementacion, fecha, _actor(request))
-            # Primero se registra el envío y recién después se avisa al equipo: si el mail
-            # falla (SMTP caído, etc.) el cliente no tiene por qué ver un error ni perder
-            # lo que ya terminó. La falla queda en el log.
-            implementacion.enviado = timezone.now()
-            implementacion.save(update_fields=["enviado"])
-            try:
-                notificar_implementacion_completa(implementacion, request=request)
-            except Exception:
-                logger.exception("No se pudo notificar al equipo la implementación %s", implementacion.pk)
-            try:
-                notificar_cliente_relevamiento_recibido(implementacion, request=request)
-            except Exception:
-                logger.exception("No se pudo confirmar al cliente la implementación %s", implementacion.pk)
+            acciones.enviar_relevamiento(
+                _actor(request), implementacion, fecha_form.cleaned_data["fecha_salida_productivo"],
+                base_url=request.build_absolute_uri("/"),
+            )
             return redirect("onboarding:enviado", token=implementacion.token)
+        else:
+            _invalido(request, implementacion, PASO_REVISION, fecha_form)
 
     resumen = {
         "licencias_activas": implementacion.licencias.filter(activo=True).count(),

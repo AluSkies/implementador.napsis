@@ -223,6 +223,11 @@ def _fresca(implementacion):
     return Implementacion.objects.select_related("cliente").get(pk=implementacion.pk)
 
 
+def foto_de_seccion(implementacion, seccion):
+    """Cómo está hoy una sección (el mismo formato que usa el historial de versiones)."""
+    return _SNAPSHOT_BUILDERS[seccion](_fresca(implementacion))
+
+
 def guardar_version(implementacion, seccion, actor):
     """Guarda una foto del estado ACTUAL de una sección, antes de que se le aplique un cambio."""
     return ImplementacionVersion.objects.create(

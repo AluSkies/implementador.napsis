@@ -1,10 +1,5 @@
-import logging
-
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
-from django.db import transaction
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -13,15 +8,14 @@ from django.utils.dateparse import parse_date
 from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Cliente, Implementacion, Modulo
-from clients.validators import normalizar_cuits
 from clients.services import (
     COLUMNAS_ORDENABLES,
-    crear_o_resetear_acceso,
     filtrar_y_ordenar_implementaciones,
     resumen_implementacion,
 )
 from employees.forms import EmpleadoForm, ImportarArchivoForm
 from employees.services import ArchivoInvalido, generar_nomina_xlsx
+from onboarding import acciones
 from onboarding import services as onboarding_services
 from onboarding.forms import (
     CondicionesForm,
@@ -31,8 +25,6 @@ from onboarding.forms import (
     RolFormSet,
     SucursalFormSet,
 )
-
-from notifications.services import enviar_invitacion, notificar_cliente_implementacion_cumplida
 
 from . import services as cuentas
 from .forms import ImplementadorAltaForm, ImplementadorEdicionForm
@@ -48,71 +40,16 @@ def _avisar_credenciales(request, titulo, username, password):
     )
 
 
-logger = logging.getLogger(__name__)
+def _mostrar(request, resultado):
+    """Muestra lo que dejó una acción: sus avisos y, si no se pudo hacer, sus errores."""
+    resultado.mostrar(request)
+    for error in resultado.errores:
+        messages.error(request, error)
+    return resultado
 
 
-def _entregar_acceso(request, cliente, username_deseado, mail=""):
-    """Crea o reinicia el acceso del cliente. Con un mail (y cuenta nueva) lo invita a crear
-    su propia contraseña; si no, genera una y se la muestra al equipo una única vez."""
-    era_nueva = not cliente.usuario
-    username, password = crear_o_resetear_acceso(cliente, username_deseado, email=mail)
-    _avisar_acceso(request, cliente, username, password, era_nueva)
-
-
-def _avisar_acceso(request, cliente, username, password, era_nueva):
-    """Le informa al equipo cómo quedó el acceso: la contraseña (una sola vez) o el mail de invitación."""
-    if password:
-        _avisar_credenciales(
-            request, "Acceso creado para el cliente" if era_nueva else "Nueva contraseña generada", username, password,
-        )
-    else:
-        _enviar_invitacion(request, cliente.usuario)
-
-
-def _enviar_invitacion(request, usuario):
-    """Manda el link para crear/cambiar la contraseña. Si el mail falla no se pierde nada:
-    el aviso lo dice y se puede reenviar desde la ficha."""
-    try:
-        enviar_invitacion(usuario, request=request)
-    except Exception:
-        logger.exception("No se pudo enviar la invitación al usuario %s", usuario.pk)
-        messages.warning(
-            request,
-            f"No se pudo enviar el mail a {usuario.email}. Usuario: {usuario.username}. "
-            "Probá de nuevo desde la ficha con «Enviar mail para crear contraseña».",
-        )
-    else:
-        messages.success(
-            request, f"Le mandamos a {usuario.email} un mail para que cree su contraseña (usuario: {usuario.username}).",
-        )
-
-
-def _mail_valido(request):
-    """El mail opcional del formulario de acceso: "" si no vino, None (y avisa) si es inválido."""
-    mail = request.POST.get("mail_cliente", "").strip()
-    if mail:
-        try:
-            validate_email(mail)
-        except ValidationError:
-            messages.error(request, "El mail no es válido.")
-            return None
-    return mail
-
-
-def _invitar_desde_panel(request, cliente, implementacion=None):
-    """Reenvía el link para crear/cambiar la contraseña al mail de la cuenta (o, si la cuenta
-    no tiene, al de contacto de la implementación, que queda guardado en la cuenta)."""
-    usuario = cliente.usuario
-    if not usuario:
-        messages.error(request, "El cliente todavía no tiene acceso creado.")
-        return
-    if not usuario.email and implementacion and implementacion.mail_contacto:
-        usuario.email = implementacion.mail_contacto
-        usuario.save(update_fields=["email"])
-    if not usuario.email:
-        messages.error(request, "No hay un mail cargado para este cliente: completalo en los datos de contacto.")
-        return
-    _enviar_invitacion(request, usuario)
+def _base_url(request):
+    return request.build_absolute_uri("/")
 
 
 def _implementador_elegido(request):
@@ -149,66 +86,32 @@ def _alta_de_implementacion(request, condiciones_form):
     """Crea la implementación (y la empresa, si es nueva) con lo que llegó del formulario de
     alta. Devuelve (implementacion, errores): si algo no pasó la validación la implementación
     es None y `errores` dice por qué (se muestran dentro del modal del alta)."""
-    cliente_id = request.POST.get("cliente_id")
-    nombre_nuevo = request.POST.get("nombre", "").strip()
-    razon_social_nueva = request.POST.get("razon_social", "").strip()
-    cuits_nuevo = request.POST.get("cuits", "").strip()
-    modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
-    errores = []
-
     if not condiciones_form.is_valid():
         detalle = " ".join(e for lista in condiciones_form.errors.values() for e in lista)
         return None, [f"Revisá las condiciones del proceso: {detalle}"]
 
-    mail_cliente = request.POST.get("mail_cliente", "").strip()
-    if mail_cliente:
-        try:
-            validate_email(mail_cliente)
-        except ValidationError:
-            return None, ["El mail del cliente no es válido."]
+    cliente_id = request.POST.get("cliente_id")
+    cliente, datos_cliente = None, {}
+    if cliente_id and cliente_id.isdigit():
+        cliente = Cliente.objects.filter(pk=cliente_id).first()
+    else:
+        datos_cliente = {
+            "nombre": request.POST.get("nombre", ""), "razon_social": request.POST.get("razon_social", ""),
+            "cuits": request.POST.get("cuits", ""),
+        }
 
-    acceso = None
-    # Todo o nada: empresa, cuenta, implementación y módulos. Si algo falla a mitad de camino no
-    # queda una empresa o un usuario suelto que después estorbe al reintentar. Los mensajes y el
-    # mail de invitación se mandan recién cuando ya está todo guardado.
-    with transaction.atomic():
-        cliente = None
-        if cliente_id and cliente_id.isdigit():
-            cliente = Cliente.objects.filter(pk=cliente_id).first()
-        elif nombre_nuevo:
-            # Razón social y CUIT son opcionales acá: si no se cargan, el cliente los
-            # completa (obligatorios) en el paso 1 del wizard.
-            try:
-                cuits_nuevo = normalizar_cuits(cuits_nuevo) if cuits_nuevo else ""
-            except ValidationError as error:
-                errores.append(error.messages[0])
-            else:
-                cliente = Cliente.objects.create(
-                    nombre=nombre_nuevo, razon_social=razon_social_nueva, cuits=cuits_nuevo,
-                )
-        if not cliente:
-            return None, errores or ["Elegí un cliente existente o completá el nombre de la empresa."]
-
-        if not cliente.usuario:
-            username, password = crear_o_resetear_acceso(
-                cliente, request.POST.get("username", "").strip(), email=mail_cliente,
-            )
-            acceso = (username, password)
-
-        implementacion = Implementacion(
-            cliente=cliente, creado_por=request.user, implementador_asignado=_implementador_elegido(request),
-            mail_contacto=mail_cliente,  # el paso 1 del cliente ya lo trae cargado
-            modulos_editables_por_cliente=bool(request.POST.get("modulos_editables")),
-        )
-        condiciones_form.aplicar(implementacion)
-        implementacion.save()
-        onboarding_services.guardar_modulos(
-            implementacion, Modulo.objects.all(), modulo_ids, actor=Actor.de_usuario(request.user),
-        )
-
-    if acceso:
-        _avisar_acceso(request, cliente, *acceso, era_nueva=True)
-    return implementacion, []
+    resultado = acciones.crear_implementacion(
+        Actor.de_usuario(request.user), cliente=cliente, datos_cliente=datos_cliente,
+        username=request.POST.get("username", ""), mail_cliente=request.POST.get("mail_cliente", ""),
+        implementador=_implementador_elegido(request), creado_por=request.user,
+        modulo_ids={int(v) for v in request.POST.getlist("modulos") if v.isdigit()},
+        modulos_editables=bool(request.POST.get("modulos_editables")), condiciones=condiciones_form,
+        base_url=_base_url(request),
+    )
+    if not resultado.ok:
+        return None, resultado.errores
+    resultado.mostrar(request)
+    return resultado.implementacion, []
 
 
 @staff_member_required(login_url="login")
@@ -255,15 +158,17 @@ def home(request):
 @staff_member_required(login_url="login")
 def cliente_detalle(request, pk):
     cliente = get_object_or_404(Cliente, pk=pk)
+    actor = Actor.de_usuario(request.user)
 
     if request.method == "POST" and request.POST.get("accion") == "regenerar_acceso":
-        mail = _mail_valido(request)
-        if mail is not None:
-            _entregar_acceso(request, cliente, request.POST.get("username", "").strip(), mail)
+        _mostrar(request, acciones.entregar_acceso(
+            actor, cliente, request.POST.get("username", ""), request.POST.get("mail_cliente", ""),
+            base_url=_base_url(request),
+        ))
         return redirect("dashboard:cliente_detalle", pk=pk)
 
     if request.method == "POST" and request.POST.get("accion") == "enviar_invitacion":
-        _invitar_desde_panel(request, cliente)
+        _mostrar(request, acciones.invitar_cliente(actor, cliente, base_url=_base_url(request)))
         return redirect("dashboard:cliente_detalle", pk=pk)
 
     implementaciones = cliente.implementaciones.order_by("-creado")
@@ -273,175 +178,217 @@ def cliente_detalle(request, pk):
     )
 
 
+# --- Ficha de la implementación: cada acción del formulario es una función ------------------
+#
+# Una acción devuelve un redirect (se hizo), un diccionario con el formulario que falló (se vuelve a
+# mostrar la página con sus errores) o None (acción desconocida: no pasa nada).
+
+
 def _empleado_del_panel(implementacion, empleado_id):
     return implementacion.empleados.filter(pk=empleado_id).first() if str(empleado_id).isdigit() else None
 
 
-def _manejar_accion_implementacion(request, implementacion):
-    """Procesa el POST de implementacion_detalle. Devuelve un redirect si la acción
-    fue manejada, o None si hay que renderizar la página (con errores de formulario, por ej.)."""
-    accion = request.POST.get("accion")
-    pk = implementacion.pk
-    actor = Actor.de_usuario(request.user)
+def _volver(implementacion):
+    return redirect("dashboard:implementacion_detalle", pk=implementacion.pk)
 
-    if accion == "actualizar_datos":
-        form = ImplementacionDatosForm(request.POST, request.FILES, instance=implementacion)
-        if form.is_valid():
-            onboarding_services.guardar_datos_contacto(implementacion, form, actor)
-            messages.success(request, "Datos de contacto actualizados.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"datos_form": form}
 
-    if accion == "actualizar_modulos":
-        modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
-        onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, actor)
-        implementacion.modulos_editables_por_cliente = bool(request.POST.get("modulos_editables"))
-        implementacion.save(update_fields=["modulos_editables_por_cliente"])
-        return redirect("dashboard:implementacion_detalle", pk=pk)
+def _accion_actualizar_datos(request, implementacion, actor):
+    form = ImplementacionDatosForm(request.POST, request.FILES, instance=implementacion)
+    if form.is_valid():
+        onboarding_services.guardar_datos_contacto(implementacion, form, actor)
+        messages.success(request, "Datos de contacto actualizados.")
+        return _volver(implementacion)
+    return {"datos_form": form}
 
-    if accion == "actualizar_roles":
-        formset = RolFormSet(request.POST, prefix="roles")
-        if formset.is_valid():
-            onboarding_services.guardar_roles(implementacion, formset, actor)
-            messages.success(request, "Roles actualizados.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"roles_formset": formset}
 
-    if accion == "actualizar_sucursales":
-        formset = SucursalFormSet(request.POST, prefix="sucursales")
-        if formset.is_valid():
-            onboarding_services.guardar_sucursales(implementacion, formset, actor)
-            messages.success(request, "Sucursales actualizadas.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"sucursales_formset": formset}
+def _accion_actualizar_modulos(request, implementacion, actor):
+    modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
+    onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, actor)
+    implementacion.modulos_editables_por_cliente = bool(request.POST.get("modulos_editables"))
+    implementacion.save(update_fields=["modulos_editables_por_cliente"])
+    return _volver(implementacion)
 
-    if accion == "actualizar_licencias_novedades":
-        licencias_qs = TipoLicencia.objects.all()
-        novedades_qs = TipoNovedad.objects.all()
-        form = LicenciasNovedadesForm(
-            request.POST, licencias_qs=licencias_qs, novedades_qs=novedades_qs,
-            estado_por_licencia=onboarding_services.estado_actual_licencias(implementacion),
-            estado_por_novedad=onboarding_services.estado_actual_novedades(implementacion),
-        )
-        if form.is_valid():
-            onboarding_services.guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, actor)
-            messages.success(request, "Licencias y novedades actualizadas.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"licencias_novedades_form": form}
 
-    if accion == "actualizar_documentos":
-        todos_qs = onboarding_services.tipos_documento_disponibles(implementacion)
-        form = DocumentosLegajoForm(
-            request.POST, tipos_qs=todos_qs,
-            estado_por_tipo=onboarding_services.estado_actual_documentos(implementacion),
-        )
-        if form.is_valid():
-            onboarding_services.guardar_documentos(implementacion, form, todos_qs, actor)
-            messages.success(request, "Documentos de legajo actualizados.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"documentos_form": form}
+def _accion_actualizar_roles(request, implementacion, actor):
+    formset = RolFormSet(request.POST, prefix="roles")
+    if formset.is_valid():
+        onboarding_services.guardar_roles(implementacion, formset, actor)
+        messages.success(request, "Roles actualizados.")
+        return _volver(implementacion)
+    return {"roles_formset": formset}
 
-    if accion == "agregar_empleado":
-        empleado_form = EmpleadoForm(request.POST, implementacion=implementacion)
-        if onboarding_services.agregar_empleado(implementacion, empleado_form, actor):
-            messages.success(request, "Empleado agregado.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"empleado_form": empleado_form}
 
-    if accion == "editar_empleado":
-        empleado = _empleado_del_panel(implementacion, request.POST.get("empleado_id"))
-        if empleado:
-            form = EmpleadoForm(request.POST, instance=empleado, implementacion=implementacion)
-            if onboarding_services.editar_empleado(implementacion, form, actor):
-                messages.success(request, "Empleado actualizado.")
-                return redirect("dashboard:implementacion_detalle", pk=pk)
-            return {"empleado_edit_form": form, "empleado_editando": empleado}
-        return redirect("dashboard:implementacion_detalle", pk=pk)
+def _accion_actualizar_sucursales(request, implementacion, actor):
+    formset = SucursalFormSet(request.POST, prefix="sucursales")
+    if formset.is_valid():
+        onboarding_services.guardar_sucursales(implementacion, formset, actor)
+        messages.success(request, "Sucursales actualizadas.")
+        return _volver(implementacion)
+    return {"sucursales_formset": formset}
 
-    if accion == "eliminar_empleado":
-        onboarding_services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), actor)
-        messages.info(request, "Empleado eliminado.")
-        return redirect("dashboard:implementacion_detalle", pk=pk)
 
-    if accion == "importar_empleados":
-        import_form = ImportarArchivoForm(request.POST, request.FILES)
-        if import_form.is_valid():
-            try:
-                filas, errores, advertencias = onboarding_services.importar_archivo_empleados(
-                    implementacion, import_form.cleaned_data["archivo"], actor
-                )
-            except ArchivoInvalido as error:
-                import_form.add_error("archivo", str(error))
-                return {"import_form": import_form}
-            for nivel, texto in onboarding_services.resumen_importacion(filas, errores, advertencias):
-                messages.add_message(request, nivel, texto)
-            if errores:
-                detalle = "; ".join(f"fila {e['fila']}: {e['mensaje']}" for e in errores[:5])
-                messages.warning(request, "Filas rechazadas: " + detalle + (" ..." if len(errores) > 5 else ""))
-            return redirect("dashboard:implementacion_detalle", pk=pk)
+def _accion_actualizar_licencias_novedades(request, implementacion, actor):
+    licencias_qs = TipoLicencia.objects.all()
+    novedades_qs = TipoNovedad.objects.all()
+    form = LicenciasNovedadesForm(
+        request.POST, licencias_qs=licencias_qs, novedades_qs=novedades_qs,
+        estado_por_licencia=onboarding_services.estado_actual_licencias(implementacion),
+        estado_por_novedad=onboarding_services.estado_actual_novedades(implementacion),
+    )
+    if form.is_valid():
+        onboarding_services.guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, actor)
+        messages.success(request, "Licencias y novedades actualizadas.")
+        return _volver(implementacion)
+    return {"licencias_novedades_form": form}
+
+
+def _accion_actualizar_documentos(request, implementacion, actor):
+    todos_qs = onboarding_services.tipos_documento_disponibles(implementacion)
+    form = DocumentosLegajoForm(
+        request.POST, tipos_qs=todos_qs,
+        estado_por_tipo=onboarding_services.estado_actual_documentos(implementacion),
+    )
+    if form.is_valid():
+        onboarding_services.guardar_documentos(implementacion, form, todos_qs, actor)
+        messages.success(request, "Documentos de legajo actualizados.")
+        return _volver(implementacion)
+    return {"documentos_form": form}
+
+
+def _accion_agregar_empleado(request, implementacion, actor):
+    empleado_form = EmpleadoForm(request.POST, implementacion=implementacion)
+    if onboarding_services.agregar_empleado(implementacion, empleado_form, actor):
+        messages.success(request, "Empleado agregado.")
+        return _volver(implementacion)
+    return {"empleado_form": empleado_form}
+
+
+def _accion_editar_empleado(request, implementacion, actor):
+    empleado = _empleado_del_panel(implementacion, request.POST.get("empleado_id"))
+    if not empleado:
+        return _volver(implementacion)
+    form = EmpleadoForm(request.POST, instance=empleado, implementacion=implementacion)
+    if onboarding_services.editar_empleado(implementacion, form, actor):
+        messages.success(request, "Empleado actualizado.")
+        return _volver(implementacion)
+    return {"empleado_edit_form": form, "empleado_editando": empleado}
+
+
+def _accion_eliminar_empleado(request, implementacion, actor):
+    onboarding_services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), actor)
+    messages.info(request, "Empleado eliminado.")
+    return _volver(implementacion)
+
+
+def _accion_importar_empleados(request, implementacion, actor):
+    import_form = ImportarArchivoForm(request.POST, request.FILES)
+    if not import_form.is_valid():
         return {"import_form": import_form}
-
-    if accion == "actualizar_condiciones":
-        form = CondicionesForm(request.POST, implementacion=implementacion)
-        if form.is_valid():
-            onboarding_services.guardar_condiciones(implementacion, form, actor)
-            messages.success(request, "Condiciones del proceso actualizadas.")
-            return redirect("dashboard:implementacion_detalle", pk=pk)
-        return {"condiciones_form": form}
-
-    if accion == "reasignar":
-        elegido = request.POST.get("implementador_id", "")
-        nuevo = cuentas.asignables().filter(pk=elegido).first() if elegido.isdigit() else None
-        if nuevo:
-            implementacion.implementador_asignado = nuevo
-            implementacion.save(update_fields=["implementador_asignado"])
-            messages.success(request, f"Implementación asignada a {nuevo.get_full_name() or nuevo.username}.")
-        return redirect("dashboard:implementacion_detalle", pk=pk)
-
-    if accion == "regenerar_link":
-        implementacion.estado = Implementacion.ESTADO_PENDIENTE
-        implementacion.paso_actual = 1
-        implementacion.enviado = None
-        implementacion.cancelada_en = None
-        implementacion.cumplida_en = None
-        implementacion.save(update_fields=["estado", "paso_actual", "enviado", "cancelada_en", "cumplida_en"])
-        return redirect("dashboard:implementacion_detalle", pk=pk)
-
-    if accion == "anular":
-        implementacion.anular()
-        return redirect("dashboard:implementacion_detalle", pk=pk)
-
-    if accion == "marcar_cumplida":
-        implementacion.marcar_cumplida()
-        try:
-            notificar_cliente_implementacion_cumplida(implementacion, request=request)
-        except Exception:
-            logger.exception("No se pudo avisar al cliente que la implementación %s está lista", pk)
-            messages.warning(request, "Quedó cumplida, pero no se pudo avisarle al cliente por mail.")
-        return redirect("dashboard:implementacion_detalle", pk=pk)
-
-    if accion == "atender_revision":
-        implementacion.marcar_revision_atendida()
-        return redirect("dashboard:implementacion_detalle", pk=pk)
-
-    if accion == "actualizar_fecha_productivo":
-        # El equipo puede poner cualquier fecha (sin el mínimo que se le exige al cliente).
-        onboarding_services.guardar_fecha_implementacion(
-            implementacion, parse_date(request.POST.get("fecha_salida_productivo", "")), actor,
+    try:
+        filas, errores, advertencias = onboarding_services.importar_archivo_empleados(
+            implementacion, import_form.cleaned_data["archivo"], actor
         )
-        return redirect("dashboard:implementacion_detalle", pk=pk)
+    except ArchivoInvalido as error:
+        import_form.add_error("archivo", str(error))
+        return {"import_form": import_form}
+    for nivel, texto in onboarding_services.resumen_importacion(filas, errores, advertencias):
+        messages.add_message(request, nivel, texto)
+    if errores:
+        detalle = "; ".join(f"fila {e['fila']}: {e['mensaje']}" for e in errores[:5])
+        messages.warning(request, "Filas rechazadas: " + detalle + (" ..." if len(errores) > 5 else ""))
+    return _volver(implementacion)
 
-    if accion == "regenerar_acceso":
-        mail = _mail_valido(request)
-        if mail is not None:
-            _entregar_acceso(request, implementacion.cliente, request.POST.get("username", "").strip(), mail)
-        return redirect("dashboard:implementacion_detalle", pk=pk)
 
-    if accion == "enviar_invitacion":
-        _invitar_desde_panel(request, implementacion.cliente, implementacion)
-        return redirect("dashboard:implementacion_detalle", pk=pk)
+def _accion_actualizar_condiciones(request, implementacion, actor):
+    form = CondicionesForm(request.POST, implementacion=implementacion)
+    if form.is_valid():
+        onboarding_services.guardar_condiciones(implementacion, form, actor)
+        messages.success(request, "Condiciones del proceso actualizadas.")
+        return _volver(implementacion)
+    return {"condiciones_form": form}
 
-    return None
+
+def _accion_reasignar(request, implementacion, actor):
+    elegido = request.POST.get("implementador_id", "")
+    nuevo = cuentas.asignables().filter(pk=elegido).first() if elegido.isdigit() else None
+    if nuevo:
+        _mostrar(request, acciones.reasignar(actor, implementacion, nuevo))
+    return _volver(implementacion)
+
+
+def _accion_regenerar_link(request, implementacion, actor):
+    _mostrar(request, acciones.reabrir(actor, implementacion))
+    return _volver(implementacion)
+
+
+def _accion_anular(request, implementacion, actor):
+    _mostrar(request, acciones.anular(actor, implementacion))
+    return _volver(implementacion)
+
+
+def _accion_marcar_cumplida(request, implementacion, actor):
+    _mostrar(request, acciones.marcar_cumplida(actor, implementacion, base_url=_base_url(request)))
+    return _volver(implementacion)
+
+
+def _accion_atender_revision(request, implementacion, actor):
+    _mostrar(request, acciones.atender_revision(actor, implementacion))
+    return _volver(implementacion)
+
+
+def _accion_actualizar_fecha_productivo(request, implementacion, actor):
+    # El equipo puede poner cualquier fecha (sin el mínimo que se le exige al cliente).
+    onboarding_services.guardar_fecha_implementacion(
+        implementacion, parse_date(request.POST.get("fecha_salida_productivo", "")), actor,
+    )
+    return _volver(implementacion)
+
+
+def _accion_regenerar_acceso(request, implementacion, actor):
+    _mostrar(request, acciones.entregar_acceso(
+        actor, implementacion.cliente, request.POST.get("username", ""), request.POST.get("mail_cliente", ""),
+        base_url=_base_url(request), implementacion=implementacion,
+    ))
+    return _volver(implementacion)
+
+
+def _accion_enviar_invitacion(request, implementacion, actor):
+    _mostrar(request, acciones.invitar_cliente(
+        actor, implementacion.cliente, implementacion=implementacion, base_url=_base_url(request),
+    ))
+    return _volver(implementacion)
+
+
+ACCIONES_DE_LA_FICHA = {
+    "actualizar_datos": _accion_actualizar_datos,
+    "actualizar_modulos": _accion_actualizar_modulos,
+    "actualizar_roles": _accion_actualizar_roles,
+    "actualizar_sucursales": _accion_actualizar_sucursales,
+    "actualizar_licencias_novedades": _accion_actualizar_licencias_novedades,
+    "actualizar_documentos": _accion_actualizar_documentos,
+    "agregar_empleado": _accion_agregar_empleado,
+    "editar_empleado": _accion_editar_empleado,
+    "eliminar_empleado": _accion_eliminar_empleado,
+    "importar_empleados": _accion_importar_empleados,
+    "actualizar_condiciones": _accion_actualizar_condiciones,
+    "reasignar": _accion_reasignar,
+    "regenerar_link": _accion_regenerar_link,
+    "anular": _accion_anular,
+    "marcar_cumplida": _accion_marcar_cumplida,
+    "atender_revision": _accion_atender_revision,
+    "actualizar_fecha_productivo": _accion_actualizar_fecha_productivo,
+    "regenerar_acceso": _accion_regenerar_acceso,
+    "enviar_invitacion": _accion_enviar_invitacion,
+}
+
+
+def _manejar_accion_implementacion(request, implementacion):
+    """Procesa el POST de implementacion_detalle. Devuelve un redirect si la acción fue manejada, un
+    diccionario con el formulario que falló (hay que renderizar la página con sus errores) o None."""
+    manejador = ACCIONES_DE_LA_FICHA.get(request.POST.get("accion"))
+    if manejador is None:
+        return None
+    return manejador(request, implementacion, Actor.de_usuario(request.user))
 
 
 @staff_member_required(login_url="login")
@@ -506,7 +453,7 @@ def implementacion_detalle(request, pk):
         "datos_form": formularios_con_error.get("datos_form") or ImplementacionDatosForm(instance=implementacion),
         "roles_formset": formularios_con_error.get("roles_formset") or RolFormSet(initial=roles_iniciales, prefix="roles"),
         "sucursales_formset": formularios_con_error.get("sucursales_formset") or SucursalFormSet(initial=sucursales_iniciales, prefix="sucursales"),
-        "licencias_rows": [(l, licencias_novedades_form[f"licencia_{l.id}_activo"]) for l in licencias_qs],
+        "licencias_rows": [(licencia, licencias_novedades_form[f"licencia_{licencia.id}_activo"]) for licencia in licencias_qs],
         "novedades_rows": [(n, licencias_novedades_form[f"novedad_{n.id}_activo"]) for n in novedades_qs],
         "licencias_novedades_form": licencias_novedades_form,
         "documentos_rows": [(t, documentos_form[f"tipo_{t.id}_activo"]) for t in tipos_documento_qs],

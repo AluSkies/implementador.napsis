@@ -158,7 +158,7 @@ class AltaAtomicaTests(test_asignado.BasePanel):
     """Si algo falla a mitad del alta no tiene que quedar una empresa o un usuario suelto."""
 
     def test_si_falla_al_guardar_la_implementacion_no_queda_nada(self):
-        with patch("dashboard.views.onboarding_services.guardar_modulos", side_effect=RuntimeError("base caída")):
+        with patch("onboarding.acciones.services.guardar_modulos", side_effect=RuntimeError("base caída")):
             with self.assertLogs("django.request", "ERROR"), self.assertRaises(RuntimeError):
                 self.crear(nombre="Empresa Nueva", username="nueva", mail_cliente="gerencia@nueva.com")
         self.assertFalse(Cliente.objects.exists())
@@ -168,7 +168,7 @@ class AltaAtomicaTests(test_asignado.BasePanel):
     def test_si_falla_el_alta_no_se_manda_la_invitacion(self):
         from django.core import mail
 
-        with patch("dashboard.views.onboarding_services.guardar_modulos", side_effect=RuntimeError("base caída")):
+        with patch("onboarding.acciones.services.guardar_modulos", side_effect=RuntimeError("base caída")):
             with self.assertLogs("django.request", "ERROR"), self.assertRaises(RuntimeError):
                 self.crear(nombre="Empresa Nueva", username="nueva", mail_cliente="gerencia@nueva.com")
         self.assertEqual(mail.outbox, [])

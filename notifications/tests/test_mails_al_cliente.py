@@ -72,8 +72,8 @@ class InvitacionAlCrearTests(BasePanel):
         self.assertFalse(Cliente.objects.exists())
 
     def test_si_falla_el_envio_igual_se_crea_y_avisa(self):
-        with patch("dashboard.views.enviar_invitacion", side_effect=OSError("SMTP caído")):
-            with self.assertLogs("dashboard.views", level="ERROR"):
+        with patch("onboarding.acciones.notificaciones.enviar_invitacion", side_effect=OSError("SMTP caído")):
+            with self.assertLogs("onboarding.acciones", level="ERROR"):
                 respuesta = self.crear(nombre="Empresa Nueva", username="nueva", mail_cliente="gerencia@nueva.com")
         self.assertEqual(respuesta.status_code, 302)
         self.assertTrue(Implementacion.objects.exists())
@@ -183,8 +183,8 @@ class ConfirmacionesAlClienteTests(BaseWizard):
         self.implementacion.mail_contacto = "contacto@a.com"
         self.implementacion.save()
         self.completar_todo()
-        with patch("onboarding.views.notificar_cliente_relevamiento_recibido", side_effect=OSError("SMTP")):
-            with self.assertLogs("onboarding.views", level="ERROR"):
+        with patch("onboarding.acciones.notificaciones.notificar_cliente_relevamiento_recibido", side_effect=OSError("SMTP")):
+            with self.assertLogs("onboarding.acciones", level="ERROR"):
                 respuesta = self._enviar()
         self.assertEqual(respuesta.status_code, 302)
         self.implementacion.refresh_from_db()
@@ -193,8 +193,8 @@ class ConfirmacionesAlClienteTests(BaseWizard):
     def test_si_falla_el_aviso_de_contacto_el_cliente_no_ve_un_error(self):
         self.implementacion.enviado = self.implementacion.creado
         self.implementacion.save()
-        with patch("onboarding.views.notificar_revision_solicitada", side_effect=OSError("SMTP")):
-            with self.assertLogs("onboarding.views", level="ERROR"):
+        with patch("onboarding.acciones.notificaciones.notificar_revision_solicitada", side_effect=OSError("SMTP")):
+            with self.assertLogs("onboarding.acciones", level="ERROR"):
                 respuesta = self.client.post(_url(self.implementacion, 1), {"accion": "pedir_revision", "mensaje": "hola"})
         self.assertEqual(respuesta.status_code, 302)
         self.implementacion.refresh_from_db()
@@ -224,8 +224,8 @@ class AvisoDeImplementacionCumplidaTests(BasePanel):
         self.assertEqual(mail.outbox[0].to, ["cuenta@a.com"])
 
     def test_si_falla_igual_queda_cumplida_y_se_avisa_al_equipo(self):
-        with patch("dashboard.views.notificar_cliente_implementacion_cumplida", side_effect=OSError("SMTP")):
-            with self.assertLogs("dashboard.views", level="ERROR"):
+        with patch("onboarding.acciones.notificaciones.notificar_cliente_implementacion_cumplida", side_effect=OSError("SMTP")):
+            with self.assertLogs("onboarding.acciones", level="ERROR"):
                 self.client.post(self.url, {"accion": "marcar_cumplida"})
         self.implementacion.refresh_from_db()
         self.assertEqual(self.implementacion.estado, Implementacion.ESTADO_CUMPLIDA)
