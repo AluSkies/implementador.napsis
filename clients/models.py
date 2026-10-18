@@ -321,10 +321,17 @@ class PersonaRol(models.Model):
     implementacion = models.ForeignKey(
         Implementacion, on_delete=models.CASCADE, related_name="roles"
     )
+    # Roles que Napsis elige de la nómina ya importada: tienen que ser empleados cargados.
+    ROLES_EN_NOMINA = (ROL_APODERADO, ROL_LIQUIDADOR)
+
     rol = models.CharField(max_length=20, choices=ROL_CHOICES)
     apellido_nombre = models.CharField("Apellido y Nombre", max_length=255)
     cuil = models.CharField("CUIL", max_length=20, blank=True)
     mail = models.EmailField("Mail", blank=True)
+    # El empleado de la nómina al que corresponde (por CUIL). Si se borra el empleado, queda vacío.
+    empleado = models.ForeignKey(
+        "employees.Empleado", null=True, blank=True, on_delete=models.SET_NULL, related_name="roles",
+    )
 
     class Meta:
         verbose_name = "Persona / Rol"

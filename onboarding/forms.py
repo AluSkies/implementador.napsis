@@ -4,6 +4,7 @@ from django.forms import BaseFormSet, formset_factory
 
 from clients.models import Implementacion, PersonaRol, Sucursal
 from clients.validators import normalizar_cuits
+from employees.services import CUIL_RE, normalizar_cuil
 
 # Campos de Implementacion que completa el cliente en distintos pasos del wizard.
 # Única fuente de verdad: ImplementacionDatosForm (edición completa desde el panel)
@@ -93,6 +94,12 @@ class RolForm(forms.Form):
     cuil = forms.CharField(max_length=20, required=False, label="CUIL")
     mail = forms.EmailField(required=False, label="Mail")
 
+    def clean_cuil(self):
+        cuil = normalizar_cuil(self.cleaned_data.get("cuil", ""))
+        if cuil and not CUIL_RE.match(cuil):
+            raise forms.ValidationError("El CUIL tiene que tener 11 dígitos.")
+        return cuil
+
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("apellido_nombre") and not cleaned.get("rol"):
@@ -106,12 +113,20 @@ RolFormSet = formset_factory(RolForm, extra=6, can_delete=True)
 class _RolesObligatoriosFormSet(BaseFormSet):
     """Variante para el wizard del cliente: no se puede avanzar sin al menos un
     Apoderado/Firmante, un Liquidador y un Admin. de RRHH (los tres son elementales).
-    El panel interno usa RolFormSet, sin esta exigencia."""
+    Además, el Apoderado/Firmante y el Liquidador tienen que ser empleados de la nómina (Napsis los
+    elige de esa lista): se verifica por CUIL contra `cuils_nomina`, si se la pasa. El panel interno
+    usa RolFormSet, sin esta exigencia."""
+
+    cuils_nomina = None  # conjunto de CUIL de la nómina cargada; None = no se verifica
 
     def clean(self):
         super().clean()
         if any(self.errors):
             return
+        if self.cuils_nomina is not None:
+            self._verificar_en_la_nomina()
+            if any(self.errors):
+                return
         presentes = {
             f.cleaned_data["rol"] for f in self.forms
             if f.cleaned_data and not f.cleaned_data.get("DELETE") and f.cleaned_data.get("apellido_nombre")
@@ -122,14 +137,34 @@ class _RolesObligatoriosFormSet(BaseFormSet):
                 "Falta cargar al menos una persona para cada rol. Te falta: " + ", ".join(faltan) + "."
             )
 
+    def _verificar_en_la_nomina(self):
+        for form in self.forms:
+            datos = form.cleaned_data
+            if not datos or datos.get("DELETE") or not datos.get("apellido_nombre"):
+                continue
+            if datos.get("rol") not in PersonaRol.ROLES_EN_NOMINA:
+                continue
+            if not datos.get("cuil"):
+                form.add_error("cuil", "Este rol sale de la nómina: elegí a la persona de la lista o escribí su CUIL.")
+            elif datos["cuil"] not in self.cuils_nomina:
+                form.add_error(
+                    "cuil",
+                    "Este CUIL no está en la nómina. Cargá primero a la persona como empleado (paso de empleados)."
+                    if self.cuils_nomina else
+                    "Todavía no cargaste la nómina: hacelo primero (paso de empleados) y volvé a elegir a la persona.",
+                )
 
-def rol_formset_obligatorio(max_roles):
+
+def rol_formset_obligatorio(max_roles, cuils_nomina=None):
     """El formset de roles del wizard, con tantas filas como personas puede cargar el
-    cliente en esta implementación (max_roles) y rechazando que se manden más."""
-    return formset_factory(
+    cliente en esta implementación (max_roles) y rechazando que se manden más.
+    Con `cuils_nomina`, el Apoderado/Firmante y el Liquidador tienen que figurar en esa nómina."""
+    formset = formset_factory(
         RolForm, formset=_RolesObligatoriosFormSet, extra=max_roles, max_num=max_roles,
         validate_max=True, can_delete=True,
     )
+    formset.cuils_nomina = None if cuils_nomina is None else set(cuils_nomina)
+    return formset
 
 
 class ConfiguracionForm(forms.ModelForm):

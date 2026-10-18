@@ -130,12 +130,15 @@ class RolesMaximoDePersonasTests(test_wizard.BaseWizard):
         return reverse("onboarding:wizard_step", kwargs={"token": self.implementacion.token, "step": 5})
 
     def _post(self, cantidad):
+        self.agregar_empleado(self.CUIL_APODERADO)
+        self.agregar_empleado(self.CUIL_LIQUIDADOR, "LUIS", "RUIZ")
         roles = ["apoderado", "liquidador", "admin_rrhh"] + ["apoderado"] * 3
+        cuils = {"apoderado": self.CUIL_APODERADO, "liquidador": self.CUIL_LIQUIDADOR, "admin_rrhh": ""}
         datos = {"form-TOTAL_FORMS": str(cantidad), "form-INITIAL_FORMS": "0"}
         for i in range(cantidad):
             datos.update({
                 f"form-{i}-rol": roles[i], f"form-{i}-apellido_nombre": f"Persona {i}, Nombre",
-                f"form-{i}-cuil": "", f"form-{i}-mail": "",
+                f"form-{i}-cuil": cuils[roles[i]], f"form-{i}-mail": "",
             })
         return self.client.post(self._url(), datos)
 

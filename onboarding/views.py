@@ -222,7 +222,9 @@ def _step_roles(request, implementacion, step):
         for r in existentes
     ]
 
-    RolesFormSet = rol_formset_obligatorio(implementacion.max_roles)
+    RolesFormSet = rol_formset_obligatorio(
+        implementacion.max_roles, cuils_nomina=implementacion.empleados.values_list("cuil", flat=True),
+    )
     if request.method == "POST":
         formset = RolesFormSet(request.POST)
         if formset.is_valid():

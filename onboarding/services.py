@@ -24,7 +24,7 @@ from clients.models import (
 from automatizacion import eventos
 from clients.services import cambio_de_seccion, guardar_version
 from employees.models import Empleado, ImportBatch
-from employees.services import COLUMNAS, leer_archivo_empleados
+from employees.services import COLUMNAS, leer_archivo_empleados, normalizar_cuil
 
 TOTAL_PASOS = 9
 
@@ -109,13 +109,21 @@ def pendientes_de_envio(implementacion):
         pendientes.append({"paso": PASO_DATOS, "mensaje": "Completar la razón social y el CUIT de la empresa."})
 
     if PASO_ROLES in activos:
-        presentes = set(implementacion.roles.exclude(apellido_nombre="").values_list("rol", flat=True))
-        faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in presentes]
+        roles = list(implementacion.roles.exclude(apellido_nombre=""))
+        faltan = [nombre for rol, nombre in PersonaRol.ROL_CHOICES if rol not in {r.rol for r in roles}]
         if faltan:
             pendientes.append({
                 "paso": PASO_ROLES,
                 "mensaje": "Cargar al menos una persona para cada rol. Falta: " + ", ".join(faltan) + ".",
             })
+        cuils_nomina = set(implementacion.empleados.values_list("cuil", flat=True))
+        for rol in roles:
+            if rol.rol in PersonaRol.ROLES_EN_NOMINA and normalizar_cuil(rol.cuil) not in cuils_nomina:
+                pendientes.append({
+                    "paso": PASO_ROLES,
+                    "mensaje": f"{rol.apellido_nombre} ({rol.get_rol_display()}) no figura en la nómina: "
+                               "cargalo como empleado o corregí su CUIL.",
+                })
 
     if PASO_CONFIGURACION in activos and not implementacion.modelo_recibo:
         pendientes.append({"paso": PASO_CONFIGURACION, "mensaje": "Subir el modelo de recibo (PDF)."})
@@ -165,6 +173,17 @@ def guardar_modulos(implementacion, modulos_qs, activos_ids, actor):
             implementacion.modulos.update_or_create(modulo=modulo, defaults={"activo": modulo.id in activos_ids})
 
 
+def vincular_roles_con_nomina(implementacion):
+    """Liga cada persona con rol a su empleado de la nómina (por CUIL). Se llama cuando cambian los
+    roles o la nómina. Si el empleado se borra, el vínculo queda vacío solo."""
+    por_cuil = {e.cuil: e for e in implementacion.empleados.all()}
+    for rol in implementacion.roles.all():
+        empleado = por_cuil.get(normalizar_cuil(rol.cuil)) if rol.cuil else None
+        if (empleado.pk if empleado else None) != rol.empleado_id:
+            rol.empleado = empleado
+            rol.save(update_fields=["empleado"])
+
+
 def guardar_roles(implementacion, formset, actor):
     with cambio_de_seccion(implementacion, "roles", actor):
         implementacion.roles.all().delete()
@@ -185,6 +204,7 @@ def guardar_roles(implementacion, formset, actor):
                 )
             )
         PersonaRol.objects.bulk_create(nuevos)
+        vincular_roles_con_nomina(implementacion)
 
 
 def guardar_sucursales(implementacion, formset, actor):
@@ -351,6 +371,7 @@ def _cargar_empleados(implementacion, archivo, lectura, actor):
         actualizados, CAMPOS_EMPLEADO_IMPORTADOS + ["import_batch", "actualizado"], batch_size=LOTE_ACTUALIZACION,
     )
     jerarquias = _resolver_jerarquia_importada(implementacion, filas, advertencias)
+    vincular_roles_con_nomina(implementacion)
 
     # El alta de empleados nuevos se cuenta (cada uno ya queda en `Empleado`); lo que se PISA
     # (valores que cambiaron en empleados existentes) se detalla, porque la base no lo conserva.
@@ -396,6 +417,7 @@ def agregar_empleado(implementacion, empleado_form, actor):
             empleado = empleado_form.save(commit=False)
             empleado.implementacion = implementacion
             empleado.save()
+            vincular_roles_con_nomina(implementacion)
             eventos.registrar(actor, "empleado.agregado", implementacion, seccion="empleados",
                               datos={"empleado_id": empleado.pk})
     except IntegrityError:
@@ -419,6 +441,7 @@ def editar_empleado(implementacion, empleado_form, actor):
         with transaction.atomic():
             guardar_version(implementacion, "empleados", actor)
             empleado = empleado_form.save()
+            vincular_roles_con_nomina(implementacion)
             eventos.registrar(actor, "empleado.editado", implementacion, seccion="empleados",
                               datos={"empleado_id": empleado.pk, "cambios": cambios})
     except IntegrityError:

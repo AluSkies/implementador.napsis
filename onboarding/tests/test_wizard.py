@@ -31,16 +31,26 @@ class BaseWizard(TestCase):
             ImplementacionModulo.objects.create(implementacion=self.implementacion, modulo=modulo, activo=True)
         self.client.force_login(self.usuario)
 
-    def agregar_empleado(self):
-        return Empleado.objects.create(
-            implementacion=self.implementacion, cuil="20111111112", nombre="JUAN", apellido="PEREZ",
-            fecha_ingreso=date(2020, 1, 1),  # obligatoria con Recibo Digital
+    CUIL_APODERADO = "20111111112"
+    CUIL_LIQUIDADOR = "20222222223"
+
+    def agregar_empleado(self, cuil=CUIL_APODERADO, nombre="JUAN", apellido="PEREZ"):
+        empleado, _ = Empleado.objects.get_or_create(
+            implementacion=self.implementacion, cuil=cuil,
+            defaults={"nombre": nombre, "apellido": apellido, "fecha_ingreso": date(2020, 1, 1)},  # obligatoria con Recibo Digital
         )
+        return empleado
 
     def cargar_roles_completos(self):
-        for rol, nombre in ((PersonaRol.ROL_APODERADO, "Gomez, Ana"), (PersonaRol.ROL_LIQUIDADOR, "Ruiz, Luis"),
-                            (PersonaRol.ROL_ADMIN_RRHH, "Sosa, Eva")):
-            PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre=nombre)
+        """Los tres roles. El Apoderado y el Liquidador salen de la nómina, así que se cargan sus empleados."""
+        self.agregar_empleado(self.CUIL_APODERADO)
+        self.agregar_empleado(self.CUIL_LIQUIDADOR, "LUIS", "RUIZ")
+        for rol, nombre, cuil in (
+            (PersonaRol.ROL_APODERADO, "Gomez, Ana", self.CUIL_APODERADO),
+            (PersonaRol.ROL_LIQUIDADOR, "Ruiz, Luis", self.CUIL_LIQUIDADOR),
+            (PersonaRol.ROL_ADMIN_RRHH, "Sosa, Eva", ""),
+        ):
+            PersonaRol.objects.create(implementacion=self.implementacion, rol=rol, apellido_nombre=nombre, cuil=cuil)
 
     def completar_todo(self):
         self.cliente.razon_social = "Empresa A S.A."
@@ -125,10 +135,20 @@ class Paso1EmpresaTests(BaseWizard):
 class PasoRolesTests(BaseWizard):
     """Apoderado/Firmante, Liquidador y Admin. de RRHH son elementales: sin los tres no se avanza."""
 
+    def setUp(self):
+        super().setUp()
+        self.agregar_empleado(self.CUIL_APODERADO)
+        self.agregar_empleado(self.CUIL_LIQUIDADOR, "LUIS", "RUIZ")
+
     def _post(self, filas):
+        """Cada fila es (rol, nombre); el CUIL de cada rol sale de la nómina (el de Admin. de RRHH es opcional)."""
+        cuils = {PersonaRol.ROL_APODERADO: self.CUIL_APODERADO, PersonaRol.ROL_LIQUIDADOR: self.CUIL_LIQUIDADOR}
         datos = {"form-TOTAL_FORMS": str(len(filas)), "form-INITIAL_FORMS": "0"}
         for i, (rol, nombre) in enumerate(filas):
-            datos.update({f"form-{i}-rol": rol, f"form-{i}-apellido_nombre": nombre, f"form-{i}-cuil": "", f"form-{i}-mail": ""})
+            datos.update({
+                f"form-{i}-rol": rol, f"form-{i}-apellido_nombre": nombre,
+                f"form-{i}-cuil": cuils.get(rol, ""), f"form-{i}-mail": "",
+            })
         return self.client.post(_url(self.implementacion, 5), datos)
 
     def test_sin_los_tres_roles_no_avanza_y_no_guarda(self):
