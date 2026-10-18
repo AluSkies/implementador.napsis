@@ -2,14 +2,17 @@
 
 Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis. Reemplaza los 5 Excel de relevamiento (Datos de Nómina, Documentos Legajo Digital, Importación de Nómina, Información Pre Implementación, Licencias y Novedades) por un wizard web con link único por cliente, y notifica al equipo de implementación al enviarse.
 
+**Para entender el código:** los diagramas (capas, apps, modelo de datos, pasos del wizard, estados, recorrido completo, validación y congelado, eventos y despliegue) están en [`docs/arquitectura.md`](docs/arquitectura.md).
+
 ## Estructura
 
 - `clients/` — dos entidades separadas:
   - `Cliente`: la empresa (Nombre, CUIT(s) separados por coma). Persistente: un mismo Cliente puede tener varias Implementaciones a lo largo del tiempo.
   - `Implementacion`: un proceso puntual de relevamiento para un Cliente — tiene su propio token/link único, estado (`Pendiente` / `Cumplida` / `Cancelada`), todos los datos de contacto y configuración relevados en el wizard, y el pedido de revisión del cliente (`revision_solicitada`, `pedir_revision()`, `anular()`).
   - Además: `PersonaRol`, `Sucursal`, `Modulo`, `ImplementacionModulo` (todos FK a `Implementacion`, no a `Cliente`).
+- `automatizacion/` — actores, registro de eventos (solo se agrega) y configuración congelada.
 - `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Se cargan con `manage.py seed_catalogos` (a partir del relevamiento original), no con una migración.
-- `onboarding/` — el wizard público (9 pasos) y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
+- `onboarding/` — el wizard público (10 pasos), las acciones (alta, envío, validar, devolver, cumplir) y los servicios de guardado y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
 - `employees/` — Empleado, ImportBatch (ambos FK a Implementacion), parser/validador de la plantilla masiva (`employees/services.py`) y generador de la plantilla vacía descargable.
 - `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones).
 - `dashboard/` — panel interno con login: listado de implementaciones, ficha de cliente con su historial, generación de links, anular/reiniciar una implementación, atender pedidos de revisión.
