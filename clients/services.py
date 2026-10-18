@@ -1,9 +1,14 @@
+from contextlib import contextmanager
+
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Case, DateField, IntegerField, Value, When
 from django.db.models.functions import Cast, Coalesce
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
+
+from automatizacion import eventos
 
 from .models import Implementacion, ImplementacionVersion
 
@@ -211,9 +216,31 @@ def registrar_snapshot_builder(seccion, builder):
     _SNAPSHOT_BUILDERS[seccion] = builder
 
 
-def guardar_version(implementacion, seccion, editado_por):
+def _fresca(implementacion):
+    """La implementación tal como está en la base ahora. Las fotos se toman de acá y no del objeto
+    que llega: ese puede venir con datos ya modificados por un formulario (Django escribe en la
+    instancia al validar) o con relaciones precargadas que quedan viejas después de guardar."""
+    return Implementacion.objects.select_related("cliente").get(pk=implementacion.pk)
+
+
+def guardar_version(implementacion, seccion, actor):
     """Guarda una foto del estado ACTUAL de una sección, antes de que se le aplique un cambio."""
     return ImplementacionVersion.objects.create(
         implementacion=implementacion, seccion=seccion,
-        datos=_SNAPSHOT_BUILDERS[seccion](implementacion), editado_por=editado_por,
+        datos=_SNAPSHOT_BUILDERS[seccion](_fresca(implementacion)), editado_por=actor.etiqueta,
     )
+
+
+@contextmanager
+def cambio_de_seccion(implementacion, seccion, actor, accion="paso.guardado", datos=None):
+    """Envuelve el guardado de una sección: deja la foto anterior en el historial, deja que el
+    llamador aplique el cambio y registra el evento con lo que cambió (antes y después). Todo en
+    una sola transacción: o queda el cambio completo con su historia, o no queda nada."""
+    with transaction.atomic():
+        antes = guardar_version(implementacion, seccion, actor).datos
+        yield
+        despues = _SNAPSHOT_BUILDERS[seccion](_fresca(implementacion))
+        eventos.registrar(
+            actor, accion, implementacion, seccion=seccion,
+            datos={**(datos or {}), "cambios": eventos.diferencias(antes, despues)},
+        )

@@ -26,12 +26,20 @@ def registrar(actor, accion, implementacion=None, *, seccion="", datos=None, pos
     )
 
 
-def diferencias(antes, despues):
+def diferencias(antes, despues, prefijo=""):
     """Lo que cambió entre dos fotos de una sección: {campo: {"antes": a, "despues": d}}.
-    Si no cambió nada, devuelve un diccionario vacío."""
+
+    Las fotos son diccionarios (se compara campo por campo, y los diccionarios anidados con el
+    camino "Grupo › campo") o listas (se compara la lista entera, bajo el campo "lista"). Si no
+    cambió nada, devuelve un diccionario vacío."""
+    if not (isinstance(antes, dict) and isinstance(despues, dict)):
+        return {} if antes == despues else {prefijo or "lista": {"antes": antes, "despues": despues}}
     cambios = {}
     for campo in list(antes) + [c for c in despues if c not in antes]:
         a, d = antes.get(campo), despues.get(campo)
-        if a != d:
-            cambios[campo] = {"antes": a, "despues": d}
+        nombre = f"{prefijo} › {campo}" if prefijo else str(campo)
+        if isinstance(a, dict) and isinstance(d, dict):
+            cambios.update(diferencias(a, d, nombre))
+        elif a != d:
+            cambios[nombre] = {"antes": a, "despues": d}
     return cambios

@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
+from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Cliente, Implementacion, Modulo
 from clients.validators import normalizar_cuits
@@ -202,7 +203,7 @@ def _alta_de_implementacion(request, condiciones_form):
         condiciones_form.aplicar(implementacion)
         implementacion.save()
         onboarding_services.guardar_modulos(
-            implementacion, Modulo.objects.all(), modulo_ids, editado_por=request.user.get_username(),
+            implementacion, Modulo.objects.all(), modulo_ids, actor=Actor.de_usuario(request.user),
         )
 
     if acceso:
@@ -281,19 +282,19 @@ def _manejar_accion_implementacion(request, implementacion):
     fue manejada, o None si hay que renderizar la página (con errores de formulario, por ej.)."""
     accion = request.POST.get("accion")
     pk = implementacion.pk
-    editado_por = request.user.get_username()
+    actor = Actor.de_usuario(request.user)
 
     if accion == "actualizar_datos":
         form = ImplementacionDatosForm(request.POST, request.FILES, instance=implementacion)
         if form.is_valid():
-            onboarding_services.guardar_datos_contacto(implementacion, form, editado_por)
+            onboarding_services.guardar_datos_contacto(implementacion, form, actor)
             messages.success(request, "Datos de contacto actualizados.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"datos_form": form}
 
     if accion == "actualizar_modulos":
         modulo_ids = {int(v) for v in request.POST.getlist("modulos") if v.isdigit()}
-        onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, editado_por)
+        onboarding_services.guardar_modulos(implementacion, Modulo.objects.all(), modulo_ids, actor)
         implementacion.modulos_editables_por_cliente = bool(request.POST.get("modulos_editables"))
         implementacion.save(update_fields=["modulos_editables_por_cliente"])
         return redirect("dashboard:implementacion_detalle", pk=pk)
@@ -301,7 +302,7 @@ def _manejar_accion_implementacion(request, implementacion):
     if accion == "actualizar_roles":
         formset = RolFormSet(request.POST, prefix="roles")
         if formset.is_valid():
-            onboarding_services.guardar_roles(implementacion, formset, editado_por)
+            onboarding_services.guardar_roles(implementacion, formset, actor)
             messages.success(request, "Roles actualizados.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"roles_formset": formset}
@@ -309,7 +310,7 @@ def _manejar_accion_implementacion(request, implementacion):
     if accion == "actualizar_sucursales":
         formset = SucursalFormSet(request.POST, prefix="sucursales")
         if formset.is_valid():
-            onboarding_services.guardar_sucursales(implementacion, formset, editado_por)
+            onboarding_services.guardar_sucursales(implementacion, formset, actor)
             messages.success(request, "Sucursales actualizadas.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"sucursales_formset": formset}
@@ -323,7 +324,7 @@ def _manejar_accion_implementacion(request, implementacion):
             estado_por_novedad=onboarding_services.estado_actual_novedades(implementacion),
         )
         if form.is_valid():
-            onboarding_services.guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, editado_por)
+            onboarding_services.guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, actor)
             messages.success(request, "Licencias y novedades actualizadas.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"licencias_novedades_form": form}
@@ -335,14 +336,14 @@ def _manejar_accion_implementacion(request, implementacion):
             estado_por_tipo=onboarding_services.estado_actual_documentos(implementacion),
         )
         if form.is_valid():
-            onboarding_services.guardar_documentos(implementacion, form, todos_qs, editado_por)
+            onboarding_services.guardar_documentos(implementacion, form, todos_qs, actor)
             messages.success(request, "Documentos de legajo actualizados.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"documentos_form": form}
 
     if accion == "agregar_empleado":
         empleado_form = EmpleadoForm(request.POST, implementacion=implementacion)
-        if onboarding_services.agregar_empleado(implementacion, empleado_form, editado_por):
+        if onboarding_services.agregar_empleado(implementacion, empleado_form, actor):
             messages.success(request, "Empleado agregado.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"empleado_form": empleado_form}
@@ -351,14 +352,14 @@ def _manejar_accion_implementacion(request, implementacion):
         empleado = _empleado_del_panel(implementacion, request.POST.get("empleado_id"))
         if empleado:
             form = EmpleadoForm(request.POST, instance=empleado, implementacion=implementacion)
-            if onboarding_services.editar_empleado(implementacion, form, editado_por):
+            if onboarding_services.editar_empleado(implementacion, form, actor):
                 messages.success(request, "Empleado actualizado.")
                 return redirect("dashboard:implementacion_detalle", pk=pk)
             return {"empleado_edit_form": form, "empleado_editando": empleado}
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
     if accion == "eliminar_empleado":
-        onboarding_services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), editado_por)
+        onboarding_services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), actor)
         messages.info(request, "Empleado eliminado.")
         return redirect("dashboard:implementacion_detalle", pk=pk)
 
@@ -367,7 +368,7 @@ def _manejar_accion_implementacion(request, implementacion):
         if import_form.is_valid():
             try:
                 filas, errores, advertencias = onboarding_services.importar_archivo_empleados(
-                    implementacion, import_form.cleaned_data["archivo"], editado_por
+                    implementacion, import_form.cleaned_data["archivo"], actor
                 )
             except ArchivoInvalido as error:
                 import_form.add_error("archivo", str(error))
@@ -383,7 +384,7 @@ def _manejar_accion_implementacion(request, implementacion):
     if accion == "actualizar_condiciones":
         form = CondicionesForm(request.POST, implementacion=implementacion)
         if form.is_valid():
-            onboarding_services.guardar_condiciones(implementacion, form, editado_por)
+            onboarding_services.guardar_condiciones(implementacion, form, actor)
             messages.success(request, "Condiciones del proceso actualizadas.")
             return redirect("dashboard:implementacion_detalle", pk=pk)
         return {"condiciones_form": form}
@@ -426,7 +427,7 @@ def _manejar_accion_implementacion(request, implementacion):
     if accion == "actualizar_fecha_productivo":
         # El equipo puede poner cualquier fecha (sin el mínimo que se le exige al cliente).
         onboarding_services.guardar_fecha_implementacion(
-            implementacion, parse_date(request.POST.get("fecha_salida_productivo", "")), editado_por,
+            implementacion, parse_date(request.POST.get("fecha_salida_productivo", "")), actor,
         )
         return redirect("dashboard:implementacion_detalle", pk=pk)
 

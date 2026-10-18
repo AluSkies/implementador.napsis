@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 
+from automatizacion.actores import Actor
 from clients.models import Cliente, Implementacion
 from clients.services import (
     crear_o_resetear_acceso,
@@ -9,6 +10,8 @@ from clients.services import (
     guardar_version,
     registrar_snapshot_builder,
 )
+
+TEST = Actor.implementador("Test")
 
 
 class GenerarPasswordTests(TestCase):
@@ -115,7 +118,7 @@ class RegistroDeSnapshotBuildersTests(TestCase):
 
         registrar_snapshot_builder("seccion_de_prueba", builder_de_prueba)
         try:
-            version = guardar_version(self.implementacion, "seccion_de_prueba", "Test")
+            version = guardar_version(self.implementacion, "seccion_de_prueba", TEST)
             self.assertEqual(llamadas, [self.implementacion.pk])
             self.assertEqual(version.datos, {"ok": True})
         finally:
@@ -133,7 +136,7 @@ class RegistroDeSnapshotBuildersTests(TestCase):
         self.implementacion.telefono = "011-4000-0000"
         self.implementacion.save(update_fields=["telefono"])
 
-        version = guardar_version(self.implementacion, "datos_contacto", "Test")
+        version = guardar_version(self.implementacion, "datos_contacto", TEST)
         self.assertEqual(version.datos["Teléfono"], "011-4000-0000")
         self.assertEqual(version.editado_por, "Test")
         self.assertEqual(version.seccion, "datos_contacto")

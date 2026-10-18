@@ -8,12 +8,12 @@ con el estado previo de la sección, así el cliente y el equipo pueden consulta
 from datetime import timedelta
 
 from django.contrib import messages
+from django.forms.models import model_to_dict
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from catalog.models import TipoDocumento
 from clients.models import (
-    Implementacion,
     ImplementacionLicencia,
     ImplementacionNovedad,
     ImplementacionTipoDocumento,
@@ -21,7 +21,8 @@ from clients.models import (
     PersonaRol,
     Sucursal,
 )
-from clients.services import guardar_version
+from automatizacion import eventos
+from clients.services import cambio_de_seccion, guardar_version
 from employees.models import Empleado, ImportBatch
 from employees.services import COLUMNAS, leer_archivo_empleados
 
@@ -79,20 +80,20 @@ def fecha_minima_para_cliente(hoy=None):
     return sumar_dias_habiles(hoy or timezone.localdate(), DIAS_HABILES_MINIMOS_CLIENTE)
 
 
-def guardar_condiciones(implementacion, form, editado_por):
+def guardar_condiciones(implementacion, form, actor):
     """Aplica las condiciones del proceso (form = CondicionesForm ya validado) registrando antes
     la versión anterior."""
-    guardar_version(implementacion, "condiciones", editado_por)
-    form.aplicar(implementacion)
-    implementacion.save()
+    with cambio_de_seccion(implementacion, "condiciones", actor, accion="implementacion.condiciones_actualizadas"):
+        form.aplicar(implementacion)
+        implementacion.save()
 
 
-def guardar_fecha_implementacion(implementacion, fecha, editado_por):
+def guardar_fecha_implementacion(implementacion, fecha, actor):
     """Guarda la fecha de salida en productivo (None la borra), registrando antes la versión
     anterior. Lo usan el cliente (con su mínimo) y el panel (sin límite)."""
-    guardar_version(implementacion, "fecha_implementacion", editado_por)
-    implementacion.fecha_salida_productivo = fecha
-    implementacion.save(update_fields=["fecha_salida_productivo"])
+    with cambio_de_seccion(implementacion, "fecha_implementacion", actor, accion="implementacion.fecha_cambiada"):
+        implementacion.fecha_salida_productivo = fecha
+        implementacion.save(update_fields=["fecha_salida_productivo"])
 
 
 def pendientes_de_envio(implementacion):
@@ -144,106 +145,101 @@ def estado_actual_documentos(implementacion):
     return {doc.tipo_documento_id: {"activo": doc.activo} for doc in implementacion.documentos_legajo.all()}
 
 
-def guardar_datos_contacto(implementacion, form, editado_por):
-    # OJO: Django ya mutó `implementacion` en memoria durante form.is_valid()
-    # (ModelForm._post_clean() escribe los valores nuevos en la instancia antes
-    # de guardar). Para que el snapshot capture el estado ANTERIOR de verdad,
-    # hay que leerlo de nuevo desde la base, no del objeto que nos pasaron.
-    anterior = Implementacion.objects.get(pk=implementacion.pk)
-    guardar_version(anterior, "datos_contacto", editado_por)
-    form.save()
+def guardar_datos_contacto(implementacion, form, actor):
+    """Guarda un formulario de datos de la implementación (contacto, empresa o configuración)."""
+    with cambio_de_seccion(implementacion, "datos_contacto", actor):
+        form.save()
 
 
-def guardar_modulos(implementacion, modulos_qs, activos_ids, editado_por):
-    guardar_version(implementacion, "modulos", editado_por)
-    for modulo in modulos_qs:
-        implementacion.modulos.update_or_create(modulo=modulo, defaults={"activo": modulo.id in activos_ids})
+def guardar_modulos(implementacion, modulos_qs, activos_ids, actor):
+    with cambio_de_seccion(implementacion, "modulos", actor):
+        for modulo in modulos_qs:
+            implementacion.modulos.update_or_create(modulo=modulo, defaults={"activo": modulo.id in activos_ids})
 
 
-def guardar_roles(implementacion, formset, editado_por):
-    guardar_version(implementacion, "roles", editado_por)
-    implementacion.roles.all().delete()
-    nuevos = []
-    for form in formset:
-        if form.cleaned_data.get("DELETE"):
-            continue
-        nombre = form.cleaned_data.get("apellido_nombre")
-        if not nombre:
-            continue
-        nuevos.append(
-            PersonaRol(
-                implementacion=implementacion,
-                rol=form.cleaned_data["rol"],
-                apellido_nombre=nombre,
-                cuil=form.cleaned_data.get("cuil", ""),
-                mail=form.cleaned_data.get("mail", ""),
+def guardar_roles(implementacion, formset, actor):
+    with cambio_de_seccion(implementacion, "roles", actor):
+        implementacion.roles.all().delete()
+        nuevos = []
+        for form in formset:
+            if form.cleaned_data.get("DELETE"):
+                continue
+            nombre = form.cleaned_data.get("apellido_nombre")
+            if not nombre:
+                continue
+            nuevos.append(
+                PersonaRol(
+                    implementacion=implementacion,
+                    rol=form.cleaned_data["rol"],
+                    apellido_nombre=nombre,
+                    cuil=form.cleaned_data.get("cuil", ""),
+                    mail=form.cleaned_data.get("mail", ""),
+                )
             )
-        )
-    PersonaRol.objects.bulk_create(nuevos)
+        PersonaRol.objects.bulk_create(nuevos)
 
 
-@transaction.atomic
-def guardar_sucursales(implementacion, formset, editado_por):
+def guardar_sucursales(implementacion, formset, actor):
     """Guarda las sucursales conservando las que siguen existiendo (se reconocen por el nombre):
     antes se borraban todas y se recreaban, y cada empleado perdía la sucursal que tenía asignada
     cada vez que el cliente volvía a guardar este paso."""
-    guardar_version(implementacion, "sucursales", editado_por)
-    existentes = {}
-    for sucursal in implementacion.sucursales.all():
-        existentes.setdefault(sucursal.nombre.strip().lower(), sucursal)
+    with cambio_de_seccion(implementacion, "sucursales", actor):
+        existentes = {}
+        for sucursal in implementacion.sucursales.all():
+            existentes.setdefault(sucursal.nombre.strip().lower(), sucursal)
 
-    conservadas = set()
-    for form in formset:
-        if form.cleaned_data.get("DELETE"):
-            continue
-        if not any(form.cleaned_data.get(f) for f in ("nombre", "calle", "localidad")):
-            continue
-        datos = {k: v for k, v in form.cleaned_data.items() if k != "DELETE"}
-        clave = datos.get("nombre", "").strip().lower()
-        sucursal = existentes.get(clave) if clave and clave not in conservadas else None
-        if sucursal:
-            for campo, valor in datos.items():
-                setattr(sucursal, campo, valor)
-            sucursal.save()
-        else:
-            sucursal = Sucursal.objects.create(implementacion=implementacion, **datos)
-        conservadas.add(clave)
-        existentes[clave] = sucursal
+        conservadas = set()
+        for form in formset:
+            if form.cleaned_data.get("DELETE"):
+                continue
+            if not any(form.cleaned_data.get(f) for f in ("nombre", "calle", "localidad")):
+                continue
+            datos = {k: v for k, v in form.cleaned_data.items() if k != "DELETE"}
+            clave = datos.get("nombre", "").strip().lower()
+            sucursal = existentes.get(clave) if clave and clave not in conservadas else None
+            if sucursal:
+                for campo, valor in datos.items():
+                    setattr(sucursal, campo, valor)
+                sucursal.save()
+            else:
+                sucursal = Sucursal.objects.create(implementacion=implementacion, **datos)
+            conservadas.add(clave)
+            existentes[clave] = sucursal
 
-    mantener = [s.pk for s in existentes.values() if s.nombre.strip().lower() in conservadas]
-    implementacion.sucursales.exclude(pk__in=mantener).delete()
-
-
-def guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, editado_por):
-    guardar_version(implementacion, "licencias_novedades", editado_por)
-    for licencia in licencias_qs:
-        ImplementacionLicencia.objects.update_or_create(
-            implementacion=implementacion, tipo_licencia=licencia,
-            defaults={"activo": form.cleaned_data.get(f"licencia_{licencia.id}_activo", False)},
-        )
-    for novedad in novedades_qs:
-        ImplementacionNovedad.objects.update_or_create(
-            implementacion=implementacion, tipo_novedad=novedad,
-            defaults={"activo": form.cleaned_data.get(f"novedad_{novedad.id}_activo", False)},
-        )
+        mantener = [s.pk for s in existentes.values() if s.nombre.strip().lower() in conservadas]
+        implementacion.sucursales.exclude(pk__in=mantener).delete()
 
 
-def guardar_documentos(implementacion, form, todos_qs, editado_por):
-    guardar_version(implementacion, "documentos", editado_por)
-    for tipo in todos_qs:
-        ImplementacionTipoDocumento.objects.update_or_create(
-            implementacion=implementacion, tipo_documento=tipo,
-            defaults={"activo": form.cleaned_data.get(f"tipo_{tipo.id}_activo", False)},
-        )
-    for nombre, campos in form.parse_otros_documentos():
-        nuevo_tipo, _ = TipoDocumento.objects.get_or_create(
-            implementacion=implementacion, nombre=nombre, defaults={"es_custom": True}
-        )
-        for i, campo_nombre in enumerate(campos):
-            nuevo_tipo.campos.get_or_create(nombre=campo_nombre, defaults={"orden": i})
-        ImplementacionTipoDocumento.objects.update_or_create(
-            implementacion=implementacion, tipo_documento=nuevo_tipo, defaults={"activo": True}
-        )
+def guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, actor):
+    with cambio_de_seccion(implementacion, "licencias_novedades", actor):
+        for licencia in licencias_qs:
+            ImplementacionLicencia.objects.update_or_create(
+                implementacion=implementacion, tipo_licencia=licencia,
+                defaults={"activo": form.cleaned_data.get(f"licencia_{licencia.id}_activo", False)},
+            )
+        for novedad in novedades_qs:
+            ImplementacionNovedad.objects.update_or_create(
+                implementacion=implementacion, tipo_novedad=novedad,
+                defaults={"activo": form.cleaned_data.get(f"novedad_{novedad.id}_activo", False)},
+            )
+
+
+def guardar_documentos(implementacion, form, todos_qs, actor):
+    with cambio_de_seccion(implementacion, "documentos", actor):
+        for tipo in todos_qs:
+            ImplementacionTipoDocumento.objects.update_or_create(
+                implementacion=implementacion, tipo_documento=tipo,
+                defaults={"activo": form.cleaned_data.get(f"tipo_{tipo.id}_activo", False)},
+            )
+        for nombre, campos in form.parse_otros_documentos():
+            nuevo_tipo, _ = TipoDocumento.objects.get_or_create(
+                implementacion=implementacion, nombre=nombre, defaults={"es_custom": True}
+            )
+            for i, campo_nombre in enumerate(campos):
+                nuevo_tipo.campos.get_or_create(nombre=campo_nombre, defaults={"orden": i})
+            ImplementacionTipoDocumento.objects.update_or_create(
+                implementacion=implementacion, tipo_documento=nuevo_tipo, defaults={"activo": True}
+            )
 
 
 # bulk_update arma un CASE por campo con una rama por fila: con lotes grandes MySQL tarda mucho
@@ -253,13 +249,24 @@ LOTE_ACTUALIZACION = 100
 CAMPOS_EMPLEADO_IMPORTADOS = [campo for _h, campo, _r, _t in COLUMNAS if campo not in ("reporta_a", "aprobador")]
 
 
+# Lo más que se detalla en un evento de importación: el resto queda contado en el resumen.
+MAX_CORRECCIONES_EN_EVENTO = 500
+MAX_ERRORES_EN_EVENTO = 50
+
+
+def _valor_json(valor):
+    """Un valor de un campo, listo para guardarse en un evento (las relaciones, por su id)."""
+    return valor.pk if hasattr(valor, "pk") else valor
+
+
 def _resolver_jerarquia_importada(implementacion, filas, advertencias):
     """Segunda pasada del import: liga Reporta A / Aprobador por CUIL, ya con todos los
     empleados cargados (un empleado puede referenciar a otro que está más abajo en el archivo).
-    Si el CUIL referenciado no existe en la nómina no se toca esa relación y se avisa."""
+    Si el CUIL referenciado no existe en la nómina no se toca esa relación y se avisa.
+    Devuelve cuántos empleados cambiaron de jerarquía."""
     con_jerarquia = [f for f in filas if f.get("reporta_a") or f.get("aprobador")]
     if not con_jerarquia:
-        return
+        return 0
     por_cuil = {e.cuil: e for e in implementacion.empleados.all()}
     modificados = {}
     for fila in con_jerarquia:
@@ -278,9 +285,10 @@ def _resolver_jerarquia_importada(implementacion, filas, advertencias):
                 setattr(empleado, campo, referenciado)
                 modificados[empleado.pk] = empleado
     Empleado.objects.bulk_update(list(modificados.values()), ["reporta_a", "aprobador"], batch_size=LOTE_ACTUALIZACION)
+    return len(modificados)
 
 
-def importar_archivo_empleados(implementacion, archivo, editado_por):
+def importar_archivo_empleados(implementacion, archivo, actor):
     """Parsea y carga un archivo de empleados. Devuelve (filas_importadas, errores, advertencias).
 
     Todo o nada: si algo falla a mitad de la carga no queda una nómina a medias. Las filas con
@@ -290,10 +298,10 @@ def importar_archivo_empleados(implementacion, archivo, editado_por):
     datos personales y no se vuelve a usar)."""
     lectura = leer_archivo_empleados(archivo)
     with transaction.atomic():
-        return _cargar_empleados(implementacion, archivo, lectura, editado_por)
+        return _cargar_empleados(implementacion, archivo, lectura, actor)
 
 
-def _cargar_empleados(implementacion, archivo, lectura, editado_por):
+def _cargar_empleados(implementacion, archivo, lectura, actor):
     filas, errores = lectura.filas, lectura.errores
     advertencias = []
     if lectura.columnas_ignoradas:
@@ -301,7 +309,7 @@ def _cargar_empleados(implementacion, archivo, lectura, editado_por):
             "No reconocimos estas columnas y se ignoraron: " + ", ".join(lectura.columnas_ignoradas) + "."
         )
 
-    guardar_version(implementacion, "empleados", editado_por)
+    guardar_version(implementacion, "empleados", actor)
     batch = ImportBatch.objects.create(
         implementacion=implementacion, nombre_archivo=archivo.name[:255],
         filas_totales=len(filas) + len(errores), filas_importadas=len(filas), errores=errores,
@@ -311,25 +319,45 @@ def _cargar_empleados(implementacion, archivo, lectura, editado_por):
     # miles de consultas dentro del pedido web (y el proxy corta a los 60 s).
     existentes = {e.cuil: e for e in implementacion.empleados.all()}
     ahora = timezone.now()
-    nuevos, actualizados = [], []
+    nuevos, actualizados, correcciones = [], [], []
     for fila in filas:
         datos = {campo: fila[campo] for campo in CAMPOS_EMPLEADO_IMPORTADOS}
         empleado = existentes.get(fila["cuil"])
         if empleado:
             # Solo se actualiza lo que cambió: volver a subir la misma planilla (o una con
             # pocas modificaciones) no reescribe miles de filas.
-            if any(getattr(empleado, campo) != valor for campo, valor in datos.items()):
+            cambios = {
+                campo: {"antes": getattr(empleado, campo), "despues": valor}
+                for campo, valor in datos.items() if getattr(empleado, campo) != valor
+            }
+            if cambios:
                 for campo, valor in datos.items():
                     setattr(empleado, campo, valor)
                 empleado.import_batch, empleado.actualizado = batch, ahora
                 actualizados.append(empleado)
+                correcciones.append({"empleado_id": empleado.pk, "cambios": cambios})
         else:
             nuevos.append(Empleado(implementacion=implementacion, import_batch=batch, **datos))
     Empleado.objects.bulk_create(nuevos, batch_size=500)
     Empleado.objects.bulk_update(
         actualizados, CAMPOS_EMPLEADO_IMPORTADOS + ["import_batch", "actualizado"], batch_size=LOTE_ACTUALIZACION,
     )
-    _resolver_jerarquia_importada(implementacion, filas, advertencias)
+    jerarquias = _resolver_jerarquia_importada(implementacion, filas, advertencias)
+
+    # El alta de empleados nuevos se cuenta (cada uno ya queda en `Empleado`); lo que se PISA
+    # (valores que cambiaron en empleados existentes) se detalla, porque la base no lo conserva.
+    eventos.registrar(
+        actor, "nomina.importada", implementacion, seccion="empleados",
+        datos={
+            "archivo": archivo.name[:255], "filas_leidas": len(filas) + len(errores), "nuevos": len(nuevos),
+            "actualizados": len(actualizados), "jerarquias_vinculadas": jerarquias,
+            "filas_con_error": len(errores), "errores": errores[:MAX_ERRORES_EN_EVENTO],
+            "errores_truncados": len(errores) > MAX_ERRORES_EN_EVENTO,
+            "columnas_ignoradas": lectura.columnas_ignoradas, "advertencias": len(advertencias),
+            "correcciones": correcciones[:MAX_CORRECCIONES_EN_EVENTO],
+            "correcciones_truncadas": len(correcciones) > MAX_CORRECCIONES_EN_EVENTO,
+        },
+    )
     return filas, errores, advertencias
 
 
@@ -350,16 +378,18 @@ def resumen_importacion(filas, errores, advertencias, maximo_detalle=5):
     return resultado
 
 
-def agregar_empleado(implementacion, empleado_form, editado_por):
+def agregar_empleado(implementacion, empleado_form, actor):
     """Guarda un EmpleadoForm ya validado. Devuelve True si se agregó."""
     if not empleado_form.is_valid():
         return False
-    guardar_version(implementacion, "empleados", editado_por)
-    empleado = empleado_form.save(commit=False)
-    empleado.implementacion = implementacion
     try:
         with transaction.atomic():
+            guardar_version(implementacion, "empleados", actor)
+            empleado = empleado_form.save(commit=False)
+            empleado.implementacion = implementacion
             empleado.save()
+            eventos.registrar(actor, "empleado.agregado", implementacion, seccion="empleados",
+                              datos={"empleado_id": empleado.pk})
     except IntegrityError:
         # Doble clic o dos personas cargando al mismo tiempo: el CUIL ya está.
         empleado_form.add_error("cuil", "Ya hay un empleado cargado con ese CUIL.")
@@ -367,22 +397,38 @@ def agregar_empleado(implementacion, empleado_form, editado_por):
     return True
 
 
-def editar_empleado(implementacion, empleado_form, editado_por):
-    """Guarda los cambios de un EmpleadoForm (con instance) ya validado. Devuelve True si se guardó."""
+def editar_empleado(implementacion, empleado_form, actor):
+    """Guarda los cambios de un EmpleadoForm (con instance) ya validado. Devuelve True si se guardó.
+    El evento lleva el antes y el después de lo que cambió: la base se queda solo con lo nuevo."""
     if not empleado_form.is_valid():
         return False
-    guardar_version(implementacion, "empleados", editado_por)
+    cambios = {
+        campo: {"antes": _valor_json(empleado_form.initial.get(campo)),
+                "despues": _valor_json(empleado_form.cleaned_data.get(campo))}
+        for campo in empleado_form.changed_data
+    }
     try:
         with transaction.atomic():
-            empleado_form.save()
+            guardar_version(implementacion, "empleados", actor)
+            empleado = empleado_form.save()
+            eventos.registrar(actor, "empleado.editado", implementacion, seccion="empleados",
+                              datos={"empleado_id": empleado.pk, "cambios": cambios})
     except IntegrityError:
         empleado_form.add_error("cuil", "Ya hay un empleado cargado con ese CUIL.")
         return False
     return True
 
 
-def eliminar_empleado(implementacion, empleado_id, editado_por):
+def eliminar_empleado(implementacion, empleado_id, actor):
     if not str(empleado_id).isdigit():
         return
-    guardar_version(implementacion, "empleados", editado_por)
-    implementacion.empleados.filter(pk=empleado_id).delete()
+    empleado = implementacion.empleados.filter(pk=empleado_id).first()
+    if empleado is None:
+        return
+    with transaction.atomic():
+        guardar_version(implementacion, "empleados", actor)
+        # La base lo pierde: el evento guarda la foto completa de lo que se borró.
+        foto = {campo: _valor_json(valor) for campo, valor in model_to_dict(empleado).items()}
+        empleado.delete()
+        eventos.registrar(actor, "empleado.eliminado", implementacion, seccion="empleados",
+                          datos={"empleado_id": int(empleado_id), "foto": foto})

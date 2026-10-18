@@ -1,10 +1,13 @@
 from django.test import TestCase
 
+from automatizacion.actores import Actor
 from catalog.models import TipoDocumento, TipoLicencia, TipoNovedad
 from clients.models import Cliente, Implementacion, ImplementacionModulo, Modulo, PersonaRol, Sucursal
 from employees.forms import EmpleadoForm
 from employees.models import Empleado
 from onboarding import services
+
+TEST = Actor.implementador("Test")
 
 
 class PasosActivosTests(TestCase):
@@ -67,7 +70,7 @@ class GuardarDatosContactoTests(TestCase):
         # A esta altura form.instance (== self.implementacion) ya está mutado en memoria.
         self.assertEqual(self.implementacion.telefono, "011-9999-9999")
 
-        services.guardar_datos_contacto(self.implementacion, form, "Test")
+        services.guardar_datos_contacto(self.implementacion, form, TEST)
 
         version = self.implementacion.versiones.get(seccion="datos_contacto")
         self.assertEqual(version.datos["Teléfono"], "011-0000-0000")
@@ -85,7 +88,7 @@ class GuardarModulosTests(TestCase):
 
     def test_activa_solo_los_seleccionados(self):
         services.guardar_modulos(
-            self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, "Test",
+            self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, TEST,
         )
         activos = set(
             self.implementacion.modulos.filter(activo=True).values_list("modulo__nombre", flat=True)
@@ -93,14 +96,14 @@ class GuardarModulosTests(TestCase):
         self.assertEqual(activos, {"Módulo A"})
 
     def test_guarda_version_antes_de_aplicar_el_cambio(self):
-        services.guardar_modulos(self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, "Test")
+        services.guardar_modulos(self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, TEST)
         version = self.implementacion.versiones.get(seccion="modulos")
         # Ningún módulo estaba activo todavía en el momento del snapshot.
         self.assertEqual(version.datos, {})
 
     def test_es_idempotente_para_el_mismo_conjunto(self):
-        services.guardar_modulos(self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, "Test")
-        services.guardar_modulos(self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, "Test")
+        services.guardar_modulos(self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, TEST)
+        services.guardar_modulos(self.implementacion, Modulo.objects.all(), {self.modulo_a.id}, TEST)
         self.assertEqual(self.implementacion.modulos.filter(activo=True).count(), 1)
 
 
@@ -124,7 +127,7 @@ class GuardarRolesYSucursalesTests(TestCase):
         })
         self.assertTrue(formset.is_valid())
 
-        services.guardar_roles(self.implementacion, formset, "Test")
+        services.guardar_roles(self.implementacion, formset, TEST)
 
         roles = list(self.implementacion.roles.all())
         self.assertEqual(len(roles), 1)
@@ -144,7 +147,7 @@ class GuardarRolesYSucursalesTests(TestCase):
         })
         self.assertTrue(formset.is_valid())
 
-        services.guardar_sucursales(self.implementacion, formset, "Test")
+        services.guardar_sucursales(self.implementacion, formset, TEST)
 
         self.assertEqual(Sucursal.objects.filter(implementacion=self.implementacion).count(), 1)
 
@@ -167,7 +170,7 @@ class GuardarLicenciasNovedadesYDocumentosTests(TestCase):
         self.assertTrue(form.is_valid())
 
         services.guardar_licencias_y_novedades(
-            self.implementacion, form, TipoLicencia.objects.all(), TipoNovedad.objects.all(), "Test",
+            self.implementacion, form, TipoLicencia.objects.all(), TipoNovedad.objects.all(), TEST,
         )
 
         self.assertTrue(self.implementacion.licencias.get(tipo_licencia=self.licencia).activo)
@@ -183,7 +186,7 @@ class GuardarLicenciasNovedadesYDocumentosTests(TestCase):
         self.assertTrue(form.is_valid())
 
         services.guardar_documentos(
-            self.implementacion, form, services.tipos_documento_disponibles(self.implementacion), "Test",
+            self.implementacion, form, services.tipos_documento_disponibles(self.implementacion), TEST,
         )
 
         nuevo = TipoDocumento.objects.get(implementacion=self.implementacion, es_custom=True)
@@ -212,7 +215,7 @@ class EmpleadosTests(TestCase):
             {"cuil": "20333333334", "nombre": "Ana", "apellido": "López"},
             implementacion=self.implementacion,
         )
-        agregado = services.agregar_empleado(self.implementacion, form, "Test")
+        agregado = services.agregar_empleado(self.implementacion, form, TEST)
 
         self.assertTrue(agregado)
         self.assertEqual(self.implementacion.empleados.count(), 1)
@@ -221,7 +224,7 @@ class EmpleadosTests(TestCase):
 
     def test_agregar_empleado_con_form_invalido_no_guarda_nada(self):
         form = EmpleadoForm({"cuil": ""}, implementacion=self.implementacion)
-        agregado = services.agregar_empleado(self.implementacion, form, "Test")
+        agregado = services.agregar_empleado(self.implementacion, form, TEST)
 
         self.assertFalse(agregado)
         self.assertEqual(self.implementacion.empleados.count(), 0)
@@ -232,22 +235,22 @@ class EmpleadosTests(TestCase):
             {"cuil": "20333333334", "nombre": "Ana", "apellido": "López"},
             implementacion=self.implementacion,
         )
-        services.agregar_empleado(self.implementacion, form, "Test")
+        services.agregar_empleado(self.implementacion, form, TEST)
         empleado_id = self.implementacion.empleados.get().id
 
-        services.eliminar_empleado(self.implementacion, str(empleado_id), "Test")
+        services.eliminar_empleado(self.implementacion, str(empleado_id), TEST)
 
         self.assertEqual(self.implementacion.empleados.count(), 0)
 
     def test_eliminar_empleado_con_id_no_numerico_no_rompe(self):
         """Regresión: esto tiraba ValueError sin capturar (500) antes del fix."""
         try:
-            services.eliminar_empleado(self.implementacion, "no-es-un-id", "Test")
+            services.eliminar_empleado(self.implementacion, "no-es-un-id", TEST)
         except ValueError:
             self.fail("eliminar_empleado no debería propagar ValueError ante un id inválido")
 
     def test_eliminar_empleado_con_id_no_numerico_no_guarda_version(self):
-        services.eliminar_empleado(self.implementacion, "abc", "Test")
+        services.eliminar_empleado(self.implementacion, "abc", TEST)
         self.assertFalse(self.implementacion.versiones.filter(seccion="empleados").exists())
 
 

@@ -8,12 +8,14 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
+from automatizacion.actores import Actor
 from clients.models import Cliente, Implementacion
 from employees.forms import EmpleadoForm
 from employees.models import Empleado, ImportBatch
 from employees.services import ArchivoInvalido, generar_nomina_xlsx, leer_archivo_empleados
 from onboarding import services
 
+ANA = Actor.implementador("ana")
 CABECERA = ["CUIL", "Nombre", "Apellido", "Fecha Ingreso (DD/MM/AAAA)", "Mail"]
 
 
@@ -130,7 +132,7 @@ class CargaDeLaImportacionTests(TestCase):
         self.implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="Empresa A"))
 
     def importar(self, archivo):
-        return services.importar_archivo_empleados(self.implementacion, archivo, "ana")
+        return services.importar_archivo_empleados(self.implementacion, archivo, ANA)
 
     def test_carga_los_empleados_y_registra_la_importacion_sin_guardar_el_archivo(self):
         filas, errores, advertencias = self.importar(
@@ -252,8 +254,8 @@ class EmpleadoFormTests(TestCase):
         y tiene que volver como error de campo, no como página de error."""
         primero, segundo = self.form(), self.form()
         self.assertTrue(primero.is_valid() and segundo.is_valid())
-        self.assertTrue(services.agregar_empleado(self.implementacion, primero, "ana"))
-        self.assertFalse(services.agregar_empleado(self.implementacion, segundo, "ana"))
+        self.assertTrue(services.agregar_empleado(self.implementacion, primero, ANA))
+        self.assertFalse(services.agregar_empleado(self.implementacion, segundo, ANA))
         self.assertIn("Ya hay un empleado", " ".join(segundo.errors["cuil"]))
         self.assertEqual(Empleado.objects.count(), 1)
 
@@ -262,11 +264,11 @@ class ReimportarLaMismaPlanillaTests(TestCase):
     def test_no_reescribe_a_los_empleados_que_no_cambiaron(self):
         implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="Empresa A"))
         filas = [[20000000000 + i, "Juan", f"Pérez{i}", None, ""] for i in range(20)]
-        services.importar_archivo_empleados(implementacion, _xlsx(filas), "ana")
+        services.importar_archivo_empleados(implementacion, _xlsx(filas), ANA)
         antes = dict(Empleado.objects.values_list("cuil", "actualizado"))
 
         filas[0][1] = "Juan Carlos"  # uno solo cambia
-        services.importar_archivo_empleados(implementacion, _xlsx(filas), "ana")
+        services.importar_archivo_empleados(implementacion, _xlsx(filas), ANA)
 
         despues = dict(Empleado.objects.values_list("cuil", "actualizado"))
         cambiados = [cuil for cuil in antes if antes[cuil] != despues[cuil]]

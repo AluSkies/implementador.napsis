@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 
+from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Implementacion, Modulo
 from clients.services import resumen_implementacion
@@ -38,7 +39,10 @@ from .services import (
 
 logger = logging.getLogger(__name__)
 
-EDITADO_POR_CLIENTE = "Cliente"
+
+def _actor(request):
+    return Actor.de_usuario(request.user)
+
 
 TITULOS_PASO = {
     PASO_DATOS: "Datos de contacto",
@@ -178,7 +182,7 @@ def _step_empresa(request, implementacion, step):
     if request.method == "POST":
         form = EmpresaForm(request.POST, instance=implementacion)
         if form.is_valid():
-            services.guardar_datos_contacto(implementacion, form, EDITADO_POR_CLIENTE)
+            services.guardar_datos_contacto(implementacion, form, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         form = EmpresaForm(instance=implementacion)
@@ -198,7 +202,7 @@ def _step_modulos(request, implementacion, step):
         form = ModulosForm(request.POST, modulos_qs=modulos_qs, activos_ids=activos_ids)
         if form.is_valid():
             nuevos_activos = {m.id for m in modulos_qs if form.cleaned_data.get(f"modulo_{m.id}", False)}
-            services.guardar_modulos(implementacion, modulos_qs, nuevos_activos, EDITADO_POR_CLIENTE)
+            services.guardar_modulos(implementacion, modulos_qs, nuevos_activos, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         form = ModulosForm(modulos_qs=modulos_qs, activos_ids=activos_ids, disabled=not editable)
@@ -219,7 +223,7 @@ def _step_roles(request, implementacion, step):
     if request.method == "POST":
         formset = RolesFormSet(request.POST)
         if formset.is_valid():
-            services.guardar_roles(implementacion, formset, EDITADO_POR_CLIENTE)
+            services.guardar_roles(implementacion, formset, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         formset = RolesFormSet(initial=initial)
@@ -240,7 +244,7 @@ def _step_configuracion(request, implementacion, step):
     if request.method == "POST":
         form = ConfiguracionForm(request.POST, request.FILES, instance=implementacion)
         if form.is_valid():
-            services.guardar_datos_contacto(implementacion, form, EDITADO_POR_CLIENTE)
+            services.guardar_datos_contacto(implementacion, form, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         form = ConfiguracionForm(instance=implementacion)
@@ -261,7 +265,7 @@ def _step_sucursales(request, implementacion, step):
     if request.method == "POST":
         formset = SucursalFormSet(request.POST)
         if formset.is_valid():
-            services.guardar_sucursales(implementacion, formset, EDITADO_POR_CLIENTE)
+            services.guardar_sucursales(implementacion, formset, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         formset = SucursalFormSet(initial=initial)
@@ -280,7 +284,7 @@ def _step_licencias_novedades(request, implementacion, step):
             estado_por_licencia=estado_licencia, estado_por_novedad=estado_novedad,
         )
         if form.is_valid():
-            services.guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, EDITADO_POR_CLIENTE)
+            services.guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         form = LicenciasNovedadesForm(
@@ -309,7 +313,7 @@ def _step_documentos(request, implementacion, step):
     if request.method == "POST":
         form = DocumentosLegajoForm(request.POST, tipos_qs=todos_qs, estado_por_tipo=estado_por_tipo)
         if form.is_valid():
-            services.guardar_documentos(implementacion, form, todos_qs, EDITADO_POR_CLIENTE)
+            services.guardar_documentos(implementacion, form, todos_qs, _actor(request))
             return _redirect_next(implementacion, step)
     else:
         form = DocumentosLegajoForm(tipos_qs=todos_qs, estado_por_tipo=estado_por_tipo)
@@ -333,7 +337,7 @@ def _importar_archivo_empleados(request, implementacion):
 
     try:
         filas, errores, advertencias = services.importar_archivo_empleados(
-            implementacion, import_form.cleaned_data["archivo"], EDITADO_POR_CLIENTE,
+            implementacion, import_form.cleaned_data["archivo"], _actor(request),
         )
     except ArchivoInvalido as error:
         return import_form, [{"fila": "-", "mensaje": str(error)}]
@@ -345,7 +349,7 @@ def _importar_archivo_empleados(request, implementacion):
 def _agregar_empleado_manual(request, implementacion):
     """Maneja la acción 'agregar_manual' del paso de empleados. Devuelve el EmpleadoForm a mostrar."""
     empleado_form = EmpleadoForm(request.POST, implementacion=implementacion)
-    if services.agregar_empleado(implementacion, empleado_form, EDITADO_POR_CLIENTE):
+    if services.agregar_empleado(implementacion, empleado_form, _actor(request)):
         messages.success(request, "Empleado agregado.")
         return EmpleadoForm(implementacion=implementacion)
     return empleado_form
@@ -368,7 +372,7 @@ def _step_empleados(request, implementacion, step):
         editando = _empleado_a_editar(implementacion, request.POST.get("empleado_id"))
         if editando:
             edicion_form = EmpleadoForm(request.POST, instance=editando, implementacion=implementacion)
-            if services.editar_empleado(implementacion, edicion_form, EDITADO_POR_CLIENTE):
+            if services.editar_empleado(implementacion, edicion_form, _actor(request)):
                 messages.success(request, "Empleado actualizado.")
                 return redirect("onboarding:wizard_step", token=implementacion.token, step=step)
         accion = None
@@ -382,7 +386,7 @@ def _step_empleados(request, implementacion, step):
     elif accion == "agregar_manual":
         empleado_form = _agregar_empleado_manual(request, implementacion)
     elif accion == "eliminar":
-        services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), EDITADO_POR_CLIENTE)
+        services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), _actor(request))
         messages.info(request, "Empleado eliminado.")
     elif accion == "continuar":
         if implementacion.empleados.exists():
@@ -429,7 +433,7 @@ def _step_revision(request, implementacion, step):
         elif fecha_form.is_valid():
             fecha = fecha_form.cleaned_data["fecha_salida_productivo"]
             if fecha != implementacion.fecha_salida_productivo:
-                services.guardar_fecha_implementacion(implementacion, fecha, EDITADO_POR_CLIENTE)
+                services.guardar_fecha_implementacion(implementacion, fecha, _actor(request))
             # Primero se registra el envío y recién después se avisa al equipo: si el mail
             # falla (SMTP caído, etc.) el cliente no tiene por qué ver un error ni perder
             # lo que ya terminó. La falla queda en el log.
