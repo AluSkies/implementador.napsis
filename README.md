@@ -46,12 +46,23 @@ Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulo
 ## Tests
 
 ```bash
-venv/Scripts/python manage.py test                   # toda la suite (~10 segundos)
-venv/Scripts/python manage.py test dashboard         # solo una app
+venv/Scripts/python manage.py test                   # toda la suite (~45 s)
+venv/Scripts/python manage.py test --parallel        # en paralelo, con todos los núcleos (~30 s)
+venv/Scripts/python manage.py test onboarding        # una app
+venv/Scripts/python manage.py test onboarding.tests.firma                  # un paquete (~5 s)
+venv/Scripts/python manage.py test onboarding.tests.firma.test_servicio    # un módulo
+venv/Scripts/python manage.py test onboarding.tests.firma --keepdb         # sin recrear la base de test
 venv/Scripts/python manage.py test --durations=10    # los 10 más lentos
 ```
 
-Hay tests por app, en paquetes `tests/`. La base de test arranca vacía (los catálogos se cargan con `seed_catalogos`/`seed_modulos`, no con migraciones), así que cada test crea lo que necesita.
+**Dónde está cada cosa.** Hay tests por app, en paquetes `tests/`, y dentro de cada app agrupados por tema para poder correr solo lo que se tocó:
+
+- `onboarding/tests/`: `wizard/` (cada paso y el envío), `firma/`, `revision/` (validar, devolver, cumplir, invalidación y reglas de validación), `liquidaciones/`, `imagenes/`, `formularios/`, `servicios/` (guardado, pendientes, empleados), `acciones/` (alta, estado y envío sin pantalla). `base.py` tiene lo compartido (`BaseWizard`, `EnviadaBase`, helpers).
+- `automatizacion/tests/`: eventos y `congelada/` (la configuración congelada).
+- `dashboard/tests/`: `panel/`, `equipo/`, `configuracion/` y `base.py` (`BasePanel`).
+- `clients/tests/`: `modelos/`, `acceso/` y `operacion/`.
+
+Un módulo de tests nuevo va en el paquete de su tema; lo que comparten varios módulos va en el `base.py` de la app, no se importa de otro módulo de tests. La base de test arranca vacía (los catálogos se cargan con `seed_catalogos`/`seed_modulos`, no con migraciones), así que cada test crea lo que necesita.
 
 Al correr los tests `settings.py` cambia el hasher de contraseñas a uno rápido. El de producción (PBKDF2) es lento a propósito, y como cada test crea usuarios y se loguea, con él la suite tardaba más de 10 minutos en vez de segundos. Un test verifica que ese cambio nunca se active fuera de los tests.
 

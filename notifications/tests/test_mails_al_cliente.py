@@ -11,8 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import Cliente, Implementacion
-from dashboard.tests.test_asignado import BasePanel
-from onboarding.tests.test_wizard import BaseWizard, _url
+from dashboard.tests.base import BasePanel
+from onboarding.tests.base import BaseWizard, _url
 
 CLAVE = "una-clave-larga-9XqT"
 
