@@ -20,7 +20,7 @@ from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 
-from automatizacion import eventos
+from automatizacion import congelada, eventos
 from clients.models import Cliente, Implementacion, Modulo, RondaRevision, UbicacionFirma
 from clients.services import cambio_de_seccion, crear_o_resetear_acceso, foto_de_seccion
 from clients.validators import normalizar_cuits
@@ -304,13 +304,26 @@ def aprobar_para_configurar(actor, implementacion):
         return Resultado(implementacion=implementacion, avisos=[
             Aviso(messages.ERROR, "No se puede validar: todavía falta completar datos obligatorios. " + " ".join(pendientes)),
         ])
-    with transaction.atomic():
-        implementacion.validada_en = timezone.now()
-        implementacion.save(update_fields=["validada_en", "actualizado"])
-        eventos.registrar(actor, "estado.validada", implementacion, datos={"ronda": implementacion.rondas.count()})
+    try:
+        with transaction.atomic():
+            implementacion.validada_en = timezone.now()
+            implementacion.save(update_fields=["validada_en", "actualizado"])
+            foto = congelada.congelar(implementacion, actor)
+            eventos.registrar(actor, "estado.validada", implementacion, datos={
+                "ronda": implementacion.rondas.count(),
+                "congelada": {"version": foto.version, "hash": foto.hash},
+            })
+    except congelada.ArchivoNoDisponible as error:
+        implementacion.validada_en = None
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, f"No se pudo validar: no se pudo leer el archivo «{error.campo}». Volvé a subirlo y probá de nuevo."),
+        ])
     return Resultado(
         implementacion=implementacion,
-        avisos=[Aviso(messages.SUCCESS, "Documentación validada: la implementación quedó lista para configurar.")],
+        avisos=[Aviso(
+            messages.SUCCESS,
+            f"Documentación validada: la implementación quedó lista para configurar (configuración congelada v{foto.version}).",
+        )],
     )
 
 

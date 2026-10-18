@@ -77,3 +77,59 @@ class EventoImplementacion(models.Model):
 
     def delete(self, *args, **kwargs):
         raise EventoInmutable("Los eventos no se pueden borrar.")
+
+
+class CongeladaInmutable(Exception):
+    """Una configuración congelada no se modifica ni se borra: si algo cambia, se crea otra versión."""
+
+
+class CongeladaQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise CongeladaInmutable("Las configuraciones congeladas no se pueden modificar.")
+
+    def delete(self):
+        raise CongeladaInmutable("Las configuraciones congeladas no se pueden borrar.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise CongeladaInmutable("Las configuraciones congeladas no se pueden modificar.")
+
+
+class ConfiguracionCongelada(models.Model):
+    """La foto de lo que el equipo aprobó para configurar (ver `automatizacion.congelada`).
+
+    Una por cada vez que se valida la documentación; solo de lectura. `contenido` son los datos con
+    códigos estables y `archivos` las copias inmutables (ruta y `sha256`) de lo que se subió."""
+
+    # Como los eventos: sobrevive a la implementación (queda el uuid).
+    implementacion = models.ForeignKey(
+        "clients.Implementacion", null=True, blank=True, on_delete=models.SET_NULL, related_name="congeladas",
+    )
+    implementacion_uuid = models.UUIDField(null=True, blank=True, db_index=True)
+    version = models.PositiveIntegerField()
+    version_esquema = models.PositiveSmallIntegerField(default=1)
+    contenido = models.JSONField(encoder=DjangoJSONEncoder)
+    archivos = models.JSONField(default=list, encoder=DjangoJSONEncoder)
+    hash = models.CharField(max_length=64)
+    creada_por = models.CharField(max_length=150)
+    creada_en = models.DateTimeField(default=timezone.now, editable=False)
+
+    objects = CongeladaQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "Configuración congelada"
+        verbose_name_plural = "Configuraciones congeladas"
+        ordering = ["implementacion_uuid", "version"]
+        constraints = [
+            models.UniqueConstraint(fields=["implementacion_uuid", "version"], name="congelada_version_unica"),
+        ]
+
+    def __str__(self):
+        return f"{self.implementacion_uuid} · v{self.version}"
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise CongeladaInmutable("Las configuraciones congeladas no se pueden modificar.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise CongeladaInmutable("Las configuraciones congeladas no se pueden borrar.")

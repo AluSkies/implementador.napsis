@@ -1,11 +1,15 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import FileResponse
+import json
+
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from automatizacion.actores import Actor
+from automatizacion.congelada import como_documento as congelada_como_documento
+from automatizacion.models import ConfiguracionCongelada
 from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Cliente, Implementacion, Modulo, UbicacionFirma
 from clients.services import (
@@ -506,6 +510,10 @@ def implementacion_detalle(request, pk):
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
         "rondas": implementacion.rondas.all(),
+        "congeladas": implementacion.congeladas.order_by("-version"),
+        "congelada_vigente": (
+            implementacion.congeladas.order_by("-version").first() if implementacion.validada_en else None
+        ),
         "pendientes_de_validacion": (
             onboarding_services.pendientes_de_validacion(implementacion)
             if implementacion.enviado and not implementacion.validada_en else []
@@ -537,6 +545,18 @@ def implementacion_detalle(request, pk):
         "import_form": formularios_con_error.get("import_form") or ImportarArchivoForm(),
     })
     return render(request, "dashboard/implementacion_detalle.html", contexto)
+
+
+@staff_member_required(login_url="login")
+def descargar_congelada(request, pk, version):
+    """La configuración congelada de una versión, como un único .json (solo el equipo)."""
+    congelada = get_object_or_404(ConfiguracionCongelada, implementacion_id=pk, version=version)
+    respuesta = HttpResponse(
+        json.dumps(congelada_como_documento(congelada), ensure_ascii=False, indent=2, sort_keys=True),
+        content_type="application/json; charset=utf-8",
+    )
+    respuesta["Content-Disposition"] = f'attachment; filename="configuracion_{pk}_v{version}.json"'
+    return respuesta
 
 
 @staff_member_required(login_url="login")

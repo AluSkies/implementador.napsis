@@ -139,6 +139,28 @@
 </div>
 {% endif %}
 
+{% if congeladas %}
+<div class="card section-readonly">
+    <h2>Configuración congelada</h2>
+    <p class="muted">La foto de lo que se aprobó para configurar: datos con códigos estables y una copia inmutable de los archivos. Cada vez que se valida se crea una versión nueva.</p>
+    <table>
+        <thead><tr><th>Versión</th><th>Creada</th><th>Huella</th><th>Archivos (sha256)</th><th></th></tr></thead>
+        <tbody>
+        {% for c in congeladas %}
+            <tr>
+                <td>v{{ c.version }}{% if congelada_vigente and c.pk == congelada_vigente.pk %} <strong>(vigente)</strong>{% endif %}</td>
+                <td>{{ c.creada_en|date:"d/m/Y H:i" }}<br><span class="muted">{{ c.creada_por }}</span></td>
+                <td><code>{{ c.hash|slice:":12" }}</code></td>
+                <td>{% for a in c.archivos %}<a href="{% url 'media' ruta=a.ruta %}">{{ a.campo }}</a> <span class="muted"><code>{{ a.sha256|slice:":10" }}</code></span>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+                <td><a href="{% url 'dashboard:descargar_congelada' pk=implementacion.pk version=c.version %}">Descargar .json</a></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if not congelada_vigente %}<p class="muted">Ninguna versión está vigente: la validación se perdió o todavía no se volvió a validar.</p>{% endif %}
+</div>
+{% endif %}
+
 <div class="card section-readonly">
     <h2>Datos de contacto</h2>
     <dl>
