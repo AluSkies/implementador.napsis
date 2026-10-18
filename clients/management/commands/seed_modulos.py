@@ -17,14 +17,29 @@ from django.core.management.base import BaseCommand
 
 from clients.models import Modulo
 
-MODULOS = ["Recibo Digital", "Comunicación", "Fichada", "Legajos", "Novedades"]
+# (código estable, nombre visible). El código es lo que usa el wizard; el nombre se puede corregir en el admin.
+MODULOS = [
+    (Modulo.RECIBO_DIGITAL, "Recibo Digital"),
+    (Modulo.COMUNICACION, "Comunicación"),
+    (Modulo.FICHADA, "Fichada"),
+    (Modulo.LEGAJOS, "Legajos"),
+    (Modulo.NOVEDADES, "Novedades"),
+]
 
 
 class Command(BaseCommand):
     help = "Carga (o completa) el catálogo de módulos contratables."
 
     def handle(self, *args, **options):
-        for i, nombre in enumerate(MODULOS):
-            Modulo.objects.get_or_create(nombre=nombre, defaults={"orden": i})
+        for i, (codigo, nombre) in enumerate(MODULOS):
+            if Modulo.objects.filter(codigo=codigo).exists():
+                continue
+            # Una base armada antes de los códigos puede tener el módulo con ese nombre y sin código.
+            existente = Modulo.objects.filter(nombre=nombre, codigo=None).first()
+            if existente:
+                existente.codigo = codigo
+                existente.save(update_fields=["codigo"])
+            else:
+                Modulo.objects.create(codigo=codigo, nombre=nombre, orden=i)
 
         self.stdout.write(self.style.SUCCESS(f"Catálogo de módulos listo: {len(MODULOS)} módulos."))

@@ -12,6 +12,7 @@ existen, y no revierte activaciones/tipos "Otros" que haya cargado un cliente.
 
 from django.core.management.base import BaseCommand
 
+from catalog.codigos import codigo_desde_nombre
 from catalog.models import CampoDocumento, TipoDocumento, TipoLicencia, TipoNovedad
 
 LICENCIAS = [
@@ -138,16 +139,18 @@ class Command(BaseCommand):
         sembrar_documentos = completar or not TipoDocumento.objects.filter(implementacion=None).exists()
 
         for i, nombre in enumerate(LICENCIAS if sembrar_licencias else []):
-            TipoLicencia.objects.get_or_create(nombre=nombre, defaults={"orden": i})
+            TipoLicencia.objects.get_or_create(codigo=codigo_desde_nombre(nombre), defaults={"nombre": nombre, "orden": i})
 
         for i, nombre in enumerate(NOVEDADES if sembrar_novedades else []):
-            TipoNovedad.objects.get_or_create(nombre=nombre, defaults={"orden": i})
+            TipoNovedad.objects.get_or_create(codigo=codigo_desde_nombre(nombre), defaults={"nombre": nombre, "orden": i})
 
         for i, (nombre, requiere_firma, campos) in enumerate(TIPOS_DOCUMENTO if sembrar_documentos else []):
             tipo, _ = TipoDocumento.objects.get_or_create(
-                nombre=nombre,
-                implementacion=None,
-                defaults={"es_custom": False, "requiere_firma": requiere_firma, "orden": i},
+                codigo=codigo_desde_nombre(nombre),
+                defaults={
+                    "nombre": nombre, "implementacion": None, "es_custom": False,
+                    "requiere_firma": requiere_firma, "orden": i,
+                },
             )
             for j, (campo_nombre, obligatorio, max_adjuntos) in enumerate(campos):
                 CampoDocumento.objects.get_or_create(

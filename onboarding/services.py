@@ -17,6 +17,7 @@ from clients.models import (
     ImplementacionLicencia,
     ImplementacionNovedad,
     ImplementacionTipoDocumento,
+    Modulo,
     PersonaRol,
     Sucursal,
 )
@@ -41,11 +42,11 @@ DIAS_HABILES_MINIMOS_CLIENTE = 10
 # Pasos que solo aplican si el cliente contrató alguno de estos módulos.
 # Los pasos que no aparecen acá (datos, módulos, nómina y revisión) son universales.
 PASO_REQUIERE_MODULO = {
-    PASO_SUCURSALES: {"Fichada"},                    # Sucursales (fichada por ubicación)
-    PASO_ROLES: {"Recibo Digital", "Legajos"},       # Apoderado/Liquidador (recibos) o Admin RRHH (legajo)
-    PASO_CONFIGURACION: {"Recibo Digital"},          # Configuración de firma y adjuntos del recibo
-    PASO_LICENCIAS: {"Novedades"},                   # Licencias y Novedades
-    PASO_DOCUMENTOS: {"Legajos"},                    # Documentos de Legajo Digital
+    PASO_SUCURSALES: {Modulo.FICHADA},                          # Sucursales (fichada por ubicación)
+    PASO_ROLES: {Modulo.RECIBO_DIGITAL, Modulo.LEGAJOS},        # Apoderado/Liquidador (recibos) o Admin RRHH (legajo)
+    PASO_CONFIGURACION: {Modulo.RECIBO_DIGITAL},                # Configuración de firma y adjuntos del recibo
+    PASO_LICENCIAS: {Modulo.NOVEDADES},                         # Licencias y Novedades
+    PASO_DOCUMENTOS: {Modulo.LEGAJOS},                          # Documentos de Legajo Digital
 }
 
 
@@ -53,7 +54,7 @@ def pasos_activos(implementacion):
     """Devuelve la lista ordenada de pasos que le corresponde completar a esta
     implementación puntual, según los módulos que contrató."""
     modulos_activos = set(
-        implementacion.modulos.filter(activo=True).values_list("modulo__nombre", flat=True)
+        implementacion.modulos.filter(activo=True).values_list("modulo__codigo", flat=True)
     )
     activos = []
     for paso in range(1, TOTAL_PASOS + 1):

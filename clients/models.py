@@ -6,6 +6,8 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 
+from catalog.codigos import ConCodigo
+
 from .validators import validar_tamanio_archivo
 
 
@@ -49,8 +51,17 @@ class Cliente(models.Model):
         return self.nombre
 
 
-class Modulo(models.Model):
-    """Catálogo de módulos contratables (Recibo Digital, Autogestión, etc.)."""
+class Modulo(ConCodigo):
+    """Catálogo de módulos contratables (Recibo Digital, Autogestión, etc.).
+
+    Los pasos del wizard dependen del **código** del módulo (no del nombre, que se puede corregir en el
+    admin sin romper nada)."""
+
+    RECIBO_DIGITAL = "recibo_digital"
+    COMUNICACION = "comunicacion"
+    FICHADA = "fichada"
+    LEGAJOS = "legajos"
+    NOVEDADES = "novedades"
 
     nombre = models.CharField(max_length=100, unique=True)
     orden = models.PositiveIntegerField(default=0)

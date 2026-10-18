@@ -1,7 +1,9 @@
 from django.db import models
 
+from .codigos import ConCodigo
 
-class TipoLicencia(models.Model):
+
+class TipoLicencia(ConCodigo):
     """Catálogo fijo relevado en Licencias y Novedades.xlsx (16 tipos)."""
 
     nombre = models.CharField(max_length=150, unique=True)
@@ -16,7 +18,7 @@ class TipoLicencia(models.Model):
         return self.nombre
 
 
-class TipoNovedad(models.Model):
+class TipoNovedad(ConCodigo):
     """Catálogo fijo relevado en Licencias y Novedades.xlsx (10 tipos)."""
 
     nombre = models.CharField(max_length=150, unique=True)
@@ -31,7 +33,7 @@ class TipoNovedad(models.Model):
         return self.nombre
 
 
-class TipoDocumento(models.Model):
+class TipoDocumento(ConCodigo):
     """
     Tipo de documento del Legajo Digital.
 
@@ -62,6 +64,9 @@ class TipoDocumento(models.Model):
         verbose_name = "Tipo de documento"
         verbose_name_plural = "Tipos de documento"
         ordering = ["orden", "nombre"]
+
+    def _codigo_aplica(self):
+        return self.implementacion_id is None and not self.es_custom
 
     def __str__(self):
         return self.nombre

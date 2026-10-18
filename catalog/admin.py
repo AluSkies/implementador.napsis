@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from .codigos import AdminConCodigo
 from .models import CampoDocumento, TipoDocumento, TipoLicencia, TipoNovedad
 
 
@@ -9,17 +10,17 @@ class CampoDocumentoInline(admin.TabularInline):
 
 
 @admin.register(TipoDocumento)
-class TipoDocumentoAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "implementacion", "es_custom", "requiere_firma", "orden")
+class TipoDocumentoAdmin(AdminConCodigo, admin.ModelAdmin):
+    list_display = ("nombre", "codigo", "implementacion", "es_custom", "requiere_firma", "orden")
     list_filter = ("es_custom", "requiere_firma")
     inlines = [CampoDocumentoInline]
 
 
 @admin.register(TipoLicencia)
-class TipoLicenciaAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "orden")
+class TipoLicenciaAdmin(AdminConCodigo, admin.ModelAdmin):
+    list_display = ("nombre", "codigo", "orden")
 
 
 @admin.register(TipoNovedad)
-class TipoNovedadAdmin(admin.ModelAdmin):
-    list_display = ("nombre", "orden")
+class TipoNovedadAdmin(AdminConCodigo, admin.ModelAdmin):
+    list_display = ("nombre", "codigo", "orden")

@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from catalog.codigos import AdminConCodigo
+
 from .models import (
     Cliente,
     Implementacion,
@@ -52,7 +54,10 @@ class ImplementacionAdmin(admin.ModelAdmin):
     inlines = [ImplementacionModuloInline, PersonaRolInline, SucursalInline]
 
 
-admin.site.register(Modulo)
+@admin.register(Modulo)
+class ModuloAdmin(AdminConCodigo, admin.ModelAdmin):
+    list_display = ("nombre", "codigo", "orden")
+    # Renombrar un módulo es seguro (los pasos dependen del código); borrarlo no lo es.
 admin.site.register(ImplementacionLicencia)
 admin.site.register(ImplementacionNovedad)
 admin.site.register(ImplementacionTipoDocumento)
