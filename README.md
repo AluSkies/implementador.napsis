@@ -96,6 +96,7 @@ La nómina va **antes** que los roles para poder elegir a las personas con rol d
 ## Decisiones deliberadas
 
 - **PDF.js viaja con el repositorio** (`static/vendor/pdfjs/`, ~1,4 MB) en lugar de cargarse desde un CDN. Es un peso a propósito: el cliente es corporativo y sus redes suelen bloquear dominios externos o exigir una lista de permitidos, y el editor de firma no puede quedar inutilizable por eso. La versión está fija (3.11.174, licencia Apache 2.0) y se actualiza a mano (`static/vendor/pdfjs/LEEME.md`).
+- **Las tipografías también viajan con el repositorio** (`static/fonts/`, Montserrat y Roboto variables, subconjunto latino, ~80 KB, licencia OFL) en lugar de cargarse desde Google Fonts, por el mismo motivo: no hay ningún pedido a dominios externos. Hoy el portal no depende de ningún tercero en el navegador.
 
 ## Qué exige el wizard antes de poder enviar
 

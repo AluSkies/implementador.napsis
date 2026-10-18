@@ -1,0 +1,17 @@
+/* Montserrat (texto) y Roboto (títulos), subconjunto latino, en su versión variable (un archivo cubre todos
+   los pesos). Se sirven desde acá y no desde Google Fonts: ver «Decisiones deliberadas» en el README. */
+@font-face {
+    font-family: 'Montserrat';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url(montserrat-latin.woff2) format('woff2');
+}
+@font-face {
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 100 900;
+    font-stretch: 100%;
+    font-display: swap;
+    src: url(roboto-latin.woff2) format('woff2');
+}
