@@ -240,11 +240,31 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
             if not editable:
                 self.fields[nombre].disabled = True
                 self.fields[nombre].help_text = "Lo definió Napsis para tu implementación: no se puede cambiar."
+        self._cantidad_de_capitas_desde_la_nomina()
         campo = self.fields["modelo_recibo"]
         campo.validators.append(FileExtensionValidator(["pdf"]))
         if not self.instance.modelo_recibo:
             campo.required = True
             campo.label = "Modelo de recibo (PDF, obligatorio)"
+
+    def _cantidad_de_capitas_desde_la_nomina(self):
+        """La cantidad de cápitas, si el cliente no la indica, es la suma de la nómina (empleados cargados)."""
+        nomina = self.instance.empleados.count() if self.instance.pk else 0
+        campo = self.fields["cantidad_capitas"]
+        if nomina:
+            campo.help_text = (
+                f"Si la dejás vacía, usamos la cantidad de empleados de tu nómina ({nomina}). Indicala solo si es distinta."
+            )
+            if self.instance.cantidad_capitas is None:
+                self.initial["cantidad_capitas"] = nomina
+        else:
+            campo.help_text = "Si la dejás vacía, usamos la cantidad de empleados de tu nómina, una vez cargada."
+
+    def clean_cantidad_capitas(self):
+        valor = self.cleaned_data.get("cantidad_capitas")
+        if valor is None and self.instance.pk:
+            return self.instance.empleados.count() or None
+        return valor
 
 
 # La firma tiene que verse bien sobre el recibo: por debajo de esto queda borrosa.
@@ -339,9 +359,11 @@ class SucursalForm(forms.ModelForm):
             "nombre", "calle", "altura", "piso_depto", "codigo_postal",
             "localidad", "entre_calles", "observaciones",
         ]
+        widgets = {"observaciones": forms.Textarea(attrs={"rows": 2})}
 
 
-SucursalFormSet = formset_factory(SucursalForm, extra=5, can_delete=True)
+# Una tarjeta en blanco al final; el botón «Agregar sucursal» suma las que hagan falta (sin tope práctico).
+SucursalFormSet = formset_factory(SucursalForm, extra=1, can_delete=True)
 
 
 class LicenciasNovedadesForm(forms.Form):

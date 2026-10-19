@@ -6,6 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 
+from onboarding.forms import ConfiguracionForm
 from onboarding.tests.base import BaseWizard, _url
 
 
@@ -90,3 +91,51 @@ class PasoConfiguracionModeloDeReciboTests(BaseWizard):
         self.implementacion.modelo_recibo.save("viejo.pdf", SimpleUploadedFile("viejo.pdf", b"%PDF-1.4"))
         respuesta = self._post()
         self.assertEqual(respuesta.status_code, 302)
+
+
+class CantidadDeCapitasTests(BaseWizard):
+    """Si el cliente no indica las cápitas, valen la suma de su nómina."""
+
+    def formulario(self, **datos):
+        base = {"tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA", "tipos_liquidacion": [self.liquidacion.pk]}
+        archivos = {"modelo_recibo": SimpleUploadedFile("m.pdf", b"%PDF-1.4")}
+        return ConfiguracionForm({**base, **datos}, archivos, instance=self.implementacion)
+
+    def cargar_nomina(self, cantidad):
+        for i in range(cantidad):
+            self.agregar_empleado(f"2000000000{i}"[:11], f"N{i}", f"A{i}")
+
+    def test_viene_precargada_con_la_cantidad_de_empleados_de_la_nomina(self):
+        self.cargar_nomina(3)
+        formulario = ConfiguracionForm(instance=self.implementacion)
+        self.assertEqual(formulario.initial["cantidad_capitas"], 3)
+        self.assertIn("(3)", formulario.fields["cantidad_capitas"].help_text)
+
+    def test_si_se_deja_vacia_se_guarda_la_suma_de_la_nomina(self):
+        self.cargar_nomina(4)
+        formulario = self.formulario(cantidad_capitas="")
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        self.assertEqual(formulario.cleaned_data["cantidad_capitas"], 4)
+
+    def test_si_el_cliente_indica_otra_cantidad_se_respeta(self):
+        self.cargar_nomina(4)
+        formulario = self.formulario(cantidad_capitas="40")
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        self.assertEqual(formulario.cleaned_data["cantidad_capitas"], 40)
+
+    def test_sin_nomina_cargada_queda_vacia(self):
+        formulario = self.formulario(cantidad_capitas="")
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        self.assertIsNone(formulario.cleaned_data["cantidad_capitas"])
+        self.assertIn("una vez cargada", formulario.fields["cantidad_capitas"].help_text)
+
+    def test_un_valor_ya_guardado_no_se_pisa_con_la_nomina(self):
+        self.cargar_nomina(3)
+        self.implementacion.cantidad_capitas = 25
+        self.implementacion.save()
+        self.assertEqual(ConfiguracionForm(instance=self.implementacion).initial["cantidad_capitas"], 25)
+
+    def test_la_pantalla_la_muestra_precargada(self):
+        self.cargar_nomina(3)
+        pagina = self.client.get(_url(self.implementacion, 6)).content.decode()
+        self.assertIn('name="cantidad_capitas" value="3"', pagina)

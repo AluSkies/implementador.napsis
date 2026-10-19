@@ -299,13 +299,7 @@
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="accion" value="actualizar_sucursales">
-            {{ sucursales_formset.management_form }}
-            {% for f in sucursales_formset %}
-                <fieldset>
-                    <legend>Sucursal {{ forloop.counter }}</legend>
-                    {{ f.as_p }}
-                </fieldset>
-            {% endfor %}
+            {% include "onboarding/_sucursales_formset.html" with formset=sucursales_formset %}
             <div class="actions"><button class="btn secondary" type="submit">Guardar sucursales</button></div>
         </form>
     </details>

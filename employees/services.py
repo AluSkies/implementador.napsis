@@ -8,6 +8,10 @@ from collections import namedtuple
 from datetime import date, datetime, timedelta
 
 import openpyxl
+import openpyxl.comments
+import openpyxl.styles
+import openpyxl.utils
+import openpyxl.worksheet.datavalidation
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -72,20 +76,145 @@ def normalizar_cuil(valor):
     return re.sub(r"\D", "", str(valor))
 
 
+# Colores de la plantilla (los de la marca del portal).
+COLOR_OBLIGATORIA = "AA00FF"
+COLOR_OPCIONAL = "1C1699"
+COLOR_FONDO_SUAVE = "F6ECFF"
+FILAS_CON_FORMATO = 5000  # hasta donde llegan las listas desplegables y los formatos de celda
+
+# campo -> (qué es, ejemplo). Se muestran como ayuda en el encabezado y en la hoja de instrucciones.
+AYUDA_POR_CAMPO = {
+    "cuil": ("CUIL de la persona: 11 dígitos, con o sin guiones. Identifica a cada empleado.", "20-11111111-2"),
+    "dni": ("Número de documento, solo dígitos.", "11111111"),
+    "nombre": ("Nombre/s de la persona. Napsis lo guarda en mayúsculas y sin tildes.", "Ana"),
+    "apellido": ("Apellido/s. Napsis lo guarda en mayúsculas y sin tildes.", "Gómez"),
+    "legajo": ("Número de legajo interno de la empresa.", "1001"),
+    "fecha_ingreso": ("Fecha de ingreso a la empresa (DD/MM/AAAA). Obligatoria con Recibo Digital.", "01/03/2018"),
+    "mail": ("Mail de la persona.", "ana.gomez@empresa.com"),
+    "sexo": ("F o M (hay una lista desplegable).", "F"),
+    "fecha_nacimiento": ("Fecha de nacimiento (DD/MM/AAAA).", "15/08/1985"),
+    "lugar_nacimiento": ("Ciudad o provincia de nacimiento.", "Córdoba"),
+    "nacionalidad": ("Nacionalidad.", "Argentina"),
+    "estado_civil": ("Estado civil.", "Soltero/a"),
+    "domicilio": ("Calle y altura del domicilio.", "Av. Corrientes 1234"),
+    "planta_vivienda": ("Piso, departamento o planta, si corresponde.", "5° B"),
+    "codigo_postal": ("Código postal.", "1043"),
+    "localidad": ("Localidad del domicilio.", "CABA"),
+    "telefono": ("Teléfono de contacto.", "011-4444-5555"),
+    "obra_social": ("Obra social o prepaga.", "OSDE"),
+    "centro_costo": ("Centro de costo al que se imputa a la persona.", "CC-100"),
+    "puesto": ("Puesto que ocupa.", "Analista de Sueldos"),
+    "gerencia": ("Gerencia o área de nivel superior.", "Administración y Finanzas"),
+    "sector": ("Sector dentro de la gerencia.", "Liquidaciones"),
+    "funcion": ("Función que cumple.", "Liquidar haberes"),
+    "es_supervisor": ("SI si tiene personas a cargo, NO si no (hay una lista desplegable).", "NO"),
+    "home_office": ("SI si trabaja de forma remota, NO si no (hay una lista desplegable).", "NO"),
+    "reporta_a": ("CUIL de su superior directo. Esa persona tiene que estar en la misma planilla.", "20-22222222-3"),
+    "aprobador": ("CUIL de quien aprueba sus solicitudes. Esa persona tiene que estar en la misma planilla.", "20-22222222-3"),
+}
+CAMPOS_DE_TEXTO = ("cuil", "dni", "legajo", "codigo_postal", "telefono", "reporta_a", "aprobador")  # evitan que Excel los vuelva número
+CAMPOS_DE_FECHA = ("fecha_ingreso", "fecha_nacimiento")
+OBLIGATORIAS_EN_LA_PLANTILLA = ("cuil", "nombre", "apellido", "fecha_ingreso")  # la fecha, porque Recibo Digital va en todas
+
+
+def _letra(columna):
+    return openpyxl.utils.get_column_letter(columna)
+
+
 def _armar_hoja_con_headers():
+    """La hoja «Empleados»: encabezados con los colores de la marca (violeta = obligatoria, azul = opcional),
+    una ayuda en cada encabezado, la fila fija arriba y filtros. Los textos de los encabezados son los de COLUMNAS."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Empleados"
-    for col_idx, (header, *_rest) in enumerate(COLUMNAS, start=1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
-        cell.font = openpyxl.styles.Font(bold=True)
-        ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = max(18, len(header) + 2)
+    borde = openpyxl.styles.Side(style="thin", color="FFFFFF")
+    for col_idx, (header, campo, *_rest) in enumerate(COLUMNAS, start=1):
+        celda = ws.cell(row=1, column=col_idx, value=header)
+        obligatoria = campo in OBLIGATORIAS_EN_LA_PLANTILLA
+        celda.font = openpyxl.styles.Font(bold=True, color="FFFFFF", size=11)
+        celda.fill = openpyxl.styles.PatternFill("solid", fgColor=COLOR_OBLIGATORIA if obligatoria else COLOR_OPCIONAL)
+        celda.alignment = openpyxl.styles.Alignment(horizontal="center", vertical="center", wrap_text=True)
+        celda.border = openpyxl.styles.Border(left=borde, right=borde)
+        explicacion, ejemplo = AYUDA_POR_CAMPO[campo]
+        comentario = openpyxl.comments.Comment(
+            f"{'OBLIGATORIA. ' if obligatoria else 'Opcional. '}{explicacion}\nEjemplo: {ejemplo}", "Portal de Implementación"
+        )
+        comentario.width, comentario.height = 280, 110
+        celda.comment = comentario
+        ws.column_dimensions[_letra(col_idx)].width = max(18, len(header) + 4)
+    ws.row_dimensions[1].height = 36
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:{_letra(len(COLUMNAS))}1"
     return wb, ws
+
+
+def _formatos_y_listas(ws):
+    """Formato de las celdas vacías y listas desplegables, para que se complete bien sin mirar las instrucciones."""
+    posicion = {campo: idx for idx, (_h, campo, *_r) in enumerate(COLUMNAS, start=1)}
+    ultima = FILAS_CON_FORMATO + 1
+    for campo in CAMPOS_DE_TEXTO:  # formato de columna: vale para lo que se escriba después en las celdas vacías
+        ws.column_dimensions[_letra(posicion[campo])].number_format = "@"
+    for campo in CAMPOS_DE_FECHA:
+        ws.column_dimensions[_letra(posicion[campo])].number_format = "DD/MM/YYYY"
+    listas = (("sexo", '"F,M"', "Elegí F o M."), ("es_supervisor", '"SI,NO"', "Elegí SI o NO."), ("home_office", '"SI,NO"', "Elegí SI o NO."))
+    for campo, opciones, aviso in listas:
+        validacion = openpyxl.worksheet.datavalidation.DataValidation(
+            type="list", formula1=opciones, allow_blank=True, showErrorMessage=True, errorTitle="Valor no válido", error=aviso,
+        )
+        ws.add_data_validation(validacion)
+        letra = _letra(posicion[campo])
+        validacion.add(f"{letra}2:{letra}{ultima}")
+
+
+def _hoja_de_instrucciones(wb):
+    """Segunda hoja: cómo completar la planilla y qué significa cada columna. La importación lee solo la primera."""
+    ws = wb.create_sheet("Instrucciones")
+    ws.sheet_view.showGridLines = False
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 16
+    ws.column_dimensions["C"].width = 70
+    ws.column_dimensions["D"].width = 30
+    azul = openpyxl.styles.Font(bold=True, color=COLOR_OPCIONAL, size=18)
+    ws.cell(row=1, column=1, value="Plantilla de carga de nómina").font = azul
+    pasos = [
+        "1. Completá la hoja «Empleados» (la primera): una fila por persona, a partir de la fila 2.",
+        "2. No cambies los nombres de las columnas ni borres ninguna.",
+        "3. Las columnas con encabezado violeta son obligatorias; las azules son opcionales. Pasá el mouse sobre un encabezado para ver su ayuda.",
+        "4. Las fechas van como DD/MM/AAAA. Sexo, Es Supervisor y Home Office tienen una lista desplegable.",
+        "5. «Reporta A» y «Aprobador» llevan el CUIL de otra persona de la misma planilla. Si no figura, te lo avisamos al importar.",
+        "6. Guardá el archivo y subilo en el paso de carga de empleados. Cada archivo admite hasta 5.000 filas.",
+    ]
+    for fila, texto in enumerate(pasos, start=3):
+        celda = ws.cell(row=fila, column=1, value=texto)
+        celda.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top")
+        ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=4)
+        ws.row_dimensions[fila].height = 32 if len(texto) > 95 else 18
+    fila = 3 + len(pasos) + 1
+    for col, titulo in enumerate(("Columna", "¿Obligatoria?", "Qué es", "Ejemplo"), start=1):
+        celda = ws.cell(row=fila, column=col, value=titulo)
+        celda.font = openpyxl.styles.Font(bold=True, color="FFFFFF")
+        celda.fill = openpyxl.styles.PatternFill("solid", fgColor=COLOR_OPCIONAL)
+        celda.alignment = openpyxl.styles.Alignment(vertical="center")
+    for header, campo, *_rest in COLUMNAS:
+        fila += 1
+        explicacion, ejemplo = AYUDA_POR_CAMPO[campo]
+        obligatoria = campo in OBLIGATORIAS_EN_LA_PLANTILLA
+        valores = (header, "Sí" if obligatoria else "No", explicacion, ejemplo)
+        for col, valor in enumerate(valores, start=1):
+            celda = ws.cell(row=fila, column=col, value=valor)
+            celda.alignment = openpyxl.styles.Alignment(wrap_text=True, vertical="top")
+            if obligatoria:
+                celda.fill = openpyxl.styles.PatternFill("solid", fgColor=COLOR_FONDO_SUAVE)
+        ws.cell(row=fila, column=1).font = openpyxl.styles.Font(bold=True)
+        ws.row_dimensions[fila].height = 30 if len(explicacion) > 70 else 18
 
 
 def generar_plantilla_xlsx():
     """Genera un .xlsx vacío con las columnas esperadas, para que el cliente lo descargue y complete."""
-    wb, _ws = _armar_hoja_con_headers()
+    wb, ws = _armar_hoja_con_headers()
+    _formatos_y_listas(ws)
+    _hoja_de_instrucciones(wb)
+    wb.active = 0
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)

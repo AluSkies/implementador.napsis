@@ -1,0 +1,17 @@
+<fieldset class="sucursal-tarjeta" data-tarjeta{% if f.DELETE.value %} hidden{% endif %}>
+    <legend data-titulo>Sucursal</legend>
+    <div class="sucursal-campos">
+        {% for campo in f %}
+            {% if campo.name == "DELETE" %}
+                <span hidden>{{ campo }}</span>
+            {% else %}
+                <p>
+                    {{ campo.label_tag }}
+                    {{ campo }}
+                    {% for error in campo.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+                </p>
+            {% endif %}
+        {% endfor %}
+    </div>
+    <div class="actions"><button type="button" class="btn secondary" data-quitar>Quitar esta sucursal</button></div>
+</fieldset>
