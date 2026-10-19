@@ -3,7 +3,9 @@
 {% block content %}
 <div class="card">
     <h1>{{ cliente.nombre }}</h1>
-    <p class="muted">Tus implementaciones con Napsis.</p>
+    <aside class="epigrafe">
+        <p><strong>Acá podés ver tus implementaciones con Napsis.</strong> Hacé clic en <strong>«Ver más»</strong> para entrar a la que quieras: si todavía está en curso, la completás desde ahí; si ya la enviaste, ves lo que cargaste.</p>
+    </aside>
     <table>
         <thead><tr><th>Estado</th><th>Fecha de implementación</th><th>Creado</th><th></th></tr></thead>
         <tbody>
@@ -20,7 +22,7 @@
                     {% endif %}
                 </td>
                 <td>{{ imp.creado|date:"d/m/Y" }}</td>
-                <td><a href="{{ imp.get_absolute_url }}">Ver</a></td>
+                <td><a href="{{ imp.get_absolute_url }}">Ver más</a></td>
             </tr>
         {% empty %}
             <tr><td colspan="4" class="muted">Todavía no tenés implementaciones cargadas.</td></tr>
