@@ -811,6 +811,8 @@ flowchart TD
 
 **La regla.** No se configura con datos distintos a los que se aprobaron. Por eso, si la implementación ya estaba validada y alguien cambia algo **de lo que se va a configurar**, la validación se pierde: vuelve a «Documentación completa - Pendiente de validación» y hay que volver a validar (se crea otra versión congelada; la anterior queda como historia). Editar la **fecha de implementación** no la quita, porque la fecha no se configura. Guardar **lo mismo** tampoco.
 
+**El aviso.** Cuando el equipo hace el cambio desde la ficha del panel, `_manejar_accion_implementacion` (en `dashboard/views.py`) compara si la implementación estaba validada antes y deja de estarlo después, y muestra un aviso: «La documentación estaba validada y volvió a «Pendiente de validación»…». No lo muestra para las acciones que sacan la validación a propósito (`devolver_al_cliente`, `observar_firma` y `regenerar_link`).
+
 ```mermaid
 flowchart TD
     s1["Alguien guarda un cambio desde el wizard o desde el panel"]

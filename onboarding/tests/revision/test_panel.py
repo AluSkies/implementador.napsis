@@ -64,3 +64,42 @@ class PanelTests(EnviadaBase):
         fila = {hoja.cell(1, c).value: hoja.cell(2, c).value for c in range(1, hoja.max_column + 1)}
         self.assertEqual(fila["Estado"], "Devuelta, ronda 1")
         self.assertEqual(fila["Rondas de devolución"], 1)
+
+
+class AvisoAlPerderLaValidacionTests(EnviadaBase):
+    """Si el equipo cambia algo de una implementación validada, la ficha se lo avisa."""
+
+    AVISO = "volvió a «Pendiente de validación»"
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
+        acciones.aprobar_para_configurar(ANA, self.implementacion)
+
+    def datos(self, **cambios):
+        self.implementacion.refresh_from_db()
+        base = {"accion": "actualizar_datos", "razon_social": "Empresa A S.A.", "cuits": "30-50001091-2",
+                "telefono": self.implementacion.telefono, "mail_contacto": self.implementacion.mail_contacto}
+        return self.client.post(self.url, {**base, **cambios}, follow=True)
+
+    def test_cambiar_un_dato_avisa_que_hay_que_volver_a_validar(self):
+        respuesta = self.datos(telefono="011-5555-6666")
+        self.assertContains(respuesta, self.AVISO)
+        self.assertContains(respuesta, "Documentación completa - Pendiente de validación")
+
+    def test_guardar_lo_mismo_no_avisa_porque_no_se_perdio_nada(self):
+        self.assertNotContains(self.datos(), self.AVISO)
+
+    def test_un_comentario_no_avisa(self):
+        respuesta = self.client.post(self.url, {"accion": "agregar_comentario", "texto": "nota"}, follow=True)
+        self.assertNotContains(respuesta, self.AVISO)
+
+    def test_devolver_al_cliente_no_repite_el_aviso(self):
+        respuesta = self.client.post(self.url, {"accion": "devolver_al_cliente", "motivo": "Ajustar"}, follow=True)
+        self.assertNotContains(respuesta, self.AVISO)
+        self.assertContains(respuesta, "Devuelta al cliente (ronda 1)")
+
+    def test_si_no_estaba_validada_tampoco_avisa(self):
+        self.datos(telefono="011-1")  # pierde la validación
+        self.assertNotContains(self.datos(telefono="011-2"), self.AVISO)

@@ -73,6 +73,27 @@ class PasoDelWizardTests(BaseWizard):
         self.assertContains(pagina, "Hay que ajustar la firma del recibo")
         self.assertContains(pagina, "Subila de nuevo.")
 
+    def test_el_cartel_no_repite_el_mismo_texto_en_el_motivo_y_en_el_paso(self):
+        self.post()
+        self.completar_todo()
+        self.implementacion.enviado = self.implementacion.creado
+        self.implementacion.save()
+        acciones.observar_firma(ANA, self.implementacion, ["ilegible"], "Subila de nuevo.")
+        pagina = self.client.get(_url(self.implementacion, services.PASO_FIRMA)).content.decode()
+        self.assertEqual(pagina.count("Subila de nuevo."), 1)
+        self.assertNotIn("En este paso:", pagina)
+
+    def test_cuando_la_observacion_del_paso_es_distinta_del_motivo_se_muestran_las_dos(self):
+        self.post()
+        self.completar_todo()
+        self.implementacion.enviado = self.implementacion.creado
+        self.implementacion.save()
+        acciones.devolver_al_cliente(ANA, self.implementacion, "Revisá varias cosas.", {"firma": "Esta firma tapa el sueldo."})
+        pagina = self.client.get(_url(self.implementacion, services.PASO_FIRMA))
+        self.assertContains(pagina, "Revisá varias cosas.")
+        self.assertContains(pagina, "En este paso:")
+        self.assertContains(pagina, "Esta firma tapa el sueldo.")
+
     def test_el_envio_con_la_firma_faltante_se_rechaza(self):
         self.completar_todo()
         self.implementacion.firmas.all().delete()

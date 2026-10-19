@@ -452,13 +452,28 @@ ACCIONES_DE_LA_FICHA = {
 }
 
 
+# Estas acciones sacan la validación porque eso es justo lo que hacen: no hace falta avisarlo aparte.
+ACCIONES_QUE_SACAN_LA_VALIDACION_A_PROPOSITO = {"devolver_al_cliente", "observar_firma", "regenerar_link"}
+
+
 def _manejar_accion_implementacion(request, implementacion):
     """Procesa el POST de implementacion_detalle. Devuelve un redirect si la acción fue manejada, un
     diccionario con el formulario que falló (hay que renderizar la página con sus errores) o None."""
-    manejador = ACCIONES_DE_LA_FICHA.get(request.POST.get("accion"))
+    accion = request.POST.get("accion")
+    manejador = ACCIONES_DE_LA_FICHA.get(accion)
     if manejador is None:
         return None
-    return manejador(request, implementacion, Actor.de_usuario(request.user))
+    estaba_validada = implementacion.validada_en is not None
+    resultado = manejador(request, implementacion, Actor.de_usuario(request.user))
+    if estaba_validada and accion not in ACCIONES_QUE_SACAN_LA_VALIDACION_A_PROPOSITO:
+        implementacion.refresh_from_db(fields=["validada_en"])
+        if implementacion.validada_en is None:
+            messages.warning(
+                request,
+                "La documentación estaba validada y volvió a «Pendiente de validación» porque cambiaste algo de lo "
+                "que se configura: hay que volver a validarla (la configuración congelada anterior queda como historia).",
+            )
+    return resultado
 
 
 @staff_member_required(login_url="login")

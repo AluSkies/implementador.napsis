@@ -10,7 +10,7 @@
     {% if devolucion %}
     <div class="messages"><li class="warning" style="list-style:none;padding:10px 14px;border-radius:6px;">
         <strong>Napsis te devolvió el relevamiento (ronda {{ devolucion.ronda.numero }}):</strong> {{ devolucion.ronda.motivo|linebreaksbr }}
-        {% if devolucion.observacion %}<br><strong>En este paso:</strong> {{ devolucion.observacion|linebreaksbr }}{% endif %}
+        {% if devolucion.observacion and devolucion.observacion != devolucion.ronda.motivo %}<br><strong>En este paso:</strong> {{ devolucion.observacion|linebreaksbr }}{% endif %}
     </li></div>
     {% endif %}
     <h2>{{ titulo_paso }}</h2>
