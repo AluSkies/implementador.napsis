@@ -2,7 +2,7 @@
 
 Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis. Reemplaza los 5 Excel de relevamiento (Datos de Nómina, Documentos Legajo Digital, Importación de Nómina, Información Pre Implementación, Licencias y Novedades) por un wizard web con link único por cliente, y notifica al equipo de implementación al enviarse.
 
-**Para entender el código:** los diagramas (capas, apps, modelo de datos, pasos del wizard, estados, recorrido completo, validación y congelado, eventos y despliegue) están en [`docs/arquitectura.md`](docs/arquitectura.md).
+**Documentación:** para entender el código está el apartado [`docs/`](docs/README.md): la [arquitectura](docs/arquitectura.md) con diagramas, la lista corta de [operaciones públicas](docs/operaciones-publicas.md) (el contrato para integrar), la [lógica de negocio](docs/flujos-de-negocio.md) con diagramas de flujo y cada [módulo en sus componentes y funciones](docs/modulos/). Además, los tests agrupados por tema muestran cómo se usa cada operación.
 
 ## Estructura
 
