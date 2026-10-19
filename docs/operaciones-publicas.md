@@ -1053,7 +1053,7 @@ def fecha_minima_para_cliente(hoy=None):
 ```
 
 - **Precondiciones:** `desde` y `hoy` son `date`; `cantidad` es un entero. **Efecto:** ninguno.
-- **Devuelve:** una `date`. `sumar_dias_habiles` cuenta lunes a viernes (los feriados no se descuentan). `fecha_minima_para_cliente` suma `DIAS_HABILES_MINIMOS_CLIENTE` a `hoy` (por defecto, la fecha local de hoy): es la primera fecha que el cliente puede pedir; el equipo puede poner cualquiera.
+- **Devuelve:** una `date`. `sumar_dias_habiles` cuenta lunes a viernes (los feriados no se descuentan). `fecha_minima_para_cliente` suma `DIAS_HABILES_MINIMOS_CLIENTE + 1` a `hoy` (los 10 primeros días hábiles quedan bloqueados) (por defecto, la fecha local de hoy): es la primera fecha que el cliente puede pedir; el equipo puede poner cualquiera.
 - **Errores:** ninguno.
 - **Las llama hoy:** `fecha_minima_para_cliente` solo la llama `onboarding/views.py::_step_revision`, que le pasa el resultado a `FechaImplementacionForm(..., minima=...)` (el formulario no llama a ninguna de las dos); `sumar_dias_habiles` solo la usa `fecha_minima_para_cliente`. Quien arme otro cliente tiene que calcular `minima` y pasársela al formulario.
 

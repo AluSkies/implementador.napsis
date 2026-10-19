@@ -65,10 +65,12 @@ class DiasHabilesTests(TestCase):
 
         self.assertEqual(services.sumar_dias_habiles(date(2026, 10, 14), 0), date(2026, 10, 14))
 
-    def test_la_fecha_minima_del_cliente_son_diez_dias_habiles_desde_hoy(self):
+    def test_la_fecha_minima_del_cliente_es_el_dia_habil_siguiente_a_los_diez_primeros(self):
         from datetime import date
 
-        self.assertEqual(services.fecha_minima_para_cliente(date(2026, 10, 14)), date(2026, 10, 28))
+        # desde el miércoles 14/10 el décimo día hábil es el 28/10 (bloqueado): se puede elegir desde el 29/10
+        self.assertEqual(services.fecha_minima_para_cliente(date(2026, 10, 14)), date(2026, 10, 29))
+        self.assertEqual(services.fecha_minima_para_cliente(date(2026, 10, 19)), date(2026, 11, 3))
 
     def test_el_mismo_resultado_cae_siempre_en_dia_habil(self):
         from datetime import date, timedelta

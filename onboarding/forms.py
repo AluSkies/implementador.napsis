@@ -503,13 +503,13 @@ class FechaImplementacionForm(forms.Form):
         campo.widget.attrs["min"] = minima.isoformat()
         campo.widget.attrs["data-selector-de-fecha"] = "1"  # static/selector_de_fecha.js deshabilita los días anteriores
         campo.widget.attrs["data-minima"] = minima.isoformat()
-        campo.help_text = f"Opcional. A partir del {minima:%d/%m/%Y} (10 días hábiles, de lunes a viernes)."
+        campo.help_text = f"Opcional. A partir del {minima:%d/%m/%Y} (pasados 10 días hábiles, de lunes a viernes)."
 
     def clean_fecha_salida_productivo(self):
         fecha = self.cleaned_data.get("fecha_salida_productivo")
         if fecha and fecha < self.minima and fecha != self.implementacion.fecha_salida_productivo:
             raise forms.ValidationError(
-                f"La fecha tiene que ser a partir del {self.minima:%d/%m/%Y} (10 días hábiles desde hoy)."
+                f"La fecha tiene que ser a partir del {self.minima:%d/%m/%Y} (pasados los 10 días hábiles desde hoy)."
             )
         return fecha
 

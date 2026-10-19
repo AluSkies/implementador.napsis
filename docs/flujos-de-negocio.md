@@ -584,7 +584,7 @@ flowchart TD
 ```
 
 - **El orden de los controles** en la vista: primero los pendientes y, si no hay, la fecha. Con pendientes la fecha ni se mira.
-- **La fecha mínima** es `sumar_dias_habiles(hoy, DIAS_HABILES_MINIMOS_CLIENTE)`: avanza día por día y solo cuenta lunes a viernes. El mínimo se calcula al armar el formulario. Un campo vacío es válido: si ya había una fecha guardada y el campo llega vacío, se borra (`guardar_fecha_implementacion` con `None`).
+- **La fecha mínima** es `sumar_dias_habiles(hoy, DIAS_HABILES_MINIMOS_CLIENTE + 1)` (el décimo día hábil también está bloqueado): avanza día por día y solo cuenta lunes a viernes. El mínimo se calcula al armar el formulario. Un campo vacío es válido: si ya había una fecha guardada y el campo llega vacío, se borra (`guardar_fecha_implementacion` con `None`).
 - **Cambiar la fecha no quita la validación** (flujo 9): la fecha no se configura.
 - **Cada mail se intenta por separado.** Si no hay destinatario (equipo sin configurar o cliente sin mail) no se manda y no se registra nada. Detalle en el [flujo 13](#13-qué-mail-sale-en-cada-situación).
 - **Cierre de ronda:** si el envío responde a una devolución, `respondida_en` toma la fecha del envío y el evento `envio.confirmado` lleva el número de ronda (flujo 7).
