@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("clientes/<int:pk>/", views.cliente_detalle, name="cliente_detalle"),
     path("implementaciones/<int:pk>/", views.implementacion_detalle, name="implementacion_detalle"),
+    path("implementaciones/<int:pk>/congelada/<int:version>/", views.descargar_congelada, name="descargar_congelada"),
     path("implementaciones/<int:pk>/nomina.xlsx", views.descargar_nomina, name="descargar_nomina"),
     path("exportar/", views.exportar_implementaciones, name="exportar"),
     path("implementadores/", views.implementadores_lista, name="implementadores"),

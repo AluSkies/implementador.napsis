@@ -1,5 +1,6 @@
 import secrets
 import uuid
+from datetime import timedelta
 
 from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -111,6 +112,22 @@ class Implementacion(models.Model):
         VISUAL_CANCELADA: "Cancelada",
     }
 
+    # «Implementación sin movimiento»: una implementación pendiente a la que nadie le hizo nada en tantos días.
+    # No es un estado más (la implementación sigue donde estaba): es una marca derivada del último evento.
+    DIAS_SIN_MOVIMIENTO = 7
+    SIN_MOVIMIENTO = "sin_movimiento"
+    SIN_MOVIMIENTO_LABEL = "Implementación sin movimiento"
+
+    @classmethod
+    def opciones_de_filtro_de_estado(cls):
+        """Lo que se puede elegir en el filtro «Estado» del listado: los estados visibles y la marca."""
+        return [*cls.VISUAL_LABELS.items(), (cls.SIN_MOVIMIENTO, cls.SIN_MOVIMIENTO_LABEL)]
+
+    @classmethod
+    def limite_sin_movimiento(cls, ahora=None):
+        """Lo último que puede haber pasado para que ya cuente como sin movimiento."""
+        return (ahora or timezone.now()) - timedelta(days=cls.DIAS_SIN_MOVIMIENTO)
+
     @classmethod
     def filtro_visual(cls, clave):
         """Devuelve el Q() que corresponde a un estado visual, para filtrar el queryset."""
@@ -137,6 +154,27 @@ class Implementacion(models.Model):
     @property
     def estado_visual_label(self):
         return self.VISUAL_LABELS[self.estado_visual]
+
+    @property
+    def ultimo_movimiento(self):
+        """Cuándo fue lo último que pasó en la implementación: el último evento (cualquier acción del
+        cliente o del equipo, un comentario, un envío) o, si no tuvo ninguno, cuándo se creó."""
+        if hasattr(self, "movimiento_en"):  # viene anotado en los listados (evita una consulta por fila)
+            return self.movimiento_en
+        from automatizacion.models import EventoImplementacion
+
+        ultimo = EventoImplementacion.objects.filter(implementacion=self).order_by("-momento").values_list(
+            "momento", flat=True,
+        ).first()
+        return max(ultimo, self.creado) if ultimo else self.creado
+
+    @property
+    def sin_movimiento(self):
+        return self.estado == self.ESTADO_PENDIENTE and self.ultimo_movimiento <= self.limite_sin_movimiento()
+
+    @property
+    def dias_sin_movimiento(self):
+        return max((timezone.now() - self.ultimo_movimiento).days, 0)
 
     @property
     def ronda_abierta(self):
@@ -419,6 +457,28 @@ class UbicacionFirma(models.Model):
     def motivos_texto(self):
         nombres = dict(self.MOTIVOS)
         return [nombres.get(codigo, codigo) for codigo in self.motivos]
+
+
+class ComentarioInterno(models.Model):
+    """Una nota del equipo sobre una implementación. **Privada**: el cliente nunca la ve (no aparece en
+    ninguna pantalla ni mail del cliente ni en la configuración congelada). Solo se agrega: no se edita
+    ni se borra, así queda el hilo de lo que se fue hablando."""
+
+    MAX_LARGO = 2000
+
+    implementacion = models.ForeignKey(Implementacion, on_delete=models.CASCADE, related_name="comentarios")
+    autor = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    autor_nombre = models.CharField(max_length=150, help_text="Quién lo escribió (queda aunque se borre la cuenta).")
+    texto = models.TextField()
+    creado = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Comentario interno"
+        verbose_name_plural = "Comentarios internos"
+        ordering = ["-creado", "-id"]
+
+    def __str__(self):
+        return f"{self.implementacion} - {self.autor_nombre} ({self.creado:%d/%m/%Y %H:%M})"
 
 
 class RondaRevision(models.Model):

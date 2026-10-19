@@ -20,8 +20,8 @@ from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
 
-from automatizacion import eventos
-from clients.models import Cliente, Implementacion, Modulo, RondaRevision, UbicacionFirma
+from automatizacion import actores, congelada, eventos
+from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, RondaRevision, UbicacionFirma
 from clients.services import cambio_de_seccion, crear_o_resetear_acceso, foto_de_seccion
 from clients.validators import normalizar_cuits
 from notifications import services as notificaciones
@@ -299,22 +299,31 @@ def aprobar_para_configurar(actor, implementacion):
         return Resultado(implementacion=implementacion, avisos=[
             Aviso(messages.ERROR, "Solo se puede validar una implementación enviada por el cliente y todavía sin validar."),
         ])
-    pendientes = [p["mensaje"] for p in services.pendientes_de_envio(implementacion)]
-    if implementacion.usa_modulo(Modulo.RECIBO_DIGITAL):
-        firma = implementacion.firma
-        if firma is not None and firma.imagen and firma.estado != UbicacionFirma.ESTADO_VALIDADA:
-            pendientes.append("Falta validar la firma del recibo.")
+    pendientes = services.pendientes_de_validacion(implementacion)
     if pendientes:
         return Resultado(implementacion=implementacion, avisos=[
             Aviso(messages.ERROR, "No se puede validar: todavía falta completar datos obligatorios. " + " ".join(pendientes)),
         ])
-    with transaction.atomic():
-        implementacion.validada_en = timezone.now()
-        implementacion.save(update_fields=["validada_en", "actualizado"])
-        eventos.registrar(actor, "estado.validada", implementacion, datos={"ronda": implementacion.rondas.count()})
+    try:
+        with transaction.atomic():
+            implementacion.validada_en = timezone.now()
+            implementacion.save(update_fields=["validada_en", "actualizado"])
+            foto = congelada.congelar(implementacion, actor)
+            eventos.registrar(actor, "estado.validada", implementacion, datos={
+                "ronda": implementacion.rondas.count(),
+                "congelada": {"version": foto.version, "hash": foto.hash},
+            })
+    except congelada.ArchivoNoDisponible as error:
+        implementacion.validada_en = None
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, f"No se pudo validar: no se pudo leer el archivo «{error.campo}». Volvé a subirlo y probá de nuevo."),
+        ])
     return Resultado(
         implementacion=implementacion,
-        avisos=[Aviso(messages.SUCCESS, "Documentación validada: la implementación quedó lista para configurar.")],
+        avisos=[Aviso(
+            messages.SUCCESS,
+            f"Documentación validada: la implementación quedó lista para configurar (configuración congelada v{foto.version}).",
+        )],
     )
 
 
@@ -413,7 +422,12 @@ def devolver_al_cliente(actor, implementacion, motivo, observaciones=None, base_
 
 
 def marcar_cumplida(actor, implementacion, base_url=None):
-    """El equipo terminó de implementar. Se le avisa al cliente por mail (si falla, queda cumplida igual)."""
+    """El equipo terminó de implementar. Se le avisa al cliente por mail (si falla, queda cumplida igual).
+    Solo se puede cumplir lo que ya está validado: la configuración parte de lo que se aprobó."""
+    if not (_puede_revisarse(implementacion) and implementacion.validada_en):
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo se puede marcar como cumplida una implementación ya validada."),
+        ])
     estado_anterior = implementacion.estado
     with transaction.atomic():
         implementacion.marcar_cumplida()
@@ -427,6 +441,29 @@ def marcar_cumplida(actor, implementacion, base_url=None):
     if falla:
         avisos.append(falla)
     return Resultado(implementacion=implementacion, avisos=avisos)
+
+
+def agregar_comentario(actor, implementacion, texto, autor=None):
+    """El equipo deja una nota privada en la implementación. Cuenta como movimiento: el evento queda
+    registrado (solo con el id: el texto ya lo guarda el comentario)."""
+    if actor.tipo not in actores.TIPOS_DEL_EQUIPO:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, "Solo el equipo de implementación puede dejar comentarios."),
+        ])
+    texto = (texto or "").strip()
+    if not texto:
+        return Resultado(implementacion=implementacion, avisos=[Aviso(messages.ERROR, "Escribí el comentario.")])
+    if len(texto) > ComentarioInterno.MAX_LARGO:
+        return Resultado(implementacion=implementacion, avisos=[
+            Aviso(messages.ERROR, f"El comentario puede tener hasta {ComentarioInterno.MAX_LARGO} caracteres."),
+        ])
+    nombre = (autor.get_full_name() or autor.get_username()) if autor else actor.ref
+    with transaction.atomic():
+        comentario = ComentarioInterno.objects.create(
+            implementacion=implementacion, autor=autor, autor_nombre=nombre, texto=texto,
+        )
+        eventos.registrar(actor, "comentario.agregado", implementacion, datos={"comentario_id": comentario.pk})
+    return Resultado(implementacion=implementacion, avisos=[Aviso(messages.SUCCESS, "Comentario guardado.")])
 
 
 def atender_revision(actor, implementacion):

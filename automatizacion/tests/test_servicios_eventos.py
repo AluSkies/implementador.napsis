@@ -238,7 +238,7 @@ class ImportacionDeNominaTests(TestCase):
         self.assertEqual(list(_eventos("nomina.importada"))[1].datos["correcciones"], [])
 
     def test_el_detalle_tiene_tope(self):
-        with patch.object(services, "MAX_CORRECCIONES_EN_EVENTO", 2):
+        with patch("onboarding.services.nomina.MAX_CORRECCIONES_EN_EVENTO", 2):
             self.importar([[20000000000 + i, "J", "P", "A"] for i in range(5)])
             self.importar([[20000000000 + i, "J", "P", "B"] for i in range(5)])
         datos = list(_eventos("nomina.importada"))[1].datos
@@ -252,7 +252,7 @@ class ImportacionDeNominaTests(TestCase):
         self.assertFalse(_eventos().exists())
 
     def test_si_algo_falla_a_mitad_no_queda_evento_ni_empleados(self):
-        with patch("onboarding.services._resolver_jerarquia_importada", side_effect=RuntimeError("base")):
+        with patch("onboarding.services.nomina._resolver_jerarquia_importada", side_effect=RuntimeError("base")):
             with self.assertRaises(RuntimeError):
                 self.importar([[20111111112, "Juan", "Pérez", "A"]])
         self.assertFalse(_eventos().exists())

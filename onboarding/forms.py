@@ -3,7 +3,7 @@ from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
 from catalog.models import TipoLiquidacion
-from clients.models import Implementacion, PersonaRol, Sucursal, UbicacionFirma, geometria_inicial_de_firma
+from clients.models import Implementacion, Modulo, PersonaRol, Sucursal, UbicacionFirma, geometria_inicial_de_firma
 from clients.validators import normalizar_cuits, validar_medidas_banner, validar_medidas_logo, validar_tamanio_archivo
 from employees.services import CUIL_RE, normalizar_cuil
 
@@ -104,9 +104,10 @@ class ModulosForm(forms.Form):
         super().__init__(*args, **kwargs)
         activos_ids = activos_ids or set()
         for modulo in modulos_qs:
+            obligatorio = modulo.codigo == Modulo.RECIBO_DIGITAL  # va en todas las implementaciones
             self.fields[f"modulo_{modulo.id}"] = forms.BooleanField(
-                label=modulo.nombre, required=False, initial=modulo.id in activos_ids,
-                disabled=disabled,
+                label=f"{modulo.nombre} (obligatorio)" if obligatorio else modulo.nombre, required=False,
+                initial=obligatorio or modulo.id in activos_ids, disabled=disabled or obligatorio,
             )
 
 

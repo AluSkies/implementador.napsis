@@ -1,13 +1,17 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import FileResponse
+import json
+
+from django.http import FileResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from automatizacion.actores import Actor
+from automatizacion.congelada import como_documento as congelada_como_documento
+from automatizacion.models import ConfiguracionCongelada
 from catalog.models import TipoLicencia, TipoNovedad
-from clients.models import Cliente, Implementacion, Modulo, UbicacionFirma
+from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, UbicacionFirma
 from clients.services import (
     COLUMNAS_ORDENABLES,
     filtrar_y_ordenar_implementaciones,
@@ -150,7 +154,7 @@ def home(request):
             "condiciones_form": condiciones_form,
             "alta": alta,
             "modulos": Modulo.objects.all(),
-            "estados_choices": Implementacion.VISUAL_LABELS.items(),
+            "estados_choices": Implementacion.opciones_de_filtro_de_estado(),
             "filtros_aplicados": request.GET,
             "sort_links": _sort_links(request),
         },
@@ -383,6 +387,13 @@ def _accion_devolver_al_cliente(request, implementacion, actor):
     return _volver(implementacion)
 
 
+def _accion_agregar_comentario(request, implementacion, actor):
+    _mostrar(request, acciones.agregar_comentario(
+        actor, implementacion, request.POST.get("texto", ""), autor=request.user,
+    ))
+    return _volver(implementacion)
+
+
 def _accion_atender_revision(request, implementacion, actor):
     _mostrar(request, acciones.atender_revision(actor, implementacion))
     return _volver(implementacion)
@@ -434,6 +445,7 @@ ACCIONES_DE_LA_FICHA = {
     "aprobar_para_configurar": _accion_aprobar_para_configurar,
     "devolver_al_cliente": _accion_devolver_al_cliente,
     "atender_revision": _accion_atender_revision,
+    "agregar_comentario": _accion_agregar_comentario,
     "actualizar_fecha_productivo": _accion_actualizar_fecha_productivo,
     "regenerar_acceso": _accion_regenerar_acceso,
     "enviar_invitacion": _accion_enviar_invitacion,
@@ -506,6 +518,16 @@ def implementacion_detalle(request, pk):
     contexto.update({
         "link_url": request.build_absolute_uri(implementacion.get_absolute_url()),
         "rondas": implementacion.rondas.all(),
+        "comentarios": implementacion.comentarios.all(),
+        "max_largo_comentario": ComentarioInterno.MAX_LARGO,
+        "congeladas": implementacion.congeladas.order_by("-version"),
+        "congelada_vigente": (
+            implementacion.congeladas.order_by("-version").first() if implementacion.validada_en else None
+        ),
+        "pendientes_de_validacion": (
+            onboarding_services.pendientes_de_validacion(implementacion)
+            if implementacion.enviado and not implementacion.validada_en else []
+        ),
         "pasos_observables": [
             (onboarding_services.CODIGO_DE_PASO[n], onboarding_services.TITULOS_PASO[n])
             for n in onboarding_services.pasos_activos(implementacion) if n != onboarding_services.PASO_REVISION
@@ -533,6 +555,18 @@ def implementacion_detalle(request, pk):
         "import_form": formularios_con_error.get("import_form") or ImportarArchivoForm(),
     })
     return render(request, "dashboard/implementacion_detalle.html", contexto)
+
+
+@staff_member_required(login_url="login")
+def descargar_congelada(request, pk, version):
+    """La configuración congelada de una versión, como un único .json (solo el equipo)."""
+    congelada = get_object_or_404(ConfiguracionCongelada, implementacion_id=pk, version=version)
+    respuesta = HttpResponse(
+        json.dumps(congelada_como_documento(congelada), ensure_ascii=False, indent=2, sort_keys=True),
+        content_type="application/json; charset=utf-8",
+    )
+    respuesta["Content-Disposition"] = f'attachment; filename="configuracion_{pk}_v{version}.json"'
+    return respuesta
 
 
 @staff_member_required(login_url="login")

@@ -38,8 +38,8 @@ class TipoNovedad(ConCodigo):
 
 class TipoLiquidacion(ConCodigo):
     """Tipos de liquidación que puede usar una empresa con Recibo Digital (Liquidación Normal, Aguinaldo...).
-    El orden es el del wizard de Napsis. La cantidad de tipos activos define cuántas veces hay que
-    configurar la firma en el recibo."""
+    El orden es el del wizard de Napsis. La firma del recibo es una sola por implementación y vale
+    para todos los tipos activos."""
 
     nombre = models.CharField(max_length=150, unique=True)
     orden = models.PositiveIntegerField(default=0)

@@ -2,14 +2,17 @@
 
 Webapp Django para el relevamiento de autoservicio de nuevos clientes de Napsis. Reemplaza los 5 Excel de relevamiento (Datos de Nómina, Documentos Legajo Digital, Importación de Nómina, Información Pre Implementación, Licencias y Novedades) por un wizard web con link único por cliente, y notifica al equipo de implementación al enviarse.
 
+**Documentación:** para entender el código está el apartado [`docs/`](docs/README.md): la [arquitectura](docs/arquitectura.md) con diagramas, la lista corta de [operaciones públicas](docs/operaciones-publicas.md) (el contrato para integrar), la [lógica de negocio](docs/flujos-de-negocio.md) con diagramas de flujo y cada [módulo en sus componentes y funciones](docs/modulos/). Además, los tests agrupados por tema muestran cómo se usa cada operación.
+
 ## Estructura
 
 - `clients/` — dos entidades separadas:
   - `Cliente`: la empresa (Nombre, CUIT(s) separados por coma). Persistente: un mismo Cliente puede tener varias Implementaciones a lo largo del tiempo.
   - `Implementacion`: un proceso puntual de relevamiento para un Cliente — tiene su propio token/link único, estado (`Pendiente` / `Cumplida` / `Cancelada`), todos los datos de contacto y configuración relevados en el wizard, y el pedido de revisión del cliente (`revision_solicitada`, `pedir_revision()`, `anular()`).
   - Además: `PersonaRol`, `Sucursal`, `Modulo`, `ImplementacionModulo` (todos FK a `Implementacion`, no a `Cliente`).
+- `automatizacion/` — actores, registro de eventos (solo se agrega) y configuración congelada.
 - `catalog/` — catálogos: TipoLicencia (16), TipoNovedad (10), TipoDocumento + CampoDocumento (16 tipos de legajo digital con sus campos). Se cargan con `manage.py seed_catalogos` (a partir del relevamiento original), no con una migración.
-- `onboarding/` — el wizard público (9 pasos) y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
+- `onboarding/` — el wizard público (10 pasos), las acciones (alta, envío, validar, devolver, cumplir) y los servicios de guardado y las tablas de activación por implementación (ImplementacionLicencia, ImplementacionNovedad, ImplementacionTipoDocumento).
 - `employees/` — Empleado, ImportBatch (ambos FK a Implementacion), parser/validador de la plantilla masiva (`employees/services.py`) y generador de la plantilla vacía descargable.
 - `notifications/` — mails al equipo (resumen y "pedido de contacto") y al cliente (invitación, confirmaciones).
 - `dashboard/` — panel interno con login: listado de implementaciones, ficha de cliente con su historial, generación de links, anular/reiniciar una implementación, atender pedidos de revisión.
@@ -46,12 +49,23 @@ Copiá `.env.example` a `.env` y completá los valores. Los catálogos y módulo
 ## Tests
 
 ```bash
-venv/Scripts/python manage.py test                   # toda la suite (~10 segundos)
-venv/Scripts/python manage.py test dashboard         # solo una app
+venv/Scripts/python manage.py test                   # toda la suite (~45 s)
+venv/Scripts/python manage.py test --parallel        # en paralelo, con todos los núcleos (~30 s)
+venv/Scripts/python manage.py test onboarding        # una app
+venv/Scripts/python manage.py test onboarding.tests.firma                  # un paquete (~5 s)
+venv/Scripts/python manage.py test onboarding.tests.firma.test_servicio    # un módulo
+venv/Scripts/python manage.py test onboarding.tests.firma --keepdb         # sin recrear la base de test
 venv/Scripts/python manage.py test --durations=10    # los 10 más lentos
 ```
 
-Hay tests por app, en paquetes `tests/`. La base de test arranca vacía (los catálogos se cargan con `seed_catalogos`/`seed_modulos`, no con migraciones), así que cada test crea lo que necesita.
+**Dónde está cada cosa.** Hay tests por app, en paquetes `tests/`, y dentro de cada app agrupados por tema para poder correr solo lo que se tocó:
+
+- `onboarding/tests/`: `wizard/` (cada paso y el envío), `firma/`, `revision/` (validar, devolver, cumplir, invalidación y reglas de validación), `liquidaciones/`, `imagenes/`, `formularios/`, `servicios/` (guardado, pendientes, empleados), `acciones/` (alta, estado y envío sin pantalla). `base.py` tiene lo compartido (`BaseWizard`, `EnviadaBase`, helpers).
+- `automatizacion/tests/`: eventos y `congelada/` (la configuración congelada).
+- `dashboard/tests/`: `panel/`, `equipo/`, `configuracion/` y `base.py` (`BasePanel`).
+- `clients/tests/`: `modelos/`, `acceso/` y `operacion/`.
+
+Un módulo de tests nuevo va en el paquete de su tema; lo que comparten varios módulos va en el `base.py` de la app, no se importa de otro módulo de tests. La base de test arranca vacía (los catálogos se cargan con `seed_catalogos`/`seed_modulos`, no con migraciones), así que cada test crea lo que necesita.
 
 Al correr los tests `settings.py` cambia el hasher de contraseñas a uno rápido. El de producción (PBKDF2) es lento a propósito, y como cada test crea usuarios y se loguea, con él la suite tardaba más de 10 minutos en vez de segundos. Un test verifica que ese cambio nunca se active fuera de los tests.
 
@@ -93,6 +107,10 @@ La nómina va **antes** que los roles para poder elegir a las personas con rol d
 
 **Firma del recibo.** El cliente sube la imagen de la firma del apoderado y, sobre su modelo de recibo, arrastra y redimensiona tres recuadros (firma de la empresa, empleado en conformidad y en disconformidad). Solo se guarda su **intención** (página y recuadros como fracciones de la página, más la imagen con su `sha256`): el portal no la traduce a Napsis. El equipo la **valida**, la **observa** (motivos de un catálogo cerrado; devuelve el relevamiento al cliente con una ronda) o la **corrige** desde la ficha, y no se puede validar la documentación con la firma sin validar. Las imágenes subidas nunca se borran ni se pisan. El recibo se dibuja en el navegador con PDF.js; si no se pudiera mostrar, la firma se ubica con los campos numéricos.
 
+**Seguimiento.** Una implementación **pendiente** a la que nadie le hizo nada en **7 días** se marca como **«Implementación sin movimiento»**: en el listado (con su estado real debajo, para saber dónde quedó trabada), en la ficha, en el filtro «Estado» y en el reporte (columnas «Última actividad» y «Sin movimiento»). No es un estado más: se deriva del último evento. Lo saca de ahí **cualquier acción** sobre la implementación (del cliente o del equipo), **un comentario** o **el envío de documentación**. El límite es `Implementacion.DIAS_SIN_MOVIMIENTO`. Cada implementación tiene además **comentarios del equipo**: notas internas que solo se agregan (no se editan ni se borran) y que el cliente nunca ve, ni en pantalla, ni en mails, ni en la configuración congelada.
+
+**Configuración congelada.** Al validar la documentación se crea una `ConfiguracionCongelada` (en `automatizacion/`): un JSON con lo aprobado, usando códigos estables y no nombres editables, más una **copia inmutable de los archivos** (modelo de recibo, logo, banner y firma) con su `sha256`, guardada en `congeladas/<uuid>/v<N>/`. De la nómina solo van las cantidades (los datos personales ya los conserva la base). Es de solo lectura y cada validación crea una versión nueva; si el equipo cambia algo después, la validación se pierde y la versión anterior queda como historia. El equipo la ve y la descarga como `.json` desde la ficha; las copias de los archivos no las ve el cliente.
+
 ## Decisiones deliberadas
 
 - **PDF.js viaja con el repositorio** (`static/vendor/pdfjs/`, ~1,4 MB) en lugar de cargarse desde un CDN. Es un peso a propósito: el cliente es corporativo y sus redes suelen bloquear dominios externos o exigir una lista de permitidos, y el editor de firma no puede quedar inutilizable por eso. La versión está fija (3.11.174, licencia Apache 2.0) y se actualiza a mano (`static/vendor/pdfjs/LEEME.md`).
@@ -107,6 +125,11 @@ El cliente no puede enviar el relevamiento hasta completar (el paso 10 lista lo 
 - **Modelo de recibo** en PDF (paso 6; si hay Recibo Digital).
 - **Firma del recibo** (paso 7; si hay Recibo Digital): la imagen de la firma y su ubicación sobre el recibo.
 - **Nómina** (paso 4): al menos un empleado.
+- **Recibo Digital**: es obligatorio en toda implementación (no se puede desmarcar, ni el cliente ni el equipo).
+- **Sucursales** (paso 3; si hay Fichada): al menos una con nombre.
+- **Firma observada**: si el equipo la observó, el cliente tiene que ajustarla antes de volver a enviar.
+
+**Validar y cumplir.** «Validar documentación» repite este mismo control y además exige la firma validada; la ficha muestra qué falta antes de apretar el botón. Solo se puede marcar como **cumplida** una implementación ya validada. Si después de validar el equipo cambia algo de lo que se va a configurar (datos, módulos, roles, sucursales, liquidaciones, firma, nómina…), la validación **se pierde** y vuelve a «Documentación completa - Pendiente de validación» (queda el evento `estado.validacion_revocada`); cambiar solo la fecha de implementación no la invalida.
 
 **Condiciones del proceso.** Al crear la implementación (y después desde su ficha) el equipo decide qué deja fijo y qué decide el cliente. Cada dato se bloquea **al completarlo**; si se deja vacío, lo decide el cliente:
 

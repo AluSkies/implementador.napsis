@@ -26,7 +26,7 @@ jobs:
       - run: ruff check .
       # Que no haya cambios de modelos sin su migración.
       - run: python manage.py makemigrations --check --dry-run
-      - run: python manage.py test
+      - run: python manage.py test --parallel
 
   # La base de producción es MySQL 8: la suite también tiene que pasar ahí (las migraciones,
   # la collation y el modo estricto se comportan distinto que en SQLite).

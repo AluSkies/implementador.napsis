@@ -144,7 +144,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--completar", action="store_true",
             help="Agrega lo que falte de la lista original aunque el catálogo ya tenga datos "
-                 "(puede volver a crear algo que se haya borrado o renombrado a propósito).",
+                 "(puede volver a crear algo que se haya borrado a propósito; lo renombrado no se recrea).",
         )
 
     def handle(self, *args, **options):

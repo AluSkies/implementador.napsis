@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Case, DateField, IntegerField, OuterRef, Subquery, Value, When
-from django.db.models.functions import Cast, Coalesce
+from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date
 from django.utils.text import slugify
@@ -55,11 +55,21 @@ COLUMNAS_ORDENABLES = {
 }
 
 
+def con_ultimo_movimiento(queryset):
+    """Agrega `movimiento_en` (cuándo fue lo último que pasó) a cada implementación, sin una consulta por fila."""
+    from automatizacion.models import EventoImplementacion
+
+    ultimo_evento = Subquery(
+        EventoImplementacion.objects.filter(implementacion=OuterRef("pk")).order_by("-momento").values("momento")[:1]
+    )
+    return queryset.annotate(movimiento_en=Greatest(Coalesce(ultimo_evento, "creado"), "creado"))
+
+
 def filtrar_y_ordenar_implementaciones(queryset, params):
     """Aplica al listado del panel los filtros y el orden que vengan por querystring
     (?cliente=&estado=&creado_desde=&creado_hasta=&fecha_impl_desde=&fecha_impl_hasta=&ordenar=&direccion=).
     """
-    queryset = queryset.annotate(
+    queryset = con_ultimo_movimiento(queryset).annotate(
         estado_orden=Case(
             When(estado=Implementacion.ESTADO_CANCELADA, then=Value(4)),
             When(estado=Implementacion.ESTADO_CUMPLIDA, then=Value(3)),
@@ -84,6 +94,10 @@ def filtrar_y_ordenar_implementaciones(queryset, params):
     estado = params.get("estado", "")
     if estado in Implementacion.VISUAL_LABELS:
         queryset = queryset.filter(Implementacion.filtro_visual(estado))
+    elif estado == Implementacion.SIN_MOVIMIENTO:
+        queryset = queryset.filter(
+            estado=Implementacion.ESTADO_PENDIENTE, movimiento_en__lte=Implementacion.limite_sin_movimiento(),
+        )
 
     creado_desde = parse_date(params.get("creado_desde", ""))
     if creado_desde:
@@ -271,6 +285,24 @@ def guardar_version(implementacion, seccion, actor):
     )
 
 
+# Estas secciones no forman parte de lo que se configura: cambiarlas no invalida una validación.
+SECCIONES_QUE_NO_INVALIDAN = {"fecha_implementacion"}
+
+
+def revocar_validacion(implementacion, actor, seccion):
+    """Si la implementación ya estaba validada y alguien cambia algo de lo que se va a configurar, vuelve
+    a «Documentación completa - Pendiente de validación»: no se configura con datos distintos a los que
+    se aprobaron. (La `ConfiguracionCongelada` anterior queda como historia.) Devuelve si revocó."""
+    revocadas = Implementacion.objects.filter(
+        pk=implementacion.pk, estado=Implementacion.ESTADO_PENDIENTE, validada_en__isnull=False,
+    ).update(validada_en=None)
+    if not revocadas:
+        return False
+    implementacion.validada_en = None
+    eventos.registrar(actor, "estado.validacion_revocada", implementacion, seccion=seccion)
+    return True
+
+
 @contextmanager
 def cambio_de_seccion(implementacion, seccion, actor, accion="paso.guardado", datos=None):
     """Envuelve el guardado de una sección: deja la foto anterior en el historial, deja que el
@@ -280,7 +312,7 @@ def cambio_de_seccion(implementacion, seccion, actor, accion="paso.guardado", da
         antes = guardar_version(implementacion, seccion, actor).datos
         yield
         despues = _SNAPSHOT_BUILDERS[seccion](_fresca(implementacion))
-        eventos.registrar(
-            actor, accion, implementacion, seccion=seccion,
-            datos={**(datos or {}), "cambios": eventos.diferencias(antes, despues)},
-        )
+        cambios = eventos.diferencias(antes, despues)
+        eventos.registrar(actor, accion, implementacion, seccion=seccion, datos={**(datos or {}), "cambios": cambios})
+        if cambios and seccion not in SECCIONES_QUE_NO_INVALIDAN:
+            revocar_validacion(implementacion, actor, seccion)

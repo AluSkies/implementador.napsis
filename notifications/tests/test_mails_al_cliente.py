@@ -8,9 +8,11 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from django.utils import timezone
+
 from clients.models import Cliente, Implementacion
-from dashboard.tests.test_asignado import BasePanel
-from onboarding.tests.test_wizard import BaseWizard, _url
+from dashboard.tests.base import BasePanel
+from onboarding.tests.base import BaseWizard, _url
 
 CLAVE = "una-clave-larga-9XqT"
 
@@ -205,7 +207,10 @@ class AvisoDeImplementacionCumplidaTests(BasePanel):
     def setUp(self):
         super().setUp()
         self.cliente = Cliente.objects.create(nombre="Empresa A", razon_social="Empresa A S.A.", usuario=self.cliente_user)
-        self.implementacion = Implementacion.objects.create(cliente=self.cliente, mail_contacto="contacto@a.com")
+        ahora = timezone.now()  # la cumplida parte de una implementación ya enviada y validada
+        self.implementacion = Implementacion.objects.create(
+            cliente=self.cliente, mail_contacto="contacto@a.com", enviado=ahora, validada_en=ahora,
+        )
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
 
     def test_al_marcarla_cumplida_le_avisa_al_cliente(self):
