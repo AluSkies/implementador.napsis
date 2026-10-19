@@ -1,4 +1,5 @@
 {% extends "onboarding/base_wizard.html" %}
+{% load cuil %}
 {% block step_content %}
 <h2>Elegí la manera en la que cargar tu nómina</h2>
 <p class="muted">
@@ -68,7 +69,7 @@
     <tbody>
     {% for e in empleados %}
         <tr>
-            <td>{{ e.cuil }}</td>
+            <td>{{ e.cuil|cuil }}</td>
             <td>{{ e.apellido }}, {{ e.nombre }}</td>
             <td>{{ e.legajo }}</td>
             <td>{{ e.puesto }}</td>

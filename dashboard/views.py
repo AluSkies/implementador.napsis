@@ -18,7 +18,7 @@ from clients.services import (
     resumen_implementacion,
 )
 from employees.forms import EmpleadoForm, ImportarArchivoForm
-from employees.services import ArchivoInvalido, generar_nomina_xlsx
+from employees.services import ArchivoInvalido, formatear_cuil, generar_nomina_xlsx
 from onboarding import acciones
 from onboarding import services as onboarding_services
 from onboarding.forms import (
@@ -505,7 +505,7 @@ def implementacion_detalle(request, pk):
             empleado_edit_form = EmpleadoForm(instance=empleado_editando, implementacion=implementacion)
 
     roles_iniciales = [
-        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": r.cuil, "mail": r.mail}
+        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": formatear_cuil(r.cuil), "mail": r.mail}
         for r in implementacion.roles.all()
     ]
     sucursales_iniciales = [

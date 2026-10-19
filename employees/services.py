@@ -76,6 +76,16 @@ def normalizar_cuil(valor):
     return re.sub(r"\D", "", str(valor))
 
 
+def formatear_cuil(valor):
+    """El CUIL con guiones (NN-NNNNNNNN-N), como se muestra. Adentro se guarda siempre con los 11 dígitos
+    (normalizar_cuil): así «20-11111111-2» y «20111111112» son la misma persona. Lo que no tenga 11 dígitos
+    se devuelve tal cual, para no esconder un dato mal cargado."""
+    digitos = normalizar_cuil(valor)
+    if len(digitos) != 11:
+        return "" if valor is None else str(valor)
+    return f"{digitos[:2]}-{digitos[2:10]}-{digitos[10]}"
+
+
 # Colores de la plantilla (los de la marca del portal).
 COLOR_OBLIGATORIA = "AA00FF"
 COLOR_OPCIONAL = "1C1699"
@@ -229,10 +239,12 @@ def generar_nomina_xlsx(empleados):
         for col_idx, (_header, campo, _obligatorio, tipo) in enumerate(COLUMNAS, start=1):
             if campo in ("reporta_a", "aprobador"):
                 relacionado = getattr(empleado, campo)
-                valor = relacionado.cuil if relacionado else ""
+                valor = formatear_cuil(relacionado.cuil) if relacionado else ""
             else:
                 valor = getattr(empleado, campo)
-                if tipo == "booleano":
+                if campo == "cuil":
+                    valor = formatear_cuil(valor)
+                elif tipo == "booleano":
                     valor = "SI" if valor else "NO"
                 elif tipo == "fecha" and valor:
                     valor = valor.strftime("%d/%m/%Y")

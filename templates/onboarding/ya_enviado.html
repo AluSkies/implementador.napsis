@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load cuil %}
 {% block content %}
 <div class="card">
     {% if recien_enviado %}
@@ -62,7 +63,7 @@
         <thead><tr><th>Rol</th><th>Apellido y Nombre</th><th>CUIL</th><th>Mail</th></tr></thead>
         <tbody>
         {% for r in roles %}
-            <tr><td>{{ r.get_rol_display }}</td><td>{{ r.apellido_nombre }}</td><td>{{ r.cuil }}</td><td>{{ r.mail }}</td></tr>
+            <tr><td>{{ r.get_rol_display }}</td><td>{{ r.apellido_nombre }}</td><td>{{ r.cuil|cuil }}</td><td>{{ r.mail }}</td></tr>
         {% empty %}<tr><td colspan="4" class="muted">Sin roles cargados</td></tr>{% endfor %}
         </tbody>
     </table>
@@ -113,7 +114,7 @@
         <thead><tr><th>CUIL</th><th>Apellido y Nombre</th><th>Legajo</th><th>Puesto</th></tr></thead>
         <tbody>
         {% for e in empleados %}
-            <tr><td>{{ e.cuil }}</td><td>{{ e.apellido }}, {{ e.nombre }}</td><td>{{ e.legajo }}</td><td>{{ e.puesto }}</td></tr>
+            <tr><td>{{ e.cuil|cuil }}</td><td>{{ e.apellido }}, {{ e.nombre }}</td><td>{{ e.legajo }}</td><td>{{ e.puesto }}</td></tr>
         {% empty %}<tr><td colspan="4" class="muted">Sin empleados cargados</td></tr>{% endfor %}
         </tbody>
     </table>

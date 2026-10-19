@@ -10,7 +10,7 @@ from catalog.models import TipoLicencia, TipoNovedad
 from clients.models import Implementacion, Modulo
 from clients.services import resumen_implementacion
 from employees.forms import EmpleadoForm, ImportarArchivoForm
-from employees.services import ArchivoInvalido, generar_plantilla_xlsx
+from employees.services import ArchivoInvalido, formatear_cuil, generar_plantilla_xlsx
 
 from . import acciones, services
 from .forms import (
@@ -219,7 +219,7 @@ def _step_modulos(request, implementacion, step):
 def _step_roles(request, implementacion, step):
     existentes = list(implementacion.roles.all())
     initial = [
-        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": r.cuil, "mail": r.mail}
+        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": formatear_cuil(r.cuil), "mail": r.mail}
         for r in existentes
     ]
 
@@ -235,8 +235,8 @@ def _step_roles(request, implementacion, step):
     else:
         formset = RolesFormSet(initial=initial)
     nomina = [
-        {"etiqueta": f"{e.apellido}, {e.nombre} — {e.cuil}", "apellido_nombre": f"{e.apellido}, {e.nombre}",
-         "cuil": e.cuil, "mail": e.mail}
+        {"etiqueta": f"{e.apellido}, {e.nombre} — {formatear_cuil(e.cuil)}", "apellido_nombre": f"{e.apellido}, {e.nombre}",
+         "cuil": formatear_cuil(e.cuil), "mail": e.mail}
         for e in implementacion.empleados.order_by("apellido", "nombre")
     ]
     return render(

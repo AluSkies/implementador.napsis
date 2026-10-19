@@ -1,4 +1,5 @@
 {% extends "onboarding/base_wizard.html" %}
+{% load static %}
 {% block step_content %}
 <p class="muted">Revisá el resumen antes de enviar. Una vez enviado, el equipo de implementación de Napsis va a recibir toda esta información.</p>
 
@@ -36,4 +37,5 @@
         <button class="btn" type="submit" {% if pendientes %}disabled title="Completá los datos que faltan"{% endif %}>Enviar a Napsis</button>
     </div>
 </form>
+<script src="{% static 'selector_de_fecha.js' %}" defer></script>
 {% endblock %}

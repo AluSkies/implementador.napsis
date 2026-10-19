@@ -490,6 +490,7 @@ class FechaImplementacionForm(forms.Form):
 
     fecha_salida_productivo = forms.DateField(
         label="Fecha en la que querés salir en productivo", required=False,
+        input_formats=["%Y-%m-%d", "%d/%m/%Y"],  # el calendario propio envía DD/MM/AAAA; sin JavaScript llega AAAA-MM-DD
         widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
     )
 
@@ -500,6 +501,8 @@ class FechaImplementacionForm(forms.Form):
         campo = self.fields["fecha_salida_productivo"]
         campo.initial = implementacion.fecha_salida_productivo
         campo.widget.attrs["min"] = minima.isoformat()
+        campo.widget.attrs["data-selector-de-fecha"] = "1"  # static/selector_de_fecha.js deshabilita los días anteriores
+        campo.widget.attrs["data-minima"] = minima.isoformat()
         campo.help_text = f"Opcional. A partir del {minima:%d/%m/%Y} (10 días hábiles, de lunes a viernes)."
 
     def clean_fecha_salida_productivo(self):

@@ -63,11 +63,11 @@ class RolesDesdeLaNominaTests(BaseWizard):
         )
         respuesta = self.client.get(_url(self.implementacion, 5))
         self.assertContains(respuesta, 'id="nomina-lista"')
-        self.assertContains(respuesta, "PEREZ, JUAN — 20111111112")
+        self.assertContains(respuesta, "PEREZ, JUAN — 20-11111111-2")
         datos = json.loads(
             respuesta.content.decode().split('id="nomina-datos" type="application/json">')[1].split("</script>")[0]
         )
-        self.assertEqual(datos[0]["cuil"], "20111111112")
+        self.assertEqual(datos[0]["cuil"], "20-11111111-2")
         self.assertEqual(datos[0]["apellido_nombre"], "PEREZ, JUAN")
         self.assertEqual(datos[0]["mail"], "j@x.com")
 

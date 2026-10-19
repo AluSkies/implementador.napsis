@@ -5,10 +5,29 @@ from clients.validators import validar_tamanio_archivo
 from clients.models import Modulo
 
 from .models import Empleado
-from .services import CUIL_RE, normalizar_cuil, normalizar_texto
+from .services import CUIL_RE, formatear_cuil, normalizar_cuil, normalizar_texto
+
+
+class CuilInput(forms.TextInput):
+    """Muestra el CUIL con guiones aunque se guarde con los 11 dígitos."""
+
+    def format_value(self, value):
+        return formatear_cuil(value) or None
+
+
+class CuilField(forms.CharField):
+    """CUIL que se acepta con o sin guiones. Para saber si cambió compara los dígitos: escribirlo con
+    otro formato no es un cambio (no tiene que dejar un evento ni quitarle la validación a nadie)."""
+
+    widget = CuilInput
+
+    def has_changed(self, initial, data):
+        return normalizar_cuil(initial) != normalizar_cuil(data)
 
 
 class EmpleadoForm(forms.ModelForm):
+    cuil = CuilField(label="CUIL", max_length=20, help_text="Con o sin guiones: 20-11111111-2 o 20111111112.")
+
     class Meta:
         model = Empleado
         exclude = ("implementacion", "import_batch", "creado", "actualizado")

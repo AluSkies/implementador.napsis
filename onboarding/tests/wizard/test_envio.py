@@ -123,3 +123,55 @@ class Paso9FechaDeImplementacionTests(BaseWizard):
 
     def test_el_campo_avisa_cual_es_la_fecha_minima(self):
         self.assertContains(self.client.get(_url(self.implementacion, 10)), f'min="{self.minima.isoformat()}"')
+
+
+class SelectorDeFechaTests(BaseWizard):
+    """El calendario propio (static/selector_de_fecha.js) deshabilita los días anteriores al mínimo y envía DD/MM/AAAA."""
+
+    def setUp(self):
+        super().setUp()
+        self.completar_todo()
+        from onboarding import services
+
+        self.minima = services.fecha_minima_para_cliente()
+
+    def pagina(self):
+        return self.client.get(_url(self.implementacion, 10)).content.decode()
+
+    def test_el_campo_le_dice_al_calendario_cual_es_la_primera_fecha_posible(self):
+        pagina = self.pagina()
+        self.assertIn('data-selector-de-fecha="1"', pagina)
+        self.assertIn(f'data-minima="{self.minima.isoformat()}"', pagina)
+        self.assertIn(f'min="{self.minima.isoformat()}"', pagina)  # sin JavaScript sigue valiendo el del navegador
+
+    def test_se_incluye_el_script_del_calendario(self):
+        self.assertIn("selector_de_fecha.js", self.pagina())
+
+    def test_el_servidor_acepta_la_fecha_en_formato_argentino(self):
+        respuesta = self.client.post(
+            _url(self.implementacion, 10), {"accion": "enviar", "fecha_salida_productivo": f"{self.minima:%d/%m/%Y}"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        self.implementacion.refresh_from_db()
+        self.assertEqual(self.implementacion.fecha_salida_productivo, self.minima)
+
+    def test_tambien_acepta_el_formato_del_navegador_sin_javascript(self):
+        respuesta = self.client.post(
+            _url(self.implementacion, 10), {"accion": "enviar", "fecha_salida_productivo": self.minima.isoformat()},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_aunque_se_edite_a_mano_una_fecha_anterior_al_minimo_se_rechaza(self):
+        from datetime import timedelta
+
+        anterior = self.minima - timedelta(days=3)
+        respuesta = self.client.post(
+            _url(self.implementacion, 10), {"accion": "enviar", "fecha_salida_productivo": f"{anterior:%d/%m/%Y}"},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.implementacion.refresh_from_db()
+        self.assertIsNone(self.implementacion.enviado)
+
+    def test_una_fecha_que_no_existe_se_rechaza(self):
+        respuesta = self.client.post(_url(self.implementacion, 10), {"accion": "enviar", "fecha_salida_productivo": "31/02/2027"})
+        self.assertEqual(respuesta.status_code, 200)
