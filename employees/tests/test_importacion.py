@@ -186,7 +186,7 @@ class CargaDeLaImportacionTests(TestCase):
         self.assertEqual(Empleado.objects.count(), 1)
 
     def test_es_todo_o_nada_si_algo_falla_a_mitad_de_la_carga(self):
-        with patch("onboarding.services._resolver_jerarquia_importada", side_effect=RuntimeError("falló la base")):
+        with patch("onboarding.services.nomina._resolver_jerarquia_importada", side_effect=RuntimeError("falló la base")):
             with self.assertRaises(RuntimeError):
                 self.importar(_xlsx([[20111111112, "Juan", "Pérez", None, ""]]))
         self.assertEqual((Empleado.objects.count(), ImportBatch.objects.count()), (0, 0))
