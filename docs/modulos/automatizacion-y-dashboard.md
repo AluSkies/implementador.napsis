@@ -327,7 +327,7 @@ sequenceDiagram
     S->>E: diferencias(antes, despues)
     S->>E: registrar(actor, accion, datos con los cambios)
     E->>DB: crea el EventoImplementacion con correlation_id = correlacion.actual()
-    S->>E: si hubo cambios (y no es solo la fecha) revocar_validacion() registra estado.validacion_revocada
+    S->>E: si hubo cambios (y no es solo la fecha) y la implementación estaba validada y pendiente, revocar_validacion() la quita y registra estado.validacion_revocada
     V-->>M: respuesta
     M-->>N: respuesta con el encabezado X-Request-ID
 ```
@@ -619,7 +619,7 @@ Es el panel del equipo de implementación (`/panel/`). Trabaja con tres ideas:
 
 1. **Delega las reglas de negocio.** La vista recibe el pedido, identifica al actor (`Actor.de_usuario(request.user)`), llama a una operación de `onboarding/acciones.py` o de `onboarding/services/` y muestra el resultado. Las reglas viven allá (las pocas excepciones están anotadas en «Detalles que conviene conocer»).
 2. **Es solo para el equipo.** Cada vista exige cuenta de staff; las dos de gestión de implementadores exigen además ser admin.
-3. **Compone a las demás apps.** Por eso también aloja el comando `seed_demo`, que ya necesita a todas.
+3. **Compone a las demás apps.** Por eso también aloja el comando `seed_demo`, que ya necesita a todas (es un comando local: ver 2.11).
 
 `dashboard` **no define modelos**: `models.py` y `admin.py` están vacíos y no hay migraciones. Guarda sus cuentas en `django.contrib.auth.User` y sus datos en los modelos de `clients`, `employees` y `automatizacion`.
 
@@ -859,7 +859,7 @@ flowchart TD
 
 A un implementador logueado se le responde 403 en lugar de redirigirlo al login: el login lo devolvería al mismo panel (ya está autenticado) y se armaría un bucle de redirecciones. El menú (`templates/base.html`) muestra el enlace «Implementadores» solo si el usuario es superusuario, y rotula al usuario como «Admin» o «Implementador».
 
-El rol también se refleja en el actor: `Actor.de_usuario` convierte un superusuario en `admin` y un staff en `implementador`, y eso queda en los eventos y en el historial de versiones.
+El rol también se refleja en el actor: `Actor.de_usuario` convierte un superusuario en `admin` y un staff en `implementador`, y eso queda en los eventos (`actor_tipo` y `actor_ref`). El historial de versiones guarda solo un texto, `Actor.etiqueta`: «Cliente» o el nombre de usuario, sin distinguir `admin` de `implementador`.
 
 ### 2.6 Alta de una implementación
 
@@ -963,7 +963,7 @@ flowchart TD
 | `accion` | Manejador | Operación pública a la que llama | Qué lee y qué pasa si falla |
 |---|---|---|---|
 | `actualizar_datos` | `_accion_actualizar_datos` | servicio `guardar_datos_contacto(implementacion, form, actor)` | `ImplementacionDatosForm` (con archivos). Si es inválido, devuelve `datos_form`. |
-| `actualizar_modulos` | `_accion_actualizar_modulos` | servicio `guardar_modulos(implementacion, modulos_qs, activos_ids, actor)` | Lista `modulos` (ids numéricos). Después guarda `modulos_editables_por_cliente` directo, fuera del servicio. No tiene validación. |
+| `actualizar_modulos` | `_accion_actualizar_modulos` | servicio `guardar_modulos(implementacion, modulos_qs, activos_ids, actor)` | Lista `modulos` (ids numéricos). Después guarda `modulos_editables_por_cliente` directo, fuera del servicio. No devuelve errores de validación, pero el servicio fuerza Recibo Digital como activo: un POST sin ese módulo igual lo deja activo. |
 | `actualizar_roles` | `_accion_actualizar_roles` | servicio `guardar_roles(implementacion, formset, actor)` | `RolFormSet` (prefijo `roles`). Si es inválido, devuelve `roles_formset`. |
 | `actualizar_sucursales` | `_accion_actualizar_sucursales` | servicio `guardar_sucursales(implementacion, formset, actor)` | `SucursalFormSet` (prefijo `sucursales`). Devuelve `sucursales_formset`. |
 | `actualizar_licencias_novedades` | `_accion_actualizar_licencias_novedades` | servicio `guardar_licencias_y_novedades(implementacion, form, licencias_qs, novedades_qs, actor)` | `LicenciasNovedadesForm`. Devuelve `licencias_novedades_form`. |
@@ -1117,6 +1117,8 @@ Las vistas:
 | `reactivar` | `reactivar`. |
 
 ### 2.11 El comando `seed_demo`
+
+> **Es solo local.** El comando (`dashboard/management/`) y su test (`dashboard/tests/test_seed_demo.py`) están excluidos por `.gitignore`: **no existen en un clon limpio del repositorio**, así que `manage.py seed_demo` solo funciona donde ese archivo esté. Es una ayuda de desarrollo para ver el panel con datos; el release no depende de él.
 
 Pobla una base de desarrollo con datos ficticios: llama a `seed_catalogos` y `seed_modulos`, y crea los clientes de `PERFILES` (8 clientes y 9 implementaciones, en todos los estados posibles, con sucursales, roles, licencias, documentos, nómina, firma e historial de versiones) y dos implementadores de ejemplo (`IMPLEMENTADORES_DEMO`: uno activo y uno dado de baja). Todas las cuentas demo usan la contraseña de la constante `DEMO_PASSWORD`.
 

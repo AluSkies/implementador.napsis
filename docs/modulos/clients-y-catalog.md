@@ -767,7 +767,7 @@ flowchart LR
     ME -->|"PersonaRol.empleado"| EMP
     MB --> USR
     MD --> USR
-    MA -->|"default de token y geometria"| MD
+    MA -->|"default de token"| MD
 ```
 
 ### `services.py`
@@ -930,7 +930,7 @@ Los atributos calculados (propiedades) están marcados «propiedad». «Quién l
 | `UbicacionFirma.motivos_texto` (propiedad) | Los motivos de la observación como texto legible. | Ficha del panel (`implementacion_detalle.html`). |
 | `ComentarioInterno` | Nota del equipo sobre una implementación. **Privada**: el cliente nunca la ve (ni en pantallas, ni en mails, ni en la configuración congelada). Solo se agrega: no se edita ni se borra. Largo máximo `MAX_LARGO = 2000`. | `acciones.agregar_comentario`, `dashboard/views.py`. |
 | `RondaRevision` | Una devolución al cliente: qué tiene que corregir o completar antes de validar. Se queda para siempre; se cierra cuando el cliente vuelve a enviar. Única por (`implementacion`, `numero`). Las `observaciones` van por código estable de paso. | `acciones.devolver_al_cliente` (la crea), `acciones.enviar_relevamiento` (la cierra), `filtrar_y_ordenar_implementaciones` (la anota), `dashboard/views.py`. |
-| `RondaRevision.abierta` (propiedad) | `True` mientras `respondida_en` esté vacío. | Quien lea rondas (panel). |
+| `RondaRevision.abierta` (propiedad) | `True` mientras `respondida_en` esté vacío. | Nadie hoy: el panel y `Implementacion.ronda_abierta` miran `respondida_en` directamente. |
 | `ImplementacionModulo` | Qué módulos tiene contratados una implementación (`activo`). Única por pareja. | `Implementacion.usa_modulo`, `pasos.py` (`pasos_activos`), `secciones.guardar_modulos`, `congelada.py`, `notifications/services.py`, `dashboard/reportes.py`. |
 | `PersonaRol` | Apoderado/s, Liquidador y Admin de RRHH declarados en la implementación. `ROLES_EN_NOMINA` (apoderado y liquidador) son los que tienen que existir en la nómina importada; `empleado` apunta a esa persona (por CUIL). | `onboarding/services/roles.py`, `forms.py`, `faltantes.py`, `congelada.py`, `dashboard/views.py`. |
 | `Sucursal` | Una sucursal de la implementación (nombre, dirección y observaciones), para el módulo Fichada. | `onboarding/services/secciones.py` (`guardar_sucursales`), `onboarding/forms.py`, `employees/models.py` (cada `Empleado` puede tener una), `congelada.py`. |
@@ -1054,7 +1054,7 @@ Su pieza más importante es el **código estable** (`ConCodigo`): cada elemento 
 |---|---|
 | `models.py` | `TipoLicencia`, `TipoNovedad`, `TipoLiquidacion`, `TipoDocumento` y `CampoDocumento`. |
 | `codigos.py` | `codigo_desde_nombre`, `ConCodigo` y `AdminConCodigo`. |
-| `admin.py` | El admin de los cinco modelos. |
+| `admin.py` | El admin de los cuatro tipos del catálogo (licencia, novedad, liquidación y documento). Los campos de cada documento (`CampoDocumento`) se editan como inline dentro del tipo de documento. |
 | `management/commands/seed_catalogos.py` | La carga inicial. |
 | `apps.py` | `CatalogConfig`. |
 | `views.py` | Vacío: `catalog` no tiene pantallas. |
@@ -1124,7 +1124,7 @@ classDiagram
 |---|---|---|
 | `TipoLicencia` | Los tipos de licencia relevados en «Licencias y Novedades.xlsx» (16). | `automatica`: Napsis la crea sola al finalizar la configuración, así que el cliente no la elige (hoy solo «Vacaciones»). En el wizard aparece marcada y deshabilitada. |
 | `TipoNovedad` | Los tipos de novedad del mismo relevamiento (10). | — |
-| `TipoLiquidacion` | Tipos de liquidación que puede usar una empresa con Recibo Digital (10). El `orden` es el del wizard de Napsis. | La cantidad de tipos activos define cuántas veces hay que configurar la firma en el recibo. |
+| `TipoLiquidacion` | Tipos de liquidación que puede usar una empresa con Recibo Digital (10). El `orden` es el del wizard de Napsis. | Cada implementación tiene una sola firma de recibo (`UbicacionFirma` con `tipo_liquidacion` vacío) que vale para todos los tipos de liquidación activos, sin importar cuántos sean. El modelo admite una firma por tipo (clave foránea vacía permitida y unicidad por implementación y tipo), pero la pantalla no lo ofrece. |
 | `TipoDocumento` | Tipo de documento del Legajo Digital (16 globales). | `implementacion` vacío es catálogo global; con valor y `es_custom=True` es un tipo «Otros» que agregó esa implementación y que no aparece en las demás. Los «Otros» **no llevan código** (ver 2.3). `nombre` no es único: el código sí. |
 | `CampoDocumento` | Un campo de un tipo de documento: `obligatorio` y cuántos adjuntos permite (`permite_multiples_adjuntos`, 1 es uno solo). | Se ordenan por tipo y `orden`. |
 
@@ -1197,7 +1197,7 @@ flowchart TD
 
 - Se busca por **código**, no por nombre: por eso un nombre corregido no se duplica.
 - Sin opciones, una familia que ya tiene datos se **omite entera** y el comando lo informa («Ya tenían datos y no se tocaron: …»).
-- `--completar` agrega lo que falte de la lista original aunque la familia ya tenga datos. Puede volver a crear algo que se haya borrado o renombrado a propósito.
+- `--completar` agrega lo que falte de la lista original aunque la familia ya tenga datos. Puede volver a crear algo que se haya borrado a propósito; lo renombrado no se recrea, porque conserva su código y se reconoce por él.
 - Qué carga: `LICENCIAS` (16, y `LICENCIAS_AUTOMATICAS` marca «Vacaciones» como `automatica`), `LIQUIDACIONES` (10, en el orden del wizard de Napsis), `NOVEDADES` (10) y `TIPOS_DOCUMENTO` (16, cada uno con su lista de campos, si es obligatorio y cuántos adjuntos permite). Los documentos se cargan como catálogo global: `implementacion=None`, `es_custom=False`.
 
 Los módulos de `clients` se cargan aparte, con `seed_modulos` (ver 1.11).
@@ -1313,7 +1313,7 @@ Para correrlos: `venv/Scripts/python manage.py test catalog`.
 
 - **Un estado visual nuevo** se agrega en cuatro lugares a la vez: `VISUAL_LABELS`, `estado_visual`, `filtro_visual` y la anotación `estado_orden` de `filtrar_y_ordenar_implementaciones` (`clients/services.py`). Hay un test que mantiene sincronizados `estado_visual` y `filtro_visual`, pero no mira `estado_orden` (el orden del listado).
 - **Un dato calculado que se muestra en un listado** (como `sin_movimiento` o `marca_de_devolucion`) tiene dos versiones: la propiedad del modelo y una anotación en `services.py`. Si se cambia una, hay que cambiar la otra.
-- **Guardar una sección** se hace siempre dentro de `cambio_de_seccion`, y no con un `save()` suelto: es lo que deja la foto anterior, el evento y la revocación de la validación.
+- **Guardar una sección** se hace dentro de `cambio_de_seccion`, y no con un `save()` suelto: deja la foto anterior y el evento, y revoca la validación si hubo cambios reales (salvo en la fecha de implementación, que no invalida). La nómina (sección «empleados») tiene su propio camino en `onboarding/services/nomina.py`, que repite a mano los tres pasos: foto anterior, evento propio (`nomina.importada`, `empleado.agregado`, …) y revocación de la validación.
 - **Un catálogo nuevo** que necesite código estable hereda de `ConCodigo` y usa `AdminConCodigo` en su admin; si tiene casos que no son parte del catálogo, sobreescribe `_codigo_aplica`.
 - **Un catálogo nuevo se siembra con un comando**, no con una migración: así `migrate` (y la base de test) no lo cargan solos.
 - **No cambiar el resultado de `codigo_desde_nombre`**: dos migraciones lo importan, y los códigos ya guardados en producción son la referencia de todo lo que se congeló.

@@ -489,7 +489,7 @@ En cambio, lo que la base **sí pisa** se detalla: el evento `nomina.importada` 
 
 #### 1.5.11 Alta, edición y baja manual
 
-Las hace `onboarding/services/nomina.py`; el formulario (`EmpleadoForm`) es de `employees`. Cada operación guarda una foto del historial, hace el cambio, vuelve a vincular roles, registra su evento y revoca la validación si correspondía.
+Las hace `onboarding/services/nomina.py`; el formulario (`EmpleadoForm`) es de `employees`. Cada operación guarda una foto del historial, hace el cambio, registra su evento y revoca la validación si correspondía. Agregar y editar además vuelven a vincular los roles (`vincular_roles_con_nomina`); eliminar no lo hace, porque el vínculo `PersonaRol.empleado` se vacía solo (`SET_NULL`).
 
 | Función (en `onboarding/services/nomina.py`) | Qué hace | Evento |
 |---|---|---|
