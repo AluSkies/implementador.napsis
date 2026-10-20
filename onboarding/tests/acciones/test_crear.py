@@ -161,3 +161,21 @@ class NuevaImplementacionDeUnClienteExistenteTests(TestCase):
     def test_una_empresa_nueva_arranca_vacia(self):
         nueva = acciones.crear_implementacion(ANA, datos_cliente={"nombre": "Otra"}, base_url=URL).implementacion
         self.assertEqual((nueva.mail_contacto, nueva.telefono), ("", ""))
+
+    def test_completa_la_razon_social_y_el_cuit_que_faltaban(self):
+        self.cliente.razon_social, self.cliente.cuits = "", ""
+        self.cliente.save()
+        self.crear(datos_cliente={"razon_social": "Textil S.A.", "cuits": "30500010912"})
+        self.cliente.refresh_from_db()
+        self.assertEqual((self.cliente.razon_social, self.cliente.cuits), ("Textil S.A.", "30-50001091-2"))
+        self.assertIn("razon_social", _eventos("implementacion.creada").get().datos["empresa_completada"])
+
+    def test_lo_que_llega_vacio_no_borra_lo_cargado(self):
+        self.crear(datos_cliente={"razon_social": "", "cuits": ""})
+        self.cliente.refresh_from_db()
+        self.assertEqual((self.cliente.razon_social, self.cliente.cuits), ("Textil S.A.", "30-50001091-2"))
+
+    def test_un_cuit_invalido_no_crea_nada(self):
+        resultado = self.crear(datos_cliente={"cuits": "123"})
+        self.assertFalse(resultado.ok)
+        self.assertEqual(self.cliente.implementaciones.count(), 1)

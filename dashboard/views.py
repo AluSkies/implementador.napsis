@@ -97,14 +97,14 @@ def _alta_de_implementacion(request, condiciones_form):
         return None, [f"Revisá las condiciones del proceso: {detalle}"]
 
     cliente_id = request.POST.get("cliente_id")
-    cliente, datos_cliente = None, {}
+    cliente = None
     if cliente_id and cliente_id.isdigit():
         cliente = Cliente.objects.filter(pk=cliente_id).first()
-    else:
-        datos_cliente = {
-            "nombre": request.POST.get("nombre", ""), "razon_social": request.POST.get("razon_social", ""),
-            "cuits": request.POST.get("cuits", ""),
-        }
+    # Con una empresa existente, razón social y CUIT sirven para completar o corregir lo que tiene cargado.
+    datos_cliente = {
+        "nombre": request.POST.get("nombre", ""), "razon_social": request.POST.get("razon_social", ""),
+        "cuits": request.POST.get("cuits", ""),
+    }
 
     resultado = acciones.crear_implementacion(
         Actor.de_usuario(request.user), cliente=cliente, datos_cliente=datos_cliente,
@@ -146,7 +146,7 @@ def home(request):
     for cliente in clientes_existentes:
         ultima = cliente.implementaciones.order_by("-creado", "-pk").first()
         datos_de_clientes[cliente.pk] = {
-            "razon_social": cliente.razon_social, "cuits": cliente.cuits,
+            "nombre": cliente.nombre, "razon_social": cliente.razon_social, "cuits": cliente.cuits,
             "usuario": cliente.usuario.get_username() if cliente.usuario else "",
             "mail": ultima.mail_contacto if ultima else "", "telefono": ultima.telefono if ultima else "",
             "implementaciones": cliente.implementaciones.count(),

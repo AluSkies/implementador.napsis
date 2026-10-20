@@ -104,6 +104,25 @@ def _aviso_de_credenciales(titulo, username, password):
     )
 
 
+def _completar_datos_de_la_empresa(cliente, datos, cambios):
+    """Razón social y CUIT que el alta trae para una empresa que ya existe: si vienen escritos y
+    distintos de lo cargado, se actualizan (así el equipo completa lo que faltaba). Lo que llega
+    vacío no borra nada. Devuelve el mensaje de error si el CUIT no es válido; deja en `cambios`
+    qué campos se tocaron, para el evento."""
+    nuevos = {"razon_social": (datos.get("razon_social") or "").strip()}
+    try:
+        nuevos["cuits"] = normalizar_cuits(datos["cuits"].strip()) if (datos.get("cuits") or "").strip() else ""
+    except ValidationError as error:
+        return error.messages[0]
+    for campo, valor in nuevos.items():
+        if valor and valor != getattr(cliente, campo):
+            cambios[campo] = {"antes": getattr(cliente, campo), "despues": valor}
+            setattr(cliente, campo, valor)
+    if cambios:
+        cliente.save(update_fields=[*cambios, "actualizado"])
+    return None
+
+
 def _validar_mail(mail):
     """Devuelve el mail limpio, "" si no vino, o None si no es válido."""
     mail = (mail or "").strip()
@@ -145,6 +164,7 @@ def crear_implementacion(
         return Resultado(errores=["El mail del cliente no es válido."])
 
     acceso = None
+    cambios_en_la_empresa = {}
     with transaction.atomic():
         cliente_nuevo = cliente is None
         if cliente_nuevo:
@@ -161,6 +181,11 @@ def crear_implementacion(
             cliente = Cliente.objects.create(
                 nombre=nombre, razon_social=(datos.get("razon_social") or "").strip(), cuits=cuits,
             )
+
+        else:
+            error = _completar_datos_de_la_empresa(cliente, datos_cliente or {}, cambios_en_la_empresa)
+            if error:
+                return Resultado(errores=[error])
 
         if not cliente.usuario:
             acceso = crear_o_resetear_acceso(cliente, (username or "").strip(), email=mail)
@@ -180,6 +205,7 @@ def crear_implementacion(
         services.guardar_modulos(implementacion, Modulo.objects.all(), set(modulo_ids), actor)
         eventos.registrar(actor, "implementacion.creada", implementacion, datos={
             "origen": origen, "id_externo": id_externo, "cliente_id": cliente.pk, "cliente_nuevo": cliente_nuevo,
+            "empresa_completada": cambios_en_la_empresa or None,
             "implementador": implementador.get_username() if implementador else None,
             "modulos": sorted(
                 implementacion.modulos.filter(activo=True).values_list("modulo__codigo", flat=True)

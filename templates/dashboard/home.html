@@ -117,20 +117,7 @@
                 </select>
             </div>
 
-            <div id="datos-del-cliente" class="datos-del-cliente" hidden>
-                <strong>Lo que ya sabemos de esta empresa</strong>
-                <dl>
-                    <dt>Razón social</dt><dd data-dato="razon_social"></dd>
-                    <dt>CUIT(s)</dt><dd data-dato="cuits"></dd>
-                    <dt>Usuario</dt><dd data-dato="usuario"></dd>
-                    <dt>Mail de contacto</dt><dd data-dato="mail"></dd>
-                    <dt>Teléfono</dt><dd data-dato="telefono"></dd>
-                </dl>
-                <p class="muted">La nueva implementación arranca con estos datos y el cliente los puede corregir en el paso 1. Si querés avisar a otro mail, escribilo abajo.</p>
-            </div>
-
-            <div id="cliente-nuevo">
-            <p class="muted">O, si es un cliente nuevo, completá estos datos (se ignoran si elegiste uno de arriba):</p>
+            <p class="muted">Si elegiste un cliente existente, se completan solos con lo que ya hay cargado: podés corregirlos o completar lo que falte. Si es nuevo, escribilos.</p>
             <div class="alta-field">
                 <label for="nombre">Nombre de la empresa</label>
                 <input type="text" name="nombre" id="nombre" value="{{ alta.valores.nombre|default:'' }}" placeholder="Como se muestra en el portal (puede ser el nombre de fantasía)">
@@ -147,7 +134,6 @@
             <div class="alta-field">
                 <label for="username">Usuario para que el cliente inicie sesión</label>
                 <input type="text" name="username" id="username" value="{{ alta.valores.username|default:'' }}" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
-            </div>
             </div>
             <div class="alta-field">
                 <label for="mail_cliente">Mail del cliente <span class="muted">(opcional)</span></label>
@@ -220,22 +206,22 @@
     });
     // Un clic en el fondo oscuro también cierra; lo escrito se conserva si se vuelve a abrir.
     dialogo.addEventListener("click", function (evento) { if (evento.target === dialogo) { dialogo.close(); } });
-    // Al elegir una empresa existente se muestra lo que ya se sabe de ella y se esconden los campos de empresa nueva.
+    // Al elegir una empresa existente se completan los campos con lo que ya hay cargado (se pueden corregir).
+    // El nombre y el usuario no se editan acá: identifican a la empresa y a su cuenta.
     var datos = JSON.parse(document.getElementById("datos-de-clientes").textContent);
     var selector = document.getElementById("cliente_id");
-    var panel = document.getElementById("datos-del-cliente");
-    var nuevo = document.getElementById("cliente-nuevo");
-    var mail = document.getElementById("mail_cliente");
-    function mostrarCliente() {
+    var campos = ["nombre", "razon_social", "cuits", "username", "mail_cliente"].map(function (id) { return document.getElementById(id); });
+    var soloLectura = { nombre: true, username: true };
+    function completar() {
         var d = datos[selector.value];
-        panel.hidden = !d;
-        nuevo.hidden = !!d;
-        if (!d) { mail.placeholder = "contacto@empresa.com"; return; }
-        panel.querySelectorAll("[data-dato]").forEach(function (celda) { celda.textContent = d[celda.dataset.dato] || "—"; });
-        mail.placeholder = d.mail ? d.mail + " (el de la última implementación)" : "contacto@empresa.com";
+        campos.forEach(function (campo) {
+            var clave = { mail_cliente: "mail", username: "usuario" }[campo.id] || campo.id;
+            campo.value = d ? (d[clave] || "") : "";
+            campo.readOnly = !!d && !!soloLectura[campo.id];
+        });
     }
-    selector.addEventListener("change", mostrarCliente);
-    mostrarCliente();
+    selector.addEventListener("change", completar);
+    if (!dialogo.dataset.abrir) { completar(); }
     // Si el alta falló, se reabre sola para mostrar el motivo.
     if (dialogo.dataset.abrir === "1") { dialogo.showModal(); }
 })();
