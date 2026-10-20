@@ -7,6 +7,9 @@ from django.urls import reverse_lazy
 
 from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
+import json
+
+from clients.alcance import alcance_de, contexto_del_editor_de_alcance
 from clients.models import Implementacion, Modulo
 from clients.services import resumen_implementacion
 from employees.forms import EmpleadoForm, ImportarArchivoForm
@@ -219,7 +222,8 @@ def _step_modulos(request, implementacion, step):
 def _step_roles(request, implementacion, step):
     existentes = list(implementacion.roles.all())
     initial = [
-        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": formatear_cuil(r.cuil), "mail": r.mail}
+        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": formatear_cuil(r.cuil), "mail": r.mail,
+         "alcance": json.dumps(alcance_de(r))}
         for r in existentes
     ]
 
@@ -243,6 +247,7 @@ def _step_roles(request, implementacion, step):
         request, "onboarding/step_roles.html",
         _wizard_context(implementacion, step, {
             "formset": formset, "max_roles": implementacion.max_roles, "nomina": nomina, "paso_nomina": PASO_NOMINA,
+            "alcance": contexto_del_editor_de_alcance(implementacion),
         }),
     )
 

@@ -3,6 +3,7 @@ from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
 from catalog.models import TipoLiquidacion
+from clients.alcance import normalizar as alcance_normalizar
 from clients.models import Implementacion, Modulo, PersonaRol, Sucursal, UbicacionFirma, geometria_inicial_de_firma
 from clients.validators import normalizar_cuits, validar_medidas_banner, validar_medidas_logo, validar_tamanio_archivo
 from employees.services import CUIL_RE, normalizar_cuil
@@ -116,6 +117,15 @@ class RolForm(forms.Form):
     apellido_nombre = forms.CharField(max_length=255, required=False, label="Apellido y Nombre")
     cuil = forms.CharField(max_length=20, required=False, label="CUIL")
     mail = forms.EmailField(required=False, label="Mail")
+    # Solo el Liquidador: qué empleados ve (JSON {"reglas": [...], "cuils": [...]}). Lo arma el editor de
+    # static/alcance_liquidador.js; vacío = ve todo.
+    alcance = forms.CharField(required=False, widget=forms.HiddenInput)
+
+    def clean_alcance(self):
+        try:
+            return alcance_normalizar(self.cleaned_data.get("alcance", ""))
+        except ValueError as error:
+            raise forms.ValidationError(str(error)) from None
 
     def clean_cuil(self):
         cuil = normalizar_cuil(self.cleaned_data.get("cuil", ""))

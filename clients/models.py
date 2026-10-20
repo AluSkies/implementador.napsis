@@ -554,12 +554,45 @@ class PersonaRol(models.Model):
         "employees.Empleado", null=True, blank=True, on_delete=models.SET_NULL, related_name="roles",
     )
 
+    @property
+    def alcance_descripcion(self):
+        """Qué recibos ve esta persona, en una frase (solo tiene sentido para el Liquidador)."""
+        from .alcance import alcance_de, describir
+
+        return describir(alcance_de(self))
+
     class Meta:
         verbose_name = "Persona / Rol"
         verbose_name_plural = "Personas / Roles"
 
     def __str__(self):
         return f"{self.apellido_nombre} ({self.get_rol_display()})"
+
+
+class AlcanceRegla(models.Model):
+    """Un grupo de la nómina al que llega el liquidador (ej.: puesto = OPERARIO). Ver clients/alcance.py."""
+
+    persona = models.ForeignKey(PersonaRol, on_delete=models.CASCADE, related_name="reglas_de_alcance")
+    campo = models.CharField(max_length=20)
+    valor = models.CharField(max_length=150)
+
+    class Meta:
+        verbose_name = "Regla de alcance"
+        verbose_name_plural = "Reglas de alcance"
+        constraints = [models.UniqueConstraint(fields=["persona", "campo", "valor"], name="alcance_regla_unica")]
+
+
+class AlcancePersona(models.Model):
+    """Una persona suelta a la que llega el liquidador. Va por CUIL (y no por el empleado) para que
+    siga valiendo si la nómina se vuelve a importar."""
+
+    persona = models.ForeignKey(PersonaRol, on_delete=models.CASCADE, related_name="personas_de_alcance")
+    cuil = models.CharField(max_length=11)
+
+    class Meta:
+        verbose_name = "Persona del alcance"
+        verbose_name_plural = "Personas del alcance"
+        constraints = [models.UniqueConstraint(fields=["persona", "cuil"], name="alcance_persona_unica")]
 
 
 class Sucursal(models.Model):

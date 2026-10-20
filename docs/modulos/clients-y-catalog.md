@@ -1318,3 +1318,16 @@ Para correrlos: `venv/Scripts/python manage.py test catalog`.
 - **Un catálogo nuevo se siembra con un comando**, no con una migración: así `migrate` (y la base de test) no lo cargan solos.
 - **No cambiar el resultado de `codigo_desde_nombre`**: dos migraciones lo importan, y los códigos ya guardados en producción son la referencia de todo lo que se congeló.
 - **Los archivos subidos siempre se sirven por `/media/` con permisos**: no se publica `media/` desde el proxy.
+
+## Alcance del liquidador
+
+Qué recibos ve el Liquidador se arma con dos listas, y el alcance es la **unión** de las dos: grupos de la nómina
+(`AlcanceRegla`: campo + valor, por ejemplo `puesto = Operario`; los campos son gerencia, sector, puesto, centro de costo
+y supervisor) y personas sueltas (`AlcancePersona`: un CUIL, para que siga valiendo si la nómina se reimporta). Sin nada
+cargado ve a todos, que equivale a `AREA UNICA`. Se guardan las reglas y los CUIL, nunca la lista de empleados: el
+resultado se recalcula con la nómina vigente (`clients/alcance.py`: `alcanzados`, `describir`).
+
+- Solo lo tiene el rol Liquidador, y solo si el equipo no dejó la segmentación fija en «sin segmentar» (`segmentacion_editable`).
+- Se edita en el paso de roles del cliente y en la ficha del equipo con el mismo editor (`static/alcance_liquidador.js`), que viaja en el campo oculto `alcance` del formulario de roles.
+- `guardar_roles` ya no borra y recrea los roles: una persona con el mismo rol y CUIL se actualiza en el lugar y conserva su alcance.
+- Entra en el historial de versiones y en la configuración congelada (solo si hay alcance).

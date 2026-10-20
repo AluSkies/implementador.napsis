@@ -10,6 +10,7 @@ from django.utils.text import slugify
 
 from automatizacion import eventos
 
+from .alcance import alcance_de, describir
 from .models import Implementacion, ImplementacionVersion, RondaRevision
 
 
@@ -170,7 +171,8 @@ def _snapshot_modulos(implementacion):
 
 def _snapshot_roles(implementacion):
     return [
-        {"Rol": r.get_rol_display(), "Apellido y Nombre": r.apellido_nombre, "CUIL": r.cuil, "Mail": r.mail}
+        {"Rol": r.get_rol_display(), "Apellido y Nombre": r.apellido_nombre, "CUIL": r.cuil, "Mail": r.mail,
+         **({"Alcance": describir(alcance_de(r))} if alcance_de(r) else {})}
         for r in implementacion.roles.all()
     ]
 

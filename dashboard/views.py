@@ -11,6 +11,7 @@ from automatizacion.actores import Actor
 from automatizacion.congelada import como_documento as congelada_como_documento
 from automatizacion.models import ConfiguracionCongelada
 from catalog.models import TipoLicencia, TipoNovedad
+from clients.alcance import alcance_de, contexto_del_editor_de_alcance
 from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, UbicacionFirma
 from clients.services import (
     COLUMNAS_ORDENABLES,
@@ -516,7 +517,8 @@ def implementacion_detalle(request, pk):
             empleado_edit_form = EmpleadoForm(instance=empleado_editando, implementacion=implementacion)
 
     roles_iniciales = [
-        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": formatear_cuil(r.cuil), "mail": r.mail}
+        {"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": formatear_cuil(r.cuil), "mail": r.mail,
+         "alcance": json.dumps(alcance_de(r))}
         for r in implementacion.roles.all()
     ]
     sucursales_iniciales = [
@@ -562,6 +564,7 @@ def implementacion_detalle(request, pk):
         "condiciones_form": formularios_con_error.get("condiciones_form")
         or CondicionesForm(implementacion=implementacion),
         "datos_form": formularios_con_error.get("datos_form") or ImplementacionDatosForm(instance=implementacion),
+        "alcance": contexto_del_editor_de_alcance(implementacion),
         "roles_formset": formularios_con_error.get("roles_formset") or RolFormSet(initial=roles_iniciales, prefix="roles"),
         "sucursales_formset": formularios_con_error.get("sucursales_formset") or SucursalFormSet(initial=sucursales_iniciales, prefix="sucursales"),
         "licencias_rows": [(licencia, licencias_novedades_form[f"licencia_{licencia.id}_activo"]) for licencia in licencias_qs],

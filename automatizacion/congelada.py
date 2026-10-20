@@ -18,6 +18,8 @@ import os
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
+from clients.alcance import alcance_de
+
 from .models import ConfiguracionCongelada
 
 VERSION_ESQUEMA = 1
@@ -93,7 +95,8 @@ def contenido_de(implementacion):
             "pagina": firma.pagina, "geometria": firma.geometria, "estado": firma.estado,
         },
         "roles": sorted(
-            ({"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": r.cuil, "mail": r.mail}
+            ({"rol": r.rol, "apellido_nombre": r.apellido_nombre, "cuil": r.cuil, "mail": r.mail,
+              **({"alcance": alcance_de(r)} if alcance_de(r) else {})}
              for r in implementacion.roles.all()),
             key=lambda r: (r["rol"], r["cuil"], r["apellido_nombre"]),
         ),

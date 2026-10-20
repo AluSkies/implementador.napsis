@@ -40,6 +40,9 @@
         <button class="btn" type="submit">Continuar</button>
     </div>
 </form>
+{% load static %}
+{{ alcance|json_script:"alcance-datos" }}
+<script src="{% static 'alcance_liquidador.js' %}"></script>
 {% if nomina %}
 <script>
 (function () {

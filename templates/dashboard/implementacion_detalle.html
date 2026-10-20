@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load cuil pasos %}
+{% load cuil pasos static %}
 {% block content %}
 <div class="card">
     <p><a href="{% url 'dashboard:cliente_detalle' pk=cliente.pk %}">&larr; Volver a {{ cliente.nombre }}</a></p>
@@ -264,6 +264,7 @@
         <tbody>
         {% for r in roles %}
             <tr><td>{{ r.get_rol_display }}</td><td>{{ r.apellido_nombre }}</td><td>{{ r.cuil|cuil }}</td><td>{{ r.mail }}</td></tr>
+            {% if r.rol == "liquidador" %}<tr><td></td><td colspan="3" class="muted">Ve: {{ r.alcance_descripcion }}</td></tr>{% endif %}
         {% empty %}<tr><td colspan="4" class="muted">Sin roles cargados</td></tr>{% endfor %}
         </tbody>
     </table>
@@ -279,6 +280,8 @@
                     {{ f.as_p }}
                 </fieldset>
             {% endfor %}
+            {{ alcance|json_script:"alcance-datos" }}
+            <script src="{% static 'alcance_liquidador.js' %}"></script>
             <div class="actions"><button class="btn secondary" type="submit">Guardar roles</button></div>
         </form>
     </details>
