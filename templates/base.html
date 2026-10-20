@@ -107,6 +107,13 @@
         .alcance-quitar { border: 0; background: none; cursor: pointer; font-size: 1.1em; color: #8a1c1c; }
         .alcance-resumen { font-weight: 600; margin: 6px 0 0; }
         .solo-lectura form, .solo-lectura .section-edit { display: none; }
+        .archivo-actual { border: 1px solid #e0d4ef; border-radius: 8px; padding: 10px 12px; background: #fff; }
+        .archivo-actual-vista { display: flex; gap: 12px; align-items: center; }
+        .archivo-actual-miniatura { max-width: 160px; max-height: 64px; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
+        .archivo-actual-datos { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; word-break: break-all; }
+        .archivo-por-quitar { opacity: 0.4; text-decoration: line-through; }
+        .archivo-actual-aviso { color: #8a1c1c; font-weight: 600; margin: 6px 0 0; }
+        .archivo-actual-etiqueta { margin-top: 10px; font-weight: 500; }
         .error-box { display: block; background: #fbdada; color: #8a1c1c; border-left: 4px solid #c62828; border-radius: 6px; padding: 8px 12px; margin: 4px 0 8px; font-weight: 600; }
         .error-box > span { display: block; }
         .reglas { display: block; color: #666; font-size: 0.85em; margin-top: 4px; }
@@ -205,6 +212,22 @@
 document.addEventListener('submit', function (e) {
     var botones = e.target.querySelectorAll('button[type=submit], input[type=submit]');
     setTimeout(function () { botones.forEach(function (b) { b.disabled = true; }); }, 0);
+});
+/* Archivos ya cargados (banner, logo, modelo de recibo): «Quitar» marca el borrado y lo avisa; «Deshacer» lo
+   revierte; si se elige un archivo nuevo, ya no se quita (se reemplaza). */
+document.addEventListener('click', function (e) {
+    var quitar = e.target.closest('[data-quitar]'), deshacer = e.target.closest('[data-deshacer]');
+    if (!quitar && !deshacer) return;
+    var caja = e.target.closest('[data-archivo-actual]');
+    var marca = caja.querySelector('[data-clear]');
+    marca.checked = !!quitar;
+    caja.querySelector('[data-vista]').classList.toggle('archivo-por-quitar', !!quitar);
+    caja.querySelector('[data-aviso]').hidden = !quitar;
+});
+document.addEventListener('change', function (e) {
+    if (!e.target.matches('[data-archivo-actual] input[type=file]')) return;
+    var caja = e.target.closest('[data-archivo-actual]'), marca = caja.querySelector('[data-clear]');
+    if (marca && marca.checked && e.target.value) caja.querySelector('[data-deshacer]').click();
 });
 window.addEventListener('pageshow', function (e) {
     if (e.persisted) document.querySelectorAll('button[type=submit], input[type=submit]').forEach(function (b) { b.disabled = false; });

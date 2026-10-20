@@ -1,13 +1,15 @@
 """Logo y banner en los formularios y su acceso."""
 
+import shutil
 import tempfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from catalog.models import TipoLiquidacion
 from clients.models import Cliente, Implementacion
-from onboarding.forms import ImplementacionDatosForm
+from onboarding.forms import ConfiguracionForm, ImplementacionDatosForm
 from onboarding.tests.base import BaseWizard, _url, imagen
 
 
@@ -95,3 +97,53 @@ class AccesoAlLogoTests(BaseWizard):
         from clients.services import foto_de_seccion
 
         self.assertIn("logo", foto_de_seccion(self.implementacion, "datos_contacto")["Logo"])
+
+
+class CampoDeArchivoActualTests(TestCase):
+    """Los archivos ya cargados se muestran con «Quitar» (que se puede deshacer) y «Reemplazar»; el modelo de
+    recibo es obligatorio, así que solo se reemplaza."""
+
+    def setUp(self):
+        self.media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media, ignore_errors=True)
+        with override_settings(MEDIA_ROOT=self.media):
+            self.implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="A"))
+            self.implementacion.logo.save("logo.png", imagen(100, 100, "logo.png"))
+            self.implementacion.modelo_recibo.save("recibo.pdf", SimpleUploadedFile("recibo.pdf", b"%PDF-1.4 x"))
+
+    def pagina(self, **kwargs):
+        with override_settings(MEDIA_ROOT=self.media):
+            return str(ConfiguracionForm(instance=self.implementacion, **kwargs)["logo"]), str(
+                ConfiguracionForm(instance=self.implementacion)["modelo_recibo"]
+            )
+
+    def test_el_logo_cargado_se_muestra_con_miniatura_y_boton_quitar(self):
+        logo, _ = self.pagina()
+        self.assertIn("archivo-actual-miniatura", logo)
+        self.assertIn("data-quitar", logo)
+        self.assertIn('name="logo-clear"', logo)
+        self.assertIn("Reemplazar por otro archivo", logo)
+
+    def test_sin_archivo_solo_ofrece_elegir_uno(self):
+        implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="B"))
+        html = str(ConfiguracionForm(instance=implementacion)["logo"])
+        self.assertIn("Elegir un archivo", html)
+        self.assertNotIn("data-quitar", html)
+
+    def test_el_modelo_de_recibo_no_se_puede_quitar_solo_reemplazar(self):
+        _, modelo = self.pagina()
+        self.assertNotIn("data-quitar", modelo)
+        self.assertNotIn("modelo_recibo-clear", modelo)
+        self.assertIn("solo reemplazar", modelo)
+        self.assertIn('type="file"', modelo)
+
+    def test_marcar_quitar_y_guardar_borra_el_logo(self):
+        tipo = TipoLiquidacion.objects.create(nombre="Normal")
+        datos = {"segmentacion_liquidador": "AREA UNICA", "tipos_liquidacion": [tipo.pk], "logo-clear": "on"}
+        with override_settings(MEDIA_ROOT=self.media):
+            formulario = ConfiguracionForm(datos, instance=self.implementacion)
+            self.assertTrue(formulario.is_valid(), formulario.errors)
+            formulario.save()
+        self.implementacion.refresh_from_db()
+        self.assertFalse(self.implementacion.logo)
+        self.assertTrue(self.implementacion.modelo_recibo)

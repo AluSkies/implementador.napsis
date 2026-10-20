@@ -1,4 +1,8 @@
+import os
+
 from django import forms
+from django.forms.utils import flatatt
+from django.template.loader import render_to_string
 from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
@@ -27,6 +31,33 @@ AYUDA_BANNER = "Opcional. Tiene que medir entre 1500 × 200 y 1600 × 400 px: si
 AYUDA_LOGO = "Opcional. Puede medir hasta 200 × 200 px: si no, Napsis lo rechaza."
 
 
+class ArchivoActualInput(forms.ClearableFileInput):
+    """Campo de archivo que muestra lo que ya está cargado (con miniatura si es una imagen), un botón
+    «Quitar» que avisa que se elimina al continuar (y se puede deshacer) y «Reemplazar». Con
+    `permite_quitar=False` (el modelo de recibo es obligatorio) solo se puede reemplazar. Lo que viaja
+    al servidor es lo de siempre: el archivo nuevo y el checkbox `<campo>-clear`."""
+
+    EXTENSIONES_DE_IMAGEN = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+
+    def __init__(self, *args, permite_quitar=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.permite_quitar = permite_quitar
+
+    def render(self, name, value, attrs=None, renderer=None):
+        attrs = {**self.attrs, **(attrs or {})}
+        actual = self.is_initial(value)
+        nombre_del_archivo = os.path.basename(value.name) if actual else ""
+        input_id = attrs.get("id", f"id_{name}")
+        otros = {k: v for k, v in attrs.items() if k not in ("id", "name", "type")}
+        return render_to_string("widgets/archivo_actual.html", {
+            "nombre": name, "input_id": input_id, "atributos": flatatt(otros),
+            "actual": actual, "actual_url": value.url if actual else "", "actual_nombre": nombre_del_archivo,
+            "es_imagen": nombre_del_archivo.lower().endswith(self.EXTENSIONES_DE_IMAGEN),
+            "permite_quitar": self.permite_quitar,
+            "clear_name": self.clear_checkbox_name(name), "clear_id": self.clear_checkbox_id(self.clear_checkbox_name(name)),
+        })
+
+
 class ImagenesConMedidasMixin:
     """El banner y el logo se validan contra las medidas que acepta el wizard de Napsis, y se
     avisa cuáles son antes de subirlos (nunca se acepta en silencio algo que el destino rechaza)."""
@@ -38,6 +69,9 @@ class ImagenesConMedidasMixin:
             if nombre in self.fields:
                 self.fields[nombre].validators.append(validador)
                 self.fields[nombre].help_text = ayuda
+                self.fields[nombre].widget = ArchivoActualInput(attrs={"accept": "image/*"})
+        if "modelo_recibo" in self.fields:
+            self.fields["modelo_recibo"].widget = ArchivoActualInput(permite_quitar=False, attrs={"accept": "application/pdf,.pdf"})
 
 
 class CamposEmpresaMixin:
@@ -227,8 +261,6 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
     class Meta:
         model = Implementacion
         fields = CAMPOS_CONFIGURACION
-        # Sin el checkbox de "borrar": el modelo de recibo es obligatorio, solo se reemplaza.
-        widgets = {"modelo_recibo": forms.FileInput}
         help_texts = {
             "tipo_firma": "Digital requiere token físico ENCODE. Electrónica requiere adjuntar imagen de firma hológrafa.",
             "segmentacion_liquidador": "Por defecto 'AREA UNICA' si el liquidador ve todos los recibos sin segmentar.",

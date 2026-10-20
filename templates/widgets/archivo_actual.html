@@ -1,0 +1,24 @@
+<div class="archivo-actual" data-archivo-actual>
+    {% if actual %}
+    <div class="archivo-actual-vista" data-vista>
+        {% if es_imagen %}<img class="archivo-actual-miniatura" src="{{ actual_url }}" alt="Archivo cargado">{% endif %}
+        <div class="archivo-actual-datos">
+            <a href="{{ actual_url }}" target="_blank" rel="noopener">{{ actual_nombre }}</a>
+            <span class="muted">Ya está cargado.</span>
+            {% if permite_quitar %}
+                <input type="checkbox" name="{{ clear_name }}" id="{{ clear_id }}" hidden data-clear>
+                <button type="button" class="btn danger" data-quitar>Quitar</button>
+            {% endif %}
+        </div>
+    </div>
+    {% if permite_quitar %}
+    <p class="archivo-actual-aviso" data-aviso hidden>
+        Se va a eliminar cuando toques «Continuar». <button type="button" class="btn secondary" data-deshacer>Deshacer</button>
+    </p>
+    {% else %}
+    <p class="muted">Es obligatorio: no se puede quitar, solo reemplazar por otro.</p>
+    {% endif %}
+    {% endif %}
+    <label class="archivo-actual-etiqueta" for="{{ input_id }}">{% if actual %}Reemplazar por otro archivo{% else %}Elegir un archivo{% endif %}</label>
+    <input type="file" name="{{ nombre }}" id="{{ input_id }}"{{ atributos }}>
+</div>
