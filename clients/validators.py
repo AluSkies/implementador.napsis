@@ -79,7 +79,14 @@ def normalizar_cuits(valor):
         if not crudo:
             continue
         digitos = "".join(c for c in crudo if c.isdigit())
+        if len(digitos) != 11:
+            raise ValidationError(
+                f"El CUIT {crudo!r} no es válido: tiene {len(digitos)} dígitos y tiene que tener 11."
+            )
         if not _cuit_valido(digitos):
-            raise ValidationError(f"El CUIT {crudo!r} no es válido: revisá los 11 dígitos.")
+            raise ValidationError(
+                f"El CUIT {crudo!r} no es válido: tiene 11 dígitos pero el último no corresponde a los anteriores "
+                "(dígito verificador). Revisá que no haya un número mal tipeado."
+            )
         resultado.append(f"{digitos[:2]}-{digitos[2:10]}-{digitos[10]}")
     return ", ".join(resultado)

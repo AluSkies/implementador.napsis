@@ -39,3 +39,24 @@ class NormalizarCuitsTests(SimpleTestCase):
     def test_prefijo_23_con_el_verificador_equivocado_se_rechaza(self):
         with self.assertRaises(ValidationError):
             normalizar_cuits("23200000094")
+
+
+class MensajesDelCuitTests(SimpleTestCase):
+    """El mensaje dice cuál es el problema: la cantidad de dígitos o el dígito verificador."""
+
+    def mensaje(self, cuit):
+        with self.assertRaises(ValidationError) as contexto:
+            normalizar_cuits(cuit)
+        return contexto.exception.messages[0]
+
+    def test_de_mas_o_de_menos_dice_cuantos_tiene(self):
+        self.assertIn("tiene 12 dígitos y tiene que tener 11", self.mensaje("305213151205"))
+        self.assertIn("tiene 10 dígitos y tiene que tener 11", self.mensaje("30-5213151-2"))
+
+    def test_con_11_dígitos_y_verificador_malo_habla_del_verificador(self):
+        mensaje = self.mensaje("30521315126")
+        self.assertIn("tiene 11 dígitos pero el último no corresponde", mensaje)
+        self.assertIn("30521315126", mensaje)
+
+    def test_el_verificador_correcto_de_esos_diez_digitos_es_valido(self):
+        self.assertEqual(normalizar_cuits("30521315128"), "30-52131512-8")
