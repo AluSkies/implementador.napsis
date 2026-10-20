@@ -1,0 +1,14 @@
+{# Campos de contraseña: el error de cada campo sale en rojo, arriba del campo, y las reglas aparte, en gris, para no confundirlas. #}
+{% if form.non_field_errors %}
+    <div class="error-box" role="alert">{% for e in form.non_field_errors %}<p>{{ e }}</p>{% endfor %}</div>
+{% endif %}
+{% for campo in form %}
+    <p>
+        <label for="{{ campo.id_for_label }}">{{ campo.label }}:</label>
+        {% if campo.errors %}
+            <span class="error-box" role="alert">{% for e in campo.errors %}<span>{{ e }}</span>{% endfor %}</span>
+        {% endif %}
+        {{ campo }}
+        {% if campo.help_text %}<span class="reglas">{{ campo.help_text|safe }}</span>{% endif %}
+    </p>
+{% endfor %}

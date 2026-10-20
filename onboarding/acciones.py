@@ -165,9 +165,13 @@ def crear_implementacion(
         if not cliente.usuario:
             acceso = crear_o_resetear_acceso(cliente, (username or "").strip(), email=mail)
 
+        # Una empresa que ya tuvo una implementación no vuelve a cargar lo que ya sabemos de ella:
+        # el teléfono y, si no se escribió otro, el mail salen de la última.
+        anterior = None if cliente_nuevo else cliente.implementaciones.order_by("-creado", "-pk").first()
         implementacion = Implementacion(
             cliente=cliente, creado_por=creado_por, implementador_asignado=implementador,
-            mail_contacto=mail,  # el paso 1 del cliente ya lo trae cargado
+            mail_contacto=mail or (anterior.mail_contacto if anterior else ""),  # el paso 1 del cliente ya lo trae cargado
+            telefono=anterior.telefono if anterior else "",
             modulos_editables_por_cliente=bool(modulos_editables), origen=origen, id_externo=id_externo or None,
         )
         if condiciones is not None:

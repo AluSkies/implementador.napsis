@@ -6,7 +6,7 @@
     <h2>Cambiar contraseña</h2>
     <form method="post">
         {% csrf_token %}
-        {{ form.as_p }}
+        {% include "clave/_campos_de_contrasena.html" %}
         <div class="actions">
             <button class="btn" type="submit">Cambiar contraseña</button>
             <a class="btn secondary" href="{% if request.user.is_staff %}{% url 'dashboard:home' %}{% else %}{% url 'onboarding:mis_implementaciones' %}{% endif %}">Volver</a>

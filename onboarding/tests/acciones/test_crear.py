@@ -135,3 +135,29 @@ class CrearImplementacionTests(TestCase):
         implementacion = resultado.implementacion
         self.assertEqual((implementacion.creado_por, implementacion.implementador_asignado), (None, None))
         self.assertEqual(_eventos("implementacion.creada").get().actor_tipo, "servicio")
+
+
+class NuevaImplementacionDeUnClienteExistenteTests(TestCase):
+    """Una empresa que ya tuvo una implementación no vuelve a cargar lo que ya sabemos de ella."""
+
+    def setUp(self):
+        self.ana = User.objects.create_user("ana", password="x", is_staff=True)
+        self.cliente = Cliente.objects.create(nombre="Textil", razon_social="Textil S.A.", cuits="30-50001091-2")
+        self.anterior = Implementacion.objects.create(
+            cliente=self.cliente, mail_contacto="rrhh@textil.com", telefono="011-4444-5555",
+        )
+
+    def crear(self, **extra):
+        return acciones.crear_implementacion(ANA, cliente=self.cliente, implementador=self.ana, base_url=URL, **extra)
+
+    def test_hereda_el_telefono_y_el_mail_de_la_ultima(self):
+        nueva = self.crear().implementacion
+        self.assertEqual((nueva.mail_contacto, nueva.telefono), ("rrhh@textil.com", "011-4444-5555"))
+
+    def test_un_mail_escrito_en_el_alta_tiene_prioridad(self):
+        nueva = self.crear(mail_cliente="otro@textil.com").implementacion
+        self.assertEqual((nueva.mail_contacto, nueva.telefono), ("otro@textil.com", "011-4444-5555"))
+
+    def test_una_empresa_nueva_arranca_vacia(self):
+        nueva = acciones.crear_implementacion(ANA, datos_cliente={"nombre": "Otra"}, base_url=URL).implementacion
+        self.assertEqual((nueva.mail_contacto, nueva.telefono), ("", ""))

@@ -140,7 +140,17 @@ def home(request):
         "editables": bool(request.POST.get("modulos_editables")) if es_alta else True,
     }
 
-    clientes_existentes = Cliente.objects.order_by("nombre")
+    clientes_existentes = Cliente.objects.select_related("usuario").order_by("nombre")
+    # Lo que ya se sabe de cada empresa, para mostrarlo en el alta al elegirla (no se vuelve a pedir).
+    datos_de_clientes = {}
+    for cliente in clientes_existentes:
+        ultima = cliente.implementaciones.order_by("-creado", "-pk").first()
+        datos_de_clientes[cliente.pk] = {
+            "razon_social": cliente.razon_social, "cuits": cliente.cuits,
+            "usuario": cliente.usuario.get_username() if cliente.usuario else "",
+            "mail": ultima.mail_contacto if ultima else "", "telefono": ultima.telefono if ultima else "",
+            "implementaciones": cliente.implementaciones.count(),
+        }
     implementaciones = filtrar_y_ordenar_implementaciones(
         Implementacion.objects.select_related("cliente", "implementador_asignado"), request.GET
     )
@@ -150,6 +160,7 @@ def home(request):
         {
             "implementaciones": implementaciones,
             "clientes_existentes": clientes_existentes,
+            "datos_de_clientes": datos_de_clientes,
             "asignables": cuentas.asignables(),
             "condiciones_form": condiciones_form,
             "alta": alta,
