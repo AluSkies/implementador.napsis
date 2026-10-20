@@ -19,3 +19,7 @@ docker-compose.yml
 .dockerignore
 # Material de referencia local (planillas y manuales de clientes): nunca al repo ni a la imagen.
 referencias
+# Demo local con datos ficticios (ignorados también por git): nunca dentro de la imagen.
+dashboard/management
+dashboard/tests/test_seed_demo.py
+.ruff_cache

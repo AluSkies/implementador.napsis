@@ -4,7 +4,6 @@ import json
 import tempfile
 
 from dashboard.tests.base import crear_supervisor
-from django.contrib.auth.models import User
 from django.test import override_settings
 from django.urls import reverse
 

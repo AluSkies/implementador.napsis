@@ -16,6 +16,34 @@ docker compose logs -f app             # ver el arranque
 Al arrancar, el contenedor aplica las migraciones, carga los catálogos y módulos y crea
 el superusuario inicial (`DJANGO_SUPERUSER_*`). Los tres pasos son idempotentes.
 
+## La cuenta Admin (primer ingreso)
+
+Sin una cuenta Admin no se puede entrar al panel ni crear al resto del equipo. Hay dos formas de tenerla:
+
+**A. Automática en el primer arranque (recomendada).** Completar en `.env.docker`:
+
+```
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_EMAIL=implementacion@napsislatam.com
+DJANGO_SUPERUSER_PASSWORD=<una contraseña real>
+```
+
+El arranque la crea **una sola vez**: si el usuario ya existe no lo toca (no pisa una contraseña cambiada después). La contraseña tiene que pasar los validadores de Django (mín. 8 caracteres, no común, no solo números) o el contenedor falla a propósito. Una vez creada se pueden borrar esas líneas del archivo.
+
+**B. A mano, con el contenedor ya corriendo** (si no se definieron las variables):
+
+```bash
+docker compose exec app python manage.py createsuperuser
+```
+
+Pide usuario, mail y contraseña por la terminal. Si no se puede abrir una terminal interactiva, la misma creación sin preguntas:
+
+```bash
+docker compose exec -e DJANGO_SUPERUSER_USERNAME=admin -e DJANGO_SUPERUSER_PASSWORD='<contraseña>' app python manage.py ensure_superuser
+```
+
+Si el arranque no encuentra ninguna cuenta Admin y no hay variables, escribe una **ADVERTENCIA** en el log (`docker compose logs app`) con este mismo comando. Con el Admin creado, el resto del equipo se da de alta desde el panel (`/panel/implementadores/`): implementadores y supervisores. Si se pierde la contraseña del Admin, se puede resetear con `docker compose exec app python manage.py changepassword <usuario>`.
+
 ## Variables de entorno
 
 **Obligatorias.** Si falta alguna el contenedor no arranca y lista cuáles faltan:

@@ -1,7 +1,6 @@
 """Validar y devolver desde la ficha, el listado y el reporte."""
 
 from dashboard.tests.base import crear_supervisor
-from django.contrib.auth.models import User
 from django.urls import reverse
 
 from automatizacion.actores import Actor

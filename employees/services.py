@@ -62,7 +62,7 @@ class ArchivoInvalido(Exception):
 
 
 def normalizar_texto(valor):
-    """Mayúsculas, sin espacios de más, sin tildes — mismo criterio usado en la plantilla Mondezza."""
+    """Mayúsculas, sin espacios de más, sin tildes — mismo criterio que la planilla de importación de nómina original."""
     if valor is None:
         return ""
     texto = str(valor).strip().upper()

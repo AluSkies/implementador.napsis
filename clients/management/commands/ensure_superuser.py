@@ -29,6 +29,13 @@ class Command(BaseCommand):
             self.stdout.write(
                 "DJANGO_SUPERUSER_USERNAME/DJANGO_SUPERUSER_PASSWORD no configurados; se omite."
             )
+            if not User.objects.filter(is_superuser=True, is_active=True).exists():
+                # Sin ningún admin no se puede entrar al panel ni crear al equipo: que no pase desapercibido.
+                self.stderr.write(self.style.WARNING(
+                    "ADVERTENCIA: no hay ninguna cuenta Admin. Crear una con: "
+                    "docker compose exec app python manage.py createsuperuser "
+                    "(o definir DJANGO_SUPERUSER_USERNAME/PASSWORD en .env.docker y reiniciar). Ver deploy/DOCKER.md."
+                ))
             return
 
         if User.objects.filter(username=username).exists():

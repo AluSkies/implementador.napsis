@@ -1,3 +1,4 @@
+import os
 from io import StringIO
 
 from django.contrib.auth.models import User
@@ -68,3 +69,26 @@ class EnsureSuperuserCommandTests(TestCase):
 
         admin.refresh_from_db()
         self.assertTrue(admin.check_password("password-cambiada-a-mano"))
+
+
+class AvisoSinAdminTests(TestCase):
+    """Un despliegue sin variables de superusuario y sin ningún admin tiene que avisarlo en voz alta."""
+
+    def correr(self):
+        salida, error = StringIO(), StringIO()
+        previos = {k: os.environ.pop(k, None) for k in ("DJANGO_SUPERUSER_USERNAME", "DJANGO_SUPERUSER_PASSWORD")}
+        try:
+            call_command("ensure_superuser", stdout=salida, stderr=error)
+        finally:
+            for k, v in previos.items():
+                if v is not None:
+                    os.environ[k] = v
+        return error.getvalue()
+
+    def test_sin_variables_y_sin_admin_advierte_como_crearlo(self):
+        self.assertIn("no hay ninguna cuenta Admin", self.correr())
+        self.assertIn("createsuperuser", self.correr())
+
+    def test_si_ya_hay_un_admin_no_advierte(self):
+        User.objects.create_superuser("admin", password="Clave-Larga-2026!")
+        self.assertEqual(self.correr(), "")
