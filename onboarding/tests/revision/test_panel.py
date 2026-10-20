@@ -1,5 +1,6 @@
 """Validar y devolver desde la ficha, el listado y el reporte."""
 
+from dashboard.tests.base import crear_supervisor
 from django.contrib.auth.models import User
 from django.urls import reverse
 
@@ -14,7 +15,7 @@ ANA = Actor.implementador("ana")
 class PanelTests(EnviadaBase):
     def setUp(self):
         super().setUp()
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_supervisor("ana"))
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
 
     def test_la_ficha_ofrece_validar_y_devolver(self):
@@ -73,7 +74,7 @@ class AvisoAlPerderLaValidacionTests(EnviadaBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_supervisor("ana"))
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         acciones.aprobar_para_configurar(ANA, self.implementacion)
 

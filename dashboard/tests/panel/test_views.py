@@ -1,3 +1,4 @@
+from dashboard.tests.base import crear_supervisor
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -88,7 +89,7 @@ class CrearImplementacionTests(TestCase):
 
 class ActualizarModulosTests(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(username="admin_test", password="x", is_staff=True)
+        self.staff = crear_supervisor("admin_test")
         self.client.force_login(self.staff)
         self.modulo = Modulo.objects.create(nombre="Módulo A")
         cliente = Cliente.objects.create(nombre="Empresa de Prueba")
@@ -108,7 +109,7 @@ class ActualizarModulosTests(TestCase):
 
 class EliminarEmpleadoTests(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(username="admin_test", password="x", is_staff=True)
+        self.staff = crear_supervisor("admin_test")
         self.client.force_login(self.staff)
         cliente = Cliente.objects.create(nombre="Empresa de Prueba")
         self.implementacion = Implementacion.objects.create(cliente=cliente)

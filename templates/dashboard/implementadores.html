@@ -4,15 +4,17 @@
     <p><a href="{% url 'dashboard:home' %}">&larr; Volver al panel</a></p>
     <h1>Implementadores</h1>
     <p class="muted">
-        Cuentas del equipo que trabajan el panel. Un implementador puede hacer todo lo que hace el equipo hoy
-        (implementaciones, clientes, nómina); solo el rol Admin puede administrar estas cuentas.
+        Cuentas del equipo que trabajan el panel. Un <strong>implementador</strong> ve todas las implementaciones pero solo
+        actúa sobre las que tiene asignadas. Un <strong>supervisor</strong> actúa sobre todas y las asigna a los demás.
+        Solo el rol Admin puede crear estas cuentas y cambiarles el rol.
     </p>
     <table>
-        <thead><tr><th>Usuario</th><th>Nombre</th><th>Mail</th><th>Estado</th><th>Último ingreso</th><th>Implementaciones creadas</th><th></th></tr></thead>
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Nombre</th><th>Mail</th><th>Estado</th><th>Último ingreso</th><th>Implementaciones creadas</th><th></th></tr></thead>
         <tbody>
         {% for u in implementadores %}
             <tr>
                 <td>{{ u.username }}</td>
+                <td>{% if u.es_supervisor %}Supervisor{% else %}Implementador{% endif %}</td>
                 <td>{{ u.get_full_name|default:"—" }}</td>
                 <td>{{ u.email|default:"—" }}</td>
                 <td>{% if u.is_active %}Activo{% else %}<span class="muted">Dado de baja</span>{% endif %}</td>
@@ -21,19 +23,19 @@
                 <td><a href="{% url 'dashboard:implementador_detalle' pk=u.pk %}">Ver</a></td>
             </tr>
         {% empty %}
-            <tr><td colspan="7" class="muted">Todavía no hay implementadores. Creá el primero abajo.</td></tr>
+            <tr><td colspan="8" class="muted">Todavía no hay implementadores. Creá el primero abajo.</td></tr>
         {% endfor %}
         </tbody>
     </table>
 </div>
 
 <div class="card">
-    <h2>Nuevo implementador</h2>
+    <h2>Nueva cuenta del equipo</h2>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
         <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la cuenta.</p>
-        <div class="actions"><button class="btn" type="submit">Crear implementador</button></div>
+        <div class="actions"><button class="btn" type="submit">Crear cuenta</button></div>
     </form>
 </div>
 {% endblock %}

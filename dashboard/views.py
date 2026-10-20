@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.contrib.admin.views.decorators import staff_member_required
 import json
 
@@ -35,7 +36,7 @@ from onboarding.forms import (
 
 from . import services as cuentas
 from .forms import ImplementadorAltaForm, ImplementadorEdicionForm
-from .permisos import admin_requerido
+from .permisos import admin_requerido, puede_accionar, puede_accionar_sobre_el_cliente, puede_asignar
 from .reportes import generar_reporte_implementaciones_xlsx
 
 
@@ -60,10 +61,11 @@ def _base_url(request):
 
 
 def _implementador_elegido(request):
-    """El implementador elegido en el formulario (campo implementador_id). Si no vino, o no
-    es una cuenta activa del equipo, queda asignada a quien la está creando."""
+    """El implementador elegido en el formulario (campo implementador_id). Si no vino, no es una cuenta
+    activa del equipo o quien la crea no puede asignar (solo el supervisor y el admin reparten), queda
+    asignada a quien la está creando."""
     elegido = request.POST.get("implementador_id", "")
-    if elegido.isdigit():
+    if elegido.isdigit() and puede_asignar(request.user):
         encontrado = cuentas.asignables().filter(pk=elegido).first()
         if encontrado:
             return encontrado
@@ -163,6 +165,7 @@ def home(request):
             "clientes_existentes": clientes_existentes,
             "datos_de_clientes": datos_de_clientes,
             "asignables": cuentas.asignables(),
+            "puede_asignar": puede_asignar(request.user),
             "condiciones_form": condiciones_form,
             "alta": alta,
             "modulos": Modulo.objects.all(),
@@ -177,6 +180,9 @@ def home(request):
 def cliente_detalle(request, pk):
     cliente = get_object_or_404(Cliente, pk=pk)
     actor = Actor.de_usuario(request.user)
+    puede_actuar = puede_accionar_sobre_el_cliente(request.user, cliente)
+    if request.method == "POST" and not puede_actuar:
+        raise PermissionDenied
 
     if request.method == "POST" and request.POST.get("accion") == "regenerar_acceso":
         _mostrar(request, acciones.entregar_acceso(
@@ -192,7 +198,7 @@ def cliente_detalle(request, pk):
     implementaciones = cliente.implementaciones.order_by("-creado")
     return render(
         request, "dashboard/cliente_detalle.html",
-        {"cliente": cliente, "implementaciones": implementaciones},
+        {"cliente": cliente, "implementaciones": implementaciones, "puede_actuar": puede_actuar},
     )
 
 
@@ -362,6 +368,8 @@ def _accion_actualizar_condiciones(request, implementacion, actor):
 
 
 def _accion_reasignar(request, implementacion, actor):
+    if not puede_asignar(request.user):
+        raise PermissionDenied  # repartir las implementaciones es del supervisor y el admin
     elegido = request.POST.get("implementador_id", "")
     nuevo = cuentas.asignables().filter(pk=elegido).first() if elegido.isdigit() else None
     if nuevo:
@@ -475,6 +483,8 @@ def _manejar_accion_implementacion(request, implementacion):
     manejador = ACCIONES_DE_LA_FICHA.get(accion)
     if manejador is None:
         return None
+    if not puede_accionar(request.user, implementacion):
+        raise PermissionDenied  # el implementador solo actúa sobre las que tiene asignadas
     estaba_validada = implementacion.validada_en is not None
     resultado = manejador(request, implementacion, Actor.de_usuario(request.user))
     if estaba_validada and accion not in ACCIONES_QUE_SACAN_LA_VALIDACION_A_PROPOSITO:
@@ -583,6 +593,8 @@ def implementacion_detalle(request, pk):
         "empleado_edit_form": empleado_edit_form,
         "import_form": formularios_con_error.get("import_form") or ImportarArchivoForm(),
     })
+    contexto["puede_accionar"] = puede_accionar(request.user, implementacion)
+    contexto["puede_asignar"] = puede_asignar(request.user)
     return render(request, "dashboard/implementacion_detalle.html", contexto)
 
 
@@ -628,7 +640,7 @@ def implementadores_lista(request):
     form = ImplementadorAltaForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         usuario, password = cuentas.crear_implementador(**form.cleaned_data)
-        _avisar_credenciales(request, "Implementador creado", usuario.username, password)
+        _avisar_credenciales(request, "Cuenta del equipo creada", usuario.username, password)
         return redirect("dashboard:implementadores")
     return render(
         request, "dashboard/implementadores.html",

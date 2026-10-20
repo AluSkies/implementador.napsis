@@ -7,6 +7,7 @@
     <p><strong>Razón social:</strong> {{ cliente.razon_social|default:"—" }}</p>
     <p><strong>CUIT(s):</strong> {{ cliente.cuits|default:"—" }}</p>
     <p><strong>Usuario de acceso:</strong> {{ cliente.usuario.username|default:"— (sin acceso creado)" }}</p>
+    {% if puede_actuar %}
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="accion" value="regenerar_acceso">
@@ -27,6 +28,9 @@
         <div class="actions"><button class="btn secondary" type="submit">Enviar mail para crear contraseña</button></div>
         <p class="muted">Va a {% if cliente.usuario.email %}{{ cliente.usuario.email }}{% else %}el mail de contacto de la implementación{% endif %}. No cambia la contraseña actual hasta que el cliente use el link.</p>
     </form>
+    {% endif %}
+    {% else %}
+    <p class="muted">Solo lectura: el acceso del cliente lo gestiona quien lleva alguna de sus implementaciones, un supervisor o un admin.</p>
     {% endif %}
 </div>
 

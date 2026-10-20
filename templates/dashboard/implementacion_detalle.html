@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% load cuil pasos static %}
 {% block content %}
+{% if not puede_accionar %}
+<div class="messages"><li class="info" style="list-style:none;padding:10px 14px;border-radius:6px;">
+    <strong>Solo lectura.</strong> Esta implementación {% if implementacion.implementador_asignado %}la lleva {{ implementacion.asignado_nombre }}{% else %}no tiene implementador asignado{% endif %}: podés verla, pero solo quien la tiene asignada, un supervisor o un admin puede modificarla.
+</li></div>
+{% endif %}
+<div class="{% if not puede_accionar %}solo-lectura{% endif %}">
 <div class="card">
     <p><a href="{% url 'dashboard:cliente_detalle' pk=cliente.pk %}">&larr; Volver a {{ cliente.nombre }}</a></p>
     <h1>{{ cliente.nombre }}</h1>
@@ -8,6 +14,7 @@
     <p>
         <strong>Implementador asignado:</strong> {{ implementacion.asignado_nombre|default:"— (sin asignar)" }}
     </p>
+    {% if puede_asignar %}
     <form method="post" style="margin-bottom:12px;">
         {% csrf_token %}
         <input type="hidden" name="accion" value="reasignar">
@@ -18,6 +25,7 @@
         </select>
         <button class="btn secondary" type="submit">Reasignar</button>
     </form>
+    {% endif %}
     <p>
         <strong>Estado:</strong> {{ implementacion.estado_visual_label }}
         {% if implementacion.marca_de_devolucion %} · <strong>{{ implementacion.marca_de_devolucion }}</strong>{% endif %}
@@ -540,4 +548,5 @@
 </div>
 
 {% include "clients/_historial_versiones.html" %}
+</div>
 {% endblock %}

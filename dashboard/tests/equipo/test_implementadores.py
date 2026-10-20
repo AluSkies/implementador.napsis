@@ -6,7 +6,7 @@ from clients.models import Cliente, Implementacion
 from dashboard import services
 
 LISTA = "dashboard:implementadores"
-DATOS_ALTA = {"username": "lramos", "first_name": "Lucía", "last_name": "Ramos", "email": "lramos@napsislatam.com"}
+DATOS_ALTA = {"username": "lramos", "first_name": "Lucía", "last_name": "Ramos", "email": "lramos@napsislatam.com", "rol": "implementador"}
 
 
 class BaseRoles(TestCase):
@@ -143,7 +143,7 @@ class ModificacionYBajaTests(BaseRoles):
 
     def test_modifica_los_datos_pero_no_el_usuario(self):
         self.client.post(self.detalle(self.impl), {
-            "accion": "guardar", "first_name": "Nuevo", "last_name": "Nombre", "email": "nuevo@napsislatam.com",
+            "accion": "guardar", "rol": "implementador", "first_name": "Nuevo", "last_name": "Nombre", "email": "nuevo@napsislatam.com",
             "username": "intento_de_cambio",
         })
         self.impl.refresh_from_db()

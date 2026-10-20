@@ -31,7 +31,7 @@ class PanelYResumenTests(BasePanel):
             ["Aguinaldo"],
         )
         evento = EventoImplementacion.objects.get(seccion="liquidaciones")
-        self.assertEqual((evento.actor_tipo, evento.actor_ref), ("implementador", "ana"))
+        self.assertEqual((evento.actor_tipo, evento.actor_ref), ("supervisor", "ana"))
 
     def test_sin_elegir_ninguno_vuelve_con_el_error(self):
         respuesta = self.client.post(self.url, {"accion": "actualizar_liquidaciones"})

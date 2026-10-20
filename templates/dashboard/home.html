@@ -143,11 +143,15 @@
 
             <div class="alta-field">
                 <label for="implementador_id">Implementador asignado</label>
+                {% if not puede_asignar %}
+                    <p><strong>Se asigna a vos.</strong> <span class="muted">Solo un supervisor o un admin puede asignarla a otra persona.</span></p>
+                {% else %}
                 <select name="implementador_id" id="implementador_id">
                     {% for u in asignables %}
                         <option value="{{ u.id }}" {% if alta.valores.implementador_id %}{% if alta.valores.implementador_id == u.id|stringformat:"s" %}selected{% endif %}{% elif u.id == request.user.id %}selected{% endif %}>{{ u.get_full_name|default:u.username }}{% if u.id == request.user.id %} (vos){% endif %}</option>
                     {% endfor %}
                 </select>
+                {% endif %}
                 <p class="muted">Lleva la implementación y recibe sus notificaciones. Por defecto, quien la crea.</p>
             </div>
 

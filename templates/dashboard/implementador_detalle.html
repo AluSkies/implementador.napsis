@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="card">
-    <p><a href="{% url 'dashboard:implementadores' %}">&larr; Volver a implementadores</a></p>
+    <p><a href="{% url 'dashboard:implementadores' %}">&larr; Volver a las cuentas del equipo</a></p>
     <h1>{{ usuario.username }}</h1>
     <p>
         <strong>Estado:</strong> {% if usuario.is_active %}Activo{% else %}Dado de baja (no puede ingresar){% endif %}

@@ -1,9 +1,11 @@
 """Roles del equipo de Napsis.
 
-- **Implementador**: cuenta de staff (`is_staff`) que no es superusuario. Trabaja el panel:
-  implementaciones, clientes, nómina, etc.
-- **Admin**: superusuario. Puede todo lo anterior y además administrar a los
-  implementadores (alta, modificación y baja).
+- **Implementador**: cuenta de staff (`is_staff`) que no es superusuario. Ve todas las implementaciones, pero
+  solo actúa (edita, valida, comenta...) sobre las que tiene asignadas.
+- **Supervisor**: un implementador que además pertenece al grupo `Supervisor`. Actúa sobre todas las
+  implementaciones y es quien las asigna a los demás.
+- **Admin**: superusuario. Puede todo lo anterior y además administrar las cuentas del equipo
+  (alta, modificación, baja y rol de cada una).
 
 Los clientes son cuentas sin `is_staff` y no entran al panel.
 """
@@ -13,6 +15,8 @@ from functools import wraps
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import resolve_url
+
+from automatizacion.actores import es_supervisor
 
 
 def admin_requerido(vista):
@@ -33,3 +37,20 @@ def admin_requerido(vista):
         return vista(request, *args, **kwargs)
 
     return envoltura
+
+
+def puede_asignar(usuario):
+    """Quién reparte las implementaciones: el supervisor y el admin."""
+    return usuario.is_superuser or es_supervisor(usuario)
+
+
+def puede_accionar(usuario, implementacion):
+    """Quién puede actuar sobre una implementación: el supervisor y el admin sobre todas; el implementador
+    solo sobre las que tiene asignadas. Ver una puede cualquiera del equipo."""
+    return puede_asignar(usuario) or implementacion.implementador_asignado_id == usuario.pk
+
+
+def puede_accionar_sobre_el_cliente(usuario, cliente):
+    """Para las acciones de la ficha de la empresa (acceso, invitación): quien puede asignar o quien tiene
+    asignada alguna implementación de esa empresa."""
+    return puede_asignar(usuario) or cliente.implementaciones.filter(implementador_asignado=usuario).exists()

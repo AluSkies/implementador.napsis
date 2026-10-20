@@ -1228,3 +1228,19 @@ Cosas que salen de leer el código y que sorprenden si no se saben:
 6. **`_accion_eliminar_empleado` muestra siempre «Empleado eliminado.»**, aunque el servicio haya ignorado un id inexistente.
 7. **Los links de orden y el servicio difieren en el valor por defecto de `direccion`**: `_sort_links` supone `desc` cuando falta, el servicio supone `asc` salvo para `creado`. Los links que genera la página siempre llevan ambos parámetros, así que solo se nota con una URL escrita a mano con `?ordenar=cliente` y sin `direccion`.
 8. **La demo (`seed_demo`) no genera eventos**, así que la marca «sin movimiento» y la columna «Última actividad» de esos datos se calculan con la fecha de creación.
+
+## Roles del equipo y quién actúa sobre cada implementación
+
+| Rol | Cómo se reconoce | Ve | Actúa sobre | Asigna |
+|---|---|---|---|---|
+| Implementador | cuenta de staff | todas | las que tiene asignadas | no |
+| Supervisor | cuenta de staff del grupo `Supervisor` (no superusuario) | todas | todas | sí |
+| Admin | superusuario | todas | todas | sí (y administra las cuentas del equipo) |
+
+- La regla vive en un solo lugar, `dashboard/permisos.py`: `puede_asignar`, `puede_accionar` y `puede_accionar_sobre_el_cliente`.
+- En la ficha, cualquier acción (`ACCIONES_DE_LA_FICHA`) sobre una implementación ajena responde 403, y la pantalla se muestra en solo lectura (sin formularios, con un aviso). Reasignar solo lo hacen supervisor y admin.
+- Al crear una implementación, un implementador se la asigna a sí mismo; el supervisor y el admin eligen a quién.
+- En la ficha de la empresa, gestionar el acceso del cliente lo puede hacer quien lleva alguna de sus implementaciones, el supervisor o el admin.
+- Ver, descargar la nómina y exportar es para todo el equipo.
+- El supervisor tiene su propio tipo de actor (`supervisor`), así que los eventos registran quién asignó o actuó con ese rol.
+- El admin crea las cuentas y elige el rol en `dashboard/implementadores/` (`dashboard/services.py`: `crear_implementador`, `asignar_rol`); también puede cambiarlo después.

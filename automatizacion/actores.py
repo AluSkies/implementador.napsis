@@ -9,13 +9,24 @@ from dataclasses import dataclass
 
 CLIENTE = "cliente"
 IMPLEMENTADOR = "implementador"
+SUPERVISOR = "supervisor"
 ADMIN = "admin"
 SISTEMA = "sistema"
 SERVICIO = "servicio"
 AGENTE = "agente"
 
-TIPOS = (CLIENTE, IMPLEMENTADOR, ADMIN, SISTEMA, SERVICIO, AGENTE)
-TIPOS_DEL_EQUIPO = (IMPLEMENTADOR, ADMIN)
+TIPOS = (CLIENTE, IMPLEMENTADOR, SUPERVISOR, ADMIN, SISTEMA, SERVICIO, AGENTE)
+TIPOS_DEL_EQUIPO = (IMPLEMENTADOR, SUPERVISOR, ADMIN)
+# El supervisor es un implementador (cuenta de staff) que además pertenece a este grupo de Django.
+GRUPO_SUPERVISOR = "Supervisor"
+
+
+def es_supervisor(usuario):
+    """True si la cuenta de staff, sin ser superusuario, pertenece al grupo Supervisor."""
+    return bool(
+        usuario and getattr(usuario, "is_authenticated", False) and usuario.is_staff and not usuario.is_superuser
+        and usuario.groups.filter(name=GRUPO_SUPERVISOR).exists()
+    )
 
 
 @dataclass(frozen=True)
@@ -29,14 +40,14 @@ class Actor:
 
     @classmethod
     def de_usuario(cls, usuario):
-        """El actor que corresponde a una cuenta: superusuario = admin, staff = implementador, el
-        resto = cliente. Sin cuenta (o anónimo) actúa el sistema."""
+        """El actor que corresponde a una cuenta: superusuario = admin, staff del grupo Supervisor =
+        supervisor, el resto del staff = implementador, el resto = cliente. Sin cuenta (o anónimo) actúa el sistema."""
         if usuario is None or not getattr(usuario, "is_authenticated", False):
             return SISTEMA_PORTAL
         if usuario.is_superuser:
             return cls(ADMIN, usuario.get_username())
         if usuario.is_staff:
-            return cls(IMPLEMENTADOR, usuario.get_username())
+            return cls(SUPERVISOR if es_supervisor(usuario) else IMPLEMENTADOR, usuario.get_username())
         return cls(CLIENTE, usuario.get_username())
 
     @classmethod
