@@ -7,6 +7,7 @@ Todo lo necesario para entender el código sin leerlo línea por línea. Está o
 | Entender de qué se trata y cómo se organiza | [`arquitectura.md`](arquitectura.md): capas, apps, modelo de datos, pasos del wizard, estados, recorrido completo, despliegue |
 | Saber **qué puedo llamar** desde afuera (API, agente, comando) | [`operaciones-publicas.md`](operaciones-publicas.md): la lista corta de operaciones públicas, con firma, efectos y eventos |
 | Entender **por qué el sistema se comporta así** | [`flujos-de-negocio.md`](flujos-de-negocio.md): la lógica de negocio con diagramas de flujo |
+| Ver las **tablas y sus relaciones** (DER) | [`base-de-datos.md`](base-de-datos.md): diagrama entidad-relación de las 25 tablas, qué pasa al borrar (`on_delete`) y las restricciones de unicidad |
 | Encontrar **dónde está** cada función y qué hace | [`modulos/`](modulos/): cada app dividida en componentes y funciones |
 | Publicar una versión o volver atrás | [`../deploy/RELEASE.md`](../deploy/RELEASE.md) |
 | Configurar el correo o Docker | [`../deploy/CORREO.md`](../deploy/CORREO.md), [`../deploy/DOCKER.md`](../deploy/DOCKER.md) |
