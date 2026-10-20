@@ -104,7 +104,8 @@ Lo que hay que saber:
 - **Estáticos:** los sirve la propia app (WhiteNoise); no hay que configurarlos en el proxy.
 - **Adjuntos** (`/app/media`, volumen `napsis_media`): **tienen que entrar en el backup** junto con el MySQL. Los sirve la app con login (el equipo ve cualquiera; un cliente solo los suyos): **no publicar `/media/` desde el proxy**.
 - **Base de datos:** el usuario de MySQL necesita permisos de esquema (`CREATE/ALTER/DROP/INDEX` además del CRUD) para las migraciones.
-- **Versiones:** cada versión es una imagen con tag (`v1.0.0`). Los datos viven en MySQL y en el volumen de adjuntos, así que se puede actualizar o volver atrás sin perderlos, **siempre que haya backup**.
+- **Versiones inmutables:** cada versión es una imagen con tag (`v1.0.0`); **no existe `latest`** y el compose exige `NAPSIS_IMAGE` (no arranca sin ella). Los datos viven en MySQL y en el volumen de adjuntos, así que se puede actualizar o volver atrás sin perderlos, **siempre que haya backup**.
+- **Backup y restore:** hay que respaldar MySQL y el volumen `napsis_media` juntos. El procedimiento está en `deploy/RELEASE.md` y **ya se ensayó de punta a punta** (`bash deploy/ensayo-de-restore.sh` lo repite con Docker y termina en «IDÉNTICO»); conviene repetirlo con el MySQL real de Napsis, en un entorno de prueba, antes del lanzamiento.
 - **No hay datos de demostración ni semillas de prueba en la imagen:** solo los catálogos reales (`seed_catalogos`, `seed_modulos`). `.dockerignore` deja afuera `.env*`, `*.xlsx`, `referencias/`, la base local y los adjuntos.
 - **Cuenta Admin:** se crea sola en el primer arranque con `DJANGO_SUPERUSER_USERNAME/PASSWORD/EMAIL` en `.env.docker`; si no se definieron, `docker compose exec app python manage.py createsuperuser`. Si no hay ningún Admin, el arranque lo advierte en el log. Detalle en [`deploy/DOCKER.md`](deploy/DOCKER.md#la-cuenta-admin-primer-ingreso).
 - **Healthcheck:** `/salud/` responde 200 si la app llega a la base.

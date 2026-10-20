@@ -8,6 +8,7 @@ el **MySQL existente** de Napsis. El proxy reverso y el TLS son los de la infra.
 ```bash
 cp .env.docker.example .env.docker     # completar (secret key, MYSQL_*, dominio)
 cp .env.mail.example .env.mail         # lo completa deploy cuando tenga el SMTP (ver deploy/CORREO.md)
+echo 'NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.0.0' > .env   # obligatoria: la versión a desplegar (no hay `latest`)
 docker compose pull                    # o `docker compose build` si se construye en el host
 docker compose up -d
 docker compose logs -f app             # ver el arranque
@@ -135,7 +136,8 @@ En resumen: fijar la versión en `NAPSIS_IMAGE`, `docker compose pull && docker 
 
 El CI (`.github/workflows/docker.yml`) corre el lint y los tests (también contra MySQL 8) en cada push.
 **La imagen se publica solo cuando se crea un tag de versión** (`vX.Y.Z`): sale como
-`ghcr.io/aluskies/implementador-napsis:vX.Y.Z` y `latest` pasa a apuntar a esa versión. Un push común a
+`ghcr.io/aluskies/implementador-napsis:vX.Y.Z`. **No existe la etiqueta `latest`**: cada versión es inmutable y
+`NAPSIS_IMAGE` es obligatoria (el compose no arranca sin ella). Un push común a
 `main` no construye ninguna imagen. Si los tests fallan, **no se publica nada**. El paquete es privado: el host necesita
 `docker login ghcr.io` con un token de solo lectura (`read:packages`).
 

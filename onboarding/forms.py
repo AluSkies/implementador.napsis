@@ -3,7 +3,6 @@ import os
 from django import forms
 from django.forms.utils import flatatt
 from django.template.loader import render_to_string
-from django.core.validators import FileExtensionValidator
 from django.forms import BaseFormSet, formset_factory
 
 from catalog.models import TipoLiquidacion
@@ -284,7 +283,6 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
                 self.fields[nombre].help_text = "Lo definió Napsis para tu implementación: no se puede cambiar."
         self._cantidad_de_capitas_desde_la_nomina()
         campo = self.fields["modelo_recibo"]
-        campo.validators.append(FileExtensionValidator(["pdf"]))
         if not self.instance.modelo_recibo:
             campo.required = True
             campo.label = "Modelo de recibo (PDF, obligatorio)"

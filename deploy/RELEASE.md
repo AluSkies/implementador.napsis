@@ -81,8 +81,8 @@ Después, entrar a `https://<dominio>/login/` con el superusuario y **cambiar su
    ```
 4. Verificar con la lista de abajo.
 
-**Siempre fijar un número de versión (`vX.Y.Z`)** y no usar `latest`: `latest` apunta a la
-última versión publicada y nadie sabe cuál es la que está corriendo. La imagen se construye solo cuando
+**Siempre se fija un número de versión (`vX.Y.Z`)**: no existe `latest` (el CI no la publica y el
+`docker-compose.yml` exige `NAPSIS_IMAGE`), así que siempre se sabe qué versión está corriendo. La imagen se construye solo cuando
 se crea un tag de versión; un push común a `main` no genera nada para desplegar.
 
 ## Volver atrás (rollback)
@@ -121,7 +121,18 @@ docker run --rm -v napsis_media:/data -v "$PWD":/respaldo alpine sh -c "cd /data
 docker compose up -d
 ```
 
-Un backup que nunca se restauró no es un backup: conviene **probar un restore** en un entorno de prueba antes del lanzamiento.
+Notas del restore:
+- La base de destino tiene que existir y estar **vacía** (`utf8mb4`). Al arrancar, la app vuelve a correr las migraciones y los catálogos, que no hacen nada si ya está todo, y **no toca** al Admin existente.
+- El `tar` conserva el dueño de los archivos (el usuario `napsis` de la imagen, uid 999), así que los adjuntos restaurados se pueden leer y también se pueden subir otros nuevos.
+- Restaurar **las dos cosas del mismo momento**: un adjunto sin su fila en la base (o al revés) queda huérfano.
+
+**Ya se ensayó.** Está probado de punta a punta con la imagen real y un MySQL 8: se cargaron datos y un PDF, se hizo el backup con estos mismos comandos, se **destruyeron** los contenedores, la base y el volumen, y se restauró en un entorno vacío. Resultado: mismos datos y catálogo, mismo login del Admin y el PDF con el **mismo `sha256`**. El ensayo está automatizado en [`ensayo-de-restore.sh`](ensayo-de-restore.sh) (necesita solo Docker, no toca ningún entorno real y limpia lo que levanta):
+
+```bash
+bash deploy/ensayo-de-restore.sh      # termina con "IDÉNTICO" si el procedimiento funciona
+```
+
+Conviene **repetirlo con el MySQL y el volumen reales de Napsis** (en un entorno de prueba, no en producción) antes del lanzamiento, y volver a correr el script después de cambiar la versión de MySQL o el procedimiento: un backup que nunca se restauró no es un backup.
 
 ## Lista de verificación después de desplegar
 

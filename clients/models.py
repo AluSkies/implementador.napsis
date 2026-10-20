@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from catalog.codigos import ConCodigo
 
-from .validators import validar_tamanio_archivo
+from .validators import validar_pdf, validar_tamanio_archivo
 
 
 def generate_token():
@@ -269,7 +269,7 @@ class Implementacion(models.Model):
     )
     modelo_recibo = models.FileField(
         "Modelo de recibo (PDF)", upload_to="implementaciones/modelos_recibo/", blank=True, null=True,
-        validators=[validar_tamanio_archivo],
+        validators=[validar_tamanio_archivo, validar_pdf],
     )
 
     fecha_salida_productivo = models.DateField(

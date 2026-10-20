@@ -147,3 +147,36 @@ class CampoDeArchivoActualTests(TestCase):
         self.implementacion.refresh_from_db()
         self.assertFalse(self.implementacion.logo)
         self.assertTrue(self.implementacion.modelo_recibo)
+
+
+class ModeloDeReciboEsUnPdfTests(TestCase):
+    """El modelo de recibo tiene que ser un PDF de verdad, lo cargue quien lo cargue (cliente, panel o admin)."""
+
+    def setUp(self):
+        self.media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.media, ignore_errors=True)
+        self.implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="A"))
+        self.tipo = TipoLiquidacion.objects.create(nombre="Normal")
+
+    def guardar(self, formulario_clase, archivo):
+        datos = {"segmentacion_liquidador": "AREA UNICA", "tipos_liquidacion": [self.tipo.pk], "razon_social": "A SA", "cuits": ""}
+        with override_settings(MEDIA_ROOT=self.media):
+            formulario = formulario_clase(datos, {"modelo_recibo": archivo}, instance=self.implementacion)
+            return formulario, formulario.is_valid()
+
+    def test_un_pdf_se_acepta_en_el_wizard_y_en_el_panel(self):
+        for clase in (ConfiguracionForm, ImplementacionDatosForm):
+            formulario, valido = self.guardar(clase, SimpleUploadedFile("m.pdf", b"%PDF-1.4 contenido"))
+            self.assertTrue(valido, (clase.__name__, formulario.errors))
+
+    def test_otro_tipo_de_archivo_se_rechaza_en_el_wizard_y_en_el_panel(self):
+        for clase in (ConfiguracionForm, ImplementacionDatosForm):
+            formulario, valido = self.guardar(clase, SimpleUploadedFile("m.docx", b"PK\x03\x04 no soy pdf"))
+            self.assertFalse(valido, clase.__name__)
+            self.assertIn("modelo_recibo", formulario.errors, clase.__name__)
+
+    def test_un_archivo_renombrado_a_pdf_se_rechaza(self):
+        for clase in (ConfiguracionForm, ImplementacionDatosForm):
+            formulario, valido = self.guardar(clase, SimpleUploadedFile("m.pdf", b"MZ\x90\x00 es un ejecutable"))
+            self.assertFalse(valido, clase.__name__)
+            self.assertIn("no es un PDF válido", str(formulario.errors["modelo_recibo"]))

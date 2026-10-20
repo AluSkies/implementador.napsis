@@ -9,6 +9,19 @@ def validar_tamanio_archivo(archivo):
         raise ValidationError(f"El archivo no puede pesar más de {limite_mb}MB.")
 
 
+def validar_pdf(archivo):
+    """Un PDF de verdad: extensión .pdf y la cabecera `%PDF-` (no alcanza con renombrar otro archivo)."""
+    nombre = (getattr(archivo, "name", "") or "").lower()
+    if not nombre.endswith(".pdf"):
+        raise ValidationError("El modelo de recibo tiene que ser un archivo PDF (.pdf).")
+    posicion = archivo.tell() if hasattr(archivo, "tell") else 0
+    archivo.seek(0)
+    cabecera = archivo.read(5)
+    archivo.seek(posicion)
+    if cabecera != b"%PDF-":
+        raise ValidationError("El archivo no es un PDF válido: parece otro tipo de archivo con la extensión cambiada.")
+
+
 # Medidas que acepta el wizard de Napsis: fuera de rango rechaza la imagen y el paso se traba.
 LOGO_MAX = (200, 200)
 BANNER_MIN = (1500, 200)

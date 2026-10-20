@@ -3,7 +3,8 @@
 services:
   app:
     build: .
-    image: ${NAPSIS_IMAGE:-ghcr.io/aluskies/implementador-napsis:latest}
+    # Sin valor por defecto a propósito: hay que fijar una versión inmutable (vX.Y.Z), nunca `latest`.
+    image: ${NAPSIS_IMAGE:?Definir NAPSIS_IMAGE en .env, ej. NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.0.0}
     env_file:
       - .env.docker
       # Correo saliente (SMTP): lo configura deploy. Opcional: sin él la app arranca, pero
