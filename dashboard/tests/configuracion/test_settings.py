@@ -20,6 +20,34 @@ def _importar_settings(**entorno):
     )
 
 
+class SinMysqlNoHayFallbackASqliteTests(SimpleTestCase):
+    """Un despliegue al que le falta la configuración de MySQL no puede arrancar con un SQLite suelto
+    (guardaría los datos en un archivo del contenedor y los perdería al reiniciar)."""
+
+    PRODUCCION = {"DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false", "DJANGO_ALLOW_SQLITE": ""}
+
+    def test_en_produccion_sin_mysql_no_arranca(self):
+        resultado = _importar_settings(**self.PRODUCCION, MYSQL_DB="")
+        self.assertNotEqual(resultado.returncode, 0)
+        self.assertIn("MYSQL_DB", resultado.stderr)
+
+    def test_en_produccion_con_mysql_arranca(self):
+        resultado = _importar_settings(**self.PRODUCCION, MYSQL_DB="napsis")
+        self.assertEqual(resultado.returncode, 0, resultado.stderr)
+
+    def test_en_desarrollo_se_usa_sqlite(self):
+        resultado = _importar_settings(**{**self.PRODUCCION, "DJANGO_DEBUG": "true"}, MYSQL_DB="")
+        self.assertEqual(resultado.returncode, 0, resultado.stderr)
+
+    def test_el_ci_y_el_build_lo_permiten_expresamente(self):
+        resultado = _importar_settings(**{**self.PRODUCCION, "DJANGO_ALLOW_SQLITE": "true"}, MYSQL_DB="")
+        self.assertEqual(resultado.returncode, 0, resultado.stderr)
+
+    def test_el_dockerfile_y_el_ci_declaran_la_excepcion(self):
+        self.assertIn("DJANGO_ALLOW_SQLITE=true", (BASE_DIR / "Dockerfile").read_text(encoding="utf-8"))
+        self.assertIn("DJANGO_ALLOW_SQLITE", (BASE_DIR / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8"))
+
+
 class SecretKeyObligatoriaTests(SimpleTestCase):
     """Sin esto la app arrancaba con una clave escrita en el repo (público): cualquiera
     podría falsificar sesiones. En producción tiene que fallar fuerte al arrancar."""
@@ -30,7 +58,7 @@ class SecretKeyObligatoriaTests(SimpleTestCase):
         self.assertIn("DJANGO_SECRET_KEY", resultado.stderr)
 
     def test_con_clave_arranca(self):
-        resultado = _importar_settings(DJANGO_SECRET_KEY="una-clave-cualquiera", DJANGO_DEBUG="false")
+        resultado = _importar_settings(DJANGO_SECRET_KEY="una-clave-cualquiera", DJANGO_DEBUG="false", MYSQL_DB="napsis")
         self.assertEqual(resultado.returncode, 0, resultado.stderr)
 
     def test_en_desarrollo_se_tolera_sin_clave(self):
@@ -45,7 +73,7 @@ class HasherRapidoSoloEnTestsTests(SimpleTestCase):
     def test_fuera_de_los_tests_no_se_usa_el_hasher_rapido(self):
         resultado = subprocess.run(
             [sys.executable, "-c", "import config.settings as s; print(getattr(s, 'PASSWORD_HASHERS', 'por-defecto'))"],
-            cwd=BASE_DIR, env={**os.environ, "DJANGO_SECRET_KEY": "x", "DJANGO_DEBUG": "false"},
+            cwd=BASE_DIR, env={**os.environ, "DJANGO_ALLOW_SQLITE": "true", "DJANGO_SECRET_KEY": "x", "DJANGO_DEBUG": "false"},
             capture_output=True, text=True,
         )
         self.assertEqual(resultado.returncode, 0, resultado.stderr)
@@ -62,7 +90,7 @@ class CorreoTests(SimpleTestCase):
     responde no puede dejar colgado al worker: siempre hay timeout."""
 
     def _leer(self, **entorno):
-        env = {**os.environ, "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false", **entorno}
+        env = {**os.environ, "DJANGO_ALLOW_SQLITE": "true", "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false", **entorno}
         salida = subprocess.run(
             [sys.executable, "-c",
              "import config.settings as s; print('|'.join(map(str, [s.EMAIL_BACKEND, s.EMAIL_HOST, s.EMAIL_PORT, "
@@ -94,7 +122,7 @@ class HttpsObligatorioTests(SimpleTestCase):
     """Fuera de los tests y del modo desarrollo, la app exige HTTPS por sí misma."""
 
     def _leer(self, **entorno):
-        env = {**os.environ, "DJANGO_SECRET_KEY": "una-clave-cualquiera", **entorno}
+        env = {**os.environ, "DJANGO_ALLOW_SQLITE": "true", "DJANGO_SECRET_KEY": "una-clave-cualquiera", **entorno}
         codigo = (
             "import config.settings as s; print('|'.join(map(str, ["
             "s.SECURE_SSL_REDIRECT if hasattr(s, 'SECURE_SSL_REDIRECT') else False, "
@@ -126,7 +154,7 @@ class HttpsObligatorioTests(SimpleTestCase):
     def test_el_chequeo_de_salud_queda_exento_del_redirect(self):
         from django.conf import settings
 
-        env = {**os.environ, "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false"}
+        env = {**os.environ, "DJANGO_ALLOW_SQLITE": "true", "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false"}
         salida = subprocess.run(
             [sys.executable, "-c", "import config.settings as s; print(s.SECURE_REDIRECT_EXEMPT)"],
             cwd=BASE_DIR, env=env, capture_output=True, text=True,
@@ -187,7 +215,7 @@ class LogDeErroresTests(SimpleTestCase):
 
     def _correr(self, codigo, **entorno):
         with tempfile.TemporaryDirectory() as carpeta:
-            env = {**os.environ, "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false",
+            env = {**os.environ, "DJANGO_ALLOW_SQLITE": "true", "DJANGO_SECRET_KEY": "una-clave-cualquiera", "DJANGO_DEBUG": "false",
                    "DJANGO_SETTINGS_MODULE": "config.settings", "LOG_DIR": carpeta, **entorno}
             salida = subprocess.run([sys.executable, "-c", codigo], cwd=BASE_DIR, env=env, capture_output=True, text=True)
             archivo = Path(carpeta) / "errores.log"

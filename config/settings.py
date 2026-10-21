@@ -114,7 +114,16 @@ DATABASES = {
     }
 }
 # En producción se define MYSQL_DB (MySQL es el motor de Napsis) y se usa esa base.
-# Sin esa variable cae a SQLite, que es lo que se usa en desarrollo y en los tests.
+# Sin esa variable se usa SQLite, pero SOLO en desarrollo (DEBUG), en los tests o con
+# DJANGO_ALLOW_SQLITE=true (el CI y el build de la imagen, que no tocan datos). Fuera de eso la app
+# no arranca: un despliegue al que le falta la configuración de MySQL no puede guardar datos
+# en un archivo suelto y perderlos en silencio.
+PERMITE_SQLITE = DEBUG or EJECUTANDO_TESTS or os.environ.get("DJANGO_ALLOW_SQLITE", "false").lower() == "true"
+if not os.environ.get("MYSQL_DB") and not PERMITE_SQLITE:
+    raise ImproperlyConfigured(
+        "Falta MYSQL_DB: en producción la base es MySQL y la app no arranca con SQLite. "
+        "Definir MYSQL_DB, MYSQL_USER, MYSQL_PASSWORD y MYSQL_HOST (ver .env.docker.example)."
+    )
 if os.environ.get("MYSQL_DB"):
     DATABASES["default"] = {
         "ENGINE": "django.db.backends.mysql",

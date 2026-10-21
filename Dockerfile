@@ -22,7 +22,7 @@ COPY . .
 # - media/ es el volumen donde la app guarda los adjuntos subidos; logs/, el del log de errores.
 RUN sed -i 's/\r$//' docker/entrypoint.sh \
     && chmod +x docker/entrypoint.sh \
-    && DJANGO_SECRET_KEY=solo-para-el-build python manage.py collectstatic --no-input \
+    && DJANGO_SECRET_KEY=solo-para-el-build DJANGO_ALLOW_SQLITE=true python manage.py collectstatic --no-input \
     && useradd --system --create-home --home-dir /home/napsis napsis \
     && mkdir -p /app/media /app/logs \
     && chown -R napsis:napsis /app/media /app/logs
