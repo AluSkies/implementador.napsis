@@ -8,7 +8,7 @@ el **MySQL existente** de Napsis. El proxy reverso y el TLS son los de la infra.
 ```bash
 cp .env.docker.example .env.docker     # completar (secret key, MYSQL_*, dominio)
 cp .env.mail.example .env.mail         # lo completa deploy cuando tenga el SMTP (ver deploy/CORREO.md)
-echo 'NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.0.0' > .env   # obligatoria: la versión a desplegar (no hay `latest`)
+echo 'NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.1.0' > .env   # obligatoria: la versión a desplegar (no hay `latest`)
 docker compose pull                    # o `docker compose build` si se construye en el host
 docker compose up -d
 docker compose logs -f app             # ver el arranque

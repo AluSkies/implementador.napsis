@@ -6,7 +6,7 @@ de la carpeta donde está `docker-compose.yml`. Para el detalle de cada variable
 
 ## La idea en tres líneas
 
-1. Cada versión de la app es una **imagen de Docker** con una etiqueta (`v1.0.0`). La construye
+1. Cada versión de la app es una **imagen de Docker** con una etiqueta (`v1.1.0`). La construye
    sola GitHub cuando se publica una versión, y **solo si pasan todos los tests**.
 2. El servidor no compila nada: **descarga** esa imagen (`docker compose pull`) y la **arranca**
    (`docker compose up -d`).
@@ -34,7 +34,7 @@ cp .env.docker.example .env.docker      # completar: clave secreta, dominio, MyS
 cp .env.mail.example   .env.mail        # completar cuando se tenga el SMTP (puede quedar para después)
 
 # 2. Fijar QUÉ versión se despliega, en un archivo llamado .env junto al docker-compose.yml
-echo "NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.0.0" > .env
+echo "NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.1.0" > .env
 
 # 3. Entrar al registro de imágenes (te pide usuario y el token de solo lectura)
 docker login ghcr.io

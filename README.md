@@ -92,7 +92,7 @@ Motor de base de datos: **MySQL 8+** (`utf8mb4`, driver PyMySQL). La app se entr
 ```bash
 cp .env.docker.example .env.docker       # completar: clave secreta, dominio, MySQL, superusuario
 cp .env.mail.example .env.mail           # cuando se tenga el SMTP (opcional)
-echo "NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.0.0" > .env
+echo "NAPSIS_IMAGE=ghcr.io/aluskies/implementador-napsis:v1.1.0" > .env
 docker login ghcr.io
 docker compose pull && docker compose up -d
 docker compose logs -f app
@@ -105,7 +105,7 @@ Lo que hay que saber:
 - **Adjuntos** (`/app/media`, volumen `napsis_media`): **tienen que entrar en el backup** junto con el MySQL. Los sirve la app con login (el equipo ve cualquiera; un cliente solo los suyos): **no publicar `/media/` desde el proxy**.
 - **Sin fallback a SQLite:** con `DJANGO_DEBUG=false` la app **no arranca si falta `MYSQL_DB`**, ni siquiera salteando el entrypoint. SQLite solo se permite en desarrollo, en los tests y con `DJANGO_ALLOW_SQLITE=true` (lo usan el build de la imagen y el job de tests de SQLite del CI; **no definirla en un servidor**).
 - **Base de datos:** el usuario de MySQL necesita permisos de esquema (`CREATE/ALTER/DROP/INDEX` además del CRUD) para las migraciones.
-- **Versiones inmutables:** cada versión es una imagen con tag (`v1.0.0`); **no existe `latest`** y el compose exige `NAPSIS_IMAGE` (no arranca sin ella). Los datos viven en MySQL y en el volumen de adjuntos, así que se puede actualizar o volver atrás sin perderlos, **siempre que haya backup**.
+- **Versiones inmutables:** cada versión es una imagen con tag (`v1.1.0`); **no existe `latest`** y el compose exige `NAPSIS_IMAGE` (no arranca sin ella). Los datos viven en MySQL y en el volumen de adjuntos, así que se puede actualizar o volver atrás sin perderlos, **siempre que haya backup**.
 - **Backup y restore:** hay que respaldar MySQL y el volumen `napsis_media` juntos. El procedimiento está en `deploy/RELEASE.md` y **ya se ensayó de punta a punta** (`bash deploy/ensayo-de-restore.sh` lo repite con Docker y termina en «IDÉNTICO»); conviene repetirlo con el MySQL real de Napsis, en un entorno de prueba, antes del lanzamiento.
 - **No hay datos de demostración ni semillas de prueba en la imagen:** solo los catálogos reales (`seed_catalogos`, `seed_modulos`). `.dockerignore` deja afuera `.env*`, `*.xlsx`, `referencias/`, la base local y los adjuntos.
 - **Cuenta Admin:** se crea sola en el primer arranque con `DJANGO_SUPERUSER_USERNAME/PASSWORD/EMAIL` en `.env.docker`; si no se definieron, `docker compose exec app python manage.py createsuperuser`. Si no hay ningún Admin, el arranque lo advierte en el log. Detalle en [`deploy/DOCKER.md`](deploy/DOCKER.md#la-cuenta-admin-primer-ingreso).
