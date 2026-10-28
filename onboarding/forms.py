@@ -311,7 +311,7 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
 FIRMA_RESOLUCION_MINIMA = (200, 60)
 FIRMA_FORMATOS = ("JPEG", "PNG")
 CAMPOS_DE_RECUADRO = ("x", "y", "ancho", "alto")
-NOMBRES_DE_RECUADRO = {"x": "izquierda", "y": "arriba", "ancho": "ancho", "alto": "alto"}
+NOMBRES_DE_RECUADRO = {"x": "eje X", "y": "eje Y", "ancho": "ancho", "alto": "alto"}
 
 
 class FirmaForm(forms.Form):

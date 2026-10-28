@@ -43,7 +43,7 @@ class PanelYArchivosTests(BaseWizard):
         self.assertIn("data-coordenadas", pagina)
         for codigo in ("empresa", "conforme", "disconforme"):
             self.assertIn(f'data-coord="{codigo}"', pagina)
-        for columna in ("X", "Y (desde arriba)", "Y (desde abajo)", "Ancho", "Alto"):
+        for columna in ("Eje X", "Eje Y (desde arriba)", "Eje Y (desde abajo)", "Ancho", "Alto"):
             self.assertIn(f"<th>{columna}</th>", pagina)
         self.assertIn("puntos del PDF", pagina)
 
