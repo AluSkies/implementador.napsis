@@ -21,6 +21,21 @@
         <span class="l-disconforme">Empleado en disconformidad</span>
     </div>
     <p class="firma-aviso muted"></p>
+    {% if coordenadas %}
+    <div class="firma-coordenadas" data-coordenadas>
+        <strong>Coordenadas para configurar en Napsis</strong>
+        <span class="muted" data-coord-pagina>Se calculan cuando se muestra el recibo.</span>
+        <table>
+            <thead><tr><th></th><th>X</th><th>Y (desde arriba)</th><th>Y (desde abajo)</th><th>Ancho</th><th>Alto</th></tr></thead>
+            <tbody>
+            {% for codigo, nombre in form.elementos %}
+                <tr data-coord="{{ codigo }}"><th>{{ nombre }}</th><td data-coord-valor="x">—</td><td data-coord-valor="y">—</td><td data-coord-valor="y_abajo">—</td><td data-coord-valor="ancho">—</td><td data-coord-valor="alto">—</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <p class="muted">En puntos del PDF (1 punto = 1/72 de pulgada), medidos desde la esquina superior izquierda de la página. «Y (desde abajo)» es la misma posición contada desde el borde inferior, por si Napsis usa el origen del PDF. X e Y son la esquina superior izquierda del recuadro.</p>
+    </div>
+    {% endif %}
     {% if not solo_lectura %}
     <details class="firma-numeros">
         <summary>Ajustar con números <span class="muted">(posición y tamaño en % de la página)</span></summary>

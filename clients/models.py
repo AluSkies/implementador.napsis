@@ -389,11 +389,9 @@ class UbicacionFirma(models.Model):
 
     PAGINA_PRIMERA = "primera"
     PAGINA_ULTIMA = "ultima"
-    PAGINA_TODAS = "todas"
     PAGINA_CHOICES = [
         (PAGINA_PRIMERA, "Primera página"),
         (PAGINA_ULTIMA, "Última página"),
-        (PAGINA_TODAS, "Todas las páginas"),
     ]
 
     ESTADO_PROPUESTA = "propuesta"

@@ -339,6 +339,11 @@ class FirmaForm(forms.Form):
         self.fields["pagina"].initial = firma.pagina if firma else UbicacionFirma.PAGINA_PRIMERA
 
     @property
+    def elementos(self):
+        """Los tres recuadros como [(código, nombre)], para la tabla de coordenadas."""
+        return UbicacionFirma.ELEMENTOS
+
+    @property
     def filas_de_recuadros(self):
         """Para dibujar los campos numéricos de respaldo: [(nombre, [campo x, y, ancho, alto])]."""
         return [

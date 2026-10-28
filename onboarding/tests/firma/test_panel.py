@@ -36,6 +36,23 @@ class PanelYArchivosTests(BaseWizard):
         self.assertContains(pagina, "Corregir la firma desde acá")
         self.assertContains(pagina, 'data-solo-lectura="1"')
 
+    def test_la_ficha_muestra_las_coordenadas_para_configurar_en_napsis(self):
+        self.como_equipo()
+        pagina = self.client.get(self.url).content.decode()
+        self.assertIn("Coordenadas para configurar en Napsis", pagina)
+        self.assertIn("data-coordenadas", pagina)
+        for codigo in ("empresa", "conforme", "disconforme"):
+            self.assertIn(f'data-coord="{codigo}"', pagina)
+        for columna in ("X", "Y (desde arriba)", "Y (desde abajo)", "Ancho", "Alto"):
+            self.assertIn(f"<th>{columna}</th>", pagina)
+        self.assertIn("puntos del PDF", pagina)
+
+    def test_el_cliente_no_ve_las_coordenadas_ni_en_el_paso_ni_despues_de_enviar(self):
+        self.assertNotContains(self.client.get(_url(self.implementacion, 7)), "Coordenadas para configurar")
+        self.implementacion.enviado = self.implementacion.creado
+        self.implementacion.save()
+        self.assertNotContains(self.client.get(_url(self.implementacion, 1)), "Coordenadas para configurar")
+
     def test_sin_recibo_digital_la_ficha_no_muestra_la_firma(self):
         self.como_equipo()
         self.implementacion.modulos.update(activo=False)

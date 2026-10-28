@@ -46,6 +46,8 @@
         this.escenario = raiz.querySelector(".firma-escenario");
         this.aviso = raiz.querySelector(".firma-aviso");
         this.pagina = raiz.querySelector('[name="pagina"]');
+        this.coordenadas = raiz.querySelector("[data-coordenadas]");
+        this.pagina_pdf = null;
         this.campos = {};
         this.cajas = {};
         this.pdf = null;
@@ -124,8 +126,37 @@
         this.cajas[elemento.codigo] = caja;
     };
 
+    // Coordenadas para quien configura en Napsis (solo en la ficha del equipo): las del recuadro en PUNTOS del PDF
+    // (1 punto = 1/72 de pulgada), calculadas con el tamaño real de la página del recibo. Origen: esquina superior
+    // izquierda de la página; se agrega también la Y medida desde abajo, por si Napsis usa el origen del PDF.
+    Editor.prototype.dibujarCoordenadas = function () {
+        var tabla = this.coordenadas;
+        if (!tabla) { return; }
+        var p = this.pagina_pdf, self = this;
+        var resumen = tabla.querySelector("[data-coord-pagina]");
+        if (resumen) {
+            resumen.textContent = p
+                ? "Página " + p.numero + " de " + p.total + " · tamaño " + redondear(p.ancho) + " × " + redondear(p.alto) + " pt"
+                : "Se calculan cuando se muestra el recibo.";
+        }
+        ELEMENTOS.forEach(function (elemento) {
+            var c = elemento.codigo, fila = tabla.querySelector('[data-coord="' + c + '"]');
+            if (!fila) { return; }
+            var x = self.valor(c, "x"), y = self.valor(c, "y"), ancho = self.valor(c, "ancho"), alto = self.valor(c, "alto");
+            var valores = p ? {
+                x: x / 100 * p.ancho, y: y / 100 * p.alto, ancho: ancho / 100 * p.ancho, alto: alto / 100 * p.alto,
+                y_abajo: p.alto - (y + alto) / 100 * p.alto
+            } : null;
+            Object.keys({ x: 1, y: 1, y_abajo: 1, ancho: 1, alto: 1 }).forEach(function (campo) {
+                var celda = fila.querySelector('[data-coord-valor="' + campo + '"]');
+                if (celda) { celda.textContent = valores ? redondear(valores[campo]) : "—"; }
+            });
+        });
+    };
+
     Editor.prototype.dibujarCajas = function () {
         var self = this;
+        this.dibujarCoordenadas();
         ELEMENTOS.forEach(function (elemento) {
             var caja = self.cajas[elemento.codigo], c = elemento.codigo;
             caja.style.left = self.valor(c, "x") + "%";
@@ -232,9 +263,9 @@
             self.canvas.height = vista.height;
             self.escenario.style.aspectRatio = base.width + " / " + base.height;
             self.escenario.classList.remove("sin-recibo");
-            var texto = elegida === "todas"
-                ? "Mostramos la primera página: la firma va en el mismo lugar en todas."
-                : "Estás viendo la " + (elegida === "ultima" ? "última" : "primera") + " página de tu recibo.";
+            self.pagina_pdf = { numero: numero, total: self.pdf.numPages, ancho: base.width, alto: base.height };
+            self.dibujarCoordenadas();
+            var texto = "Estás viendo la " + (elegida === "ultima" ? "última" : "primera") + " página de tu recibo.";
             self.avisar(self.soloLectura ? "" : texto);
             return pagina.render({ canvasContext: self.canvas.getContext("2d"), viewport: vista }).promise;
         });

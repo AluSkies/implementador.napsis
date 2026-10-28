@@ -678,7 +678,7 @@ print(implementacion.fecha_salida_productivo)                      # None
 def guardar_firma(implementacion, actor, *, pagina, geometria, imagen=None):
 ```
 
-- **Precondiciones:** `pagina` es `"primera"`, `"ultima"` o `"todas"`; `geometria` es `{"empresa", "conforme", "disconforme"}`, cada uno con `x`, `y`, `ancho` y `alto` como fracciones de 0 a 1; `imagen` es un archivo subido o `None` (conserva la que hay). La validación de la imagen (JPG o PNG, mínimo 200 × 60 px) y de los recuadros (dentro de la página) es de `FirmaForm`, antes de llamar.
+- **Precondiciones:** `pagina` es `"primera"` o `"ultima"`; `geometria` es `{"empresa", "conforme", "disconforme"}`, cada uno con `x`, `y`, `ancho` y `alto` como fracciones de 0 a 1; `imagen` es un archivo subido o `None` (conserva la que hay). La validación de la imagen (JPG o PNG, mínimo 200 × 60 px) y de los recuadros (dentro de la página) es de `FirmaForm`, antes de llamar.
 - **Efecto:** guarda la página y los recuadros de la firma general (la que vale para todos los tipos de liquidación). Si llega una imagen, calcula su `sha256` y la guarda como archivo nuevo: **la anterior no se borra** y, si ya había una, queda el evento `archivo.reemplazado` apuntando a las dos (ruta y `sha256`). Si el actor es de tipo `cliente`, la firma queda **«propuesta»** cuando algo cambió o si estaba «observada» (guardar es su respuesta); si no cambió nada, conserva su estado. Con **cualquier otro tipo de actor**, queda **«validada»** (es una corrección posterior al envío).
 - **Devuelve:** la `UbicacionFirma` guardada. **Errores:** ninguno propio.
 - **La llama hoy:** `onboarding/views.py::_step_firma`; `dashboard/views.py::_accion_corregir_firma`.

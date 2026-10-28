@@ -340,7 +340,7 @@
             {% if firma.estado == "observada" %}<span class="muted">· {{ firma.motivos_texto|join:"; " }}{% if firma.comentario %} — {{ firma.comentario }}{% endif %}</span>{% endif %}
             · <a href="{{ imagen_url }}">Ver imagen</a>
         </p>
-        {% include "onboarding/_editor_firma.html" with form=form_lectura solo_lectura=True %}
+        {% include "onboarding/_editor_firma.html" with form=form_lectura solo_lectura=True coordenadas=True %}
         <div class="actions">
             {% if firma.estado != "validada" %}
             <form method="post">
@@ -378,7 +378,7 @@
             {% csrf_token %}
             <input type="hidden" name="accion" value="corregir_firma">
             <p class="muted">Lo que guardes queda registrado como corrección del equipo (con el antes y el después) y deja la firma validada.</p>
-            {% include "onboarding/_editor_firma.html" with diferido=True %}
+            {% include "onboarding/_editor_firma.html" with diferido=True coordenadas=True %}
             <div class="actions"><button class="btn secondary" type="submit">Guardar corrección</button></div>
         </form>
         {% endif %}

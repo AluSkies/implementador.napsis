@@ -22,6 +22,9 @@
     position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; z-index: 3;
     background: linear-gradient(135deg, transparent 50%, #0a1543 50%);
 }
+.firma-coordenadas { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--border, #dcdce6); border-radius: 6px; background: #f6ecff; }
+.firma-coordenadas table { width: auto; margin: 6px 0; }
+.firma-coordenadas td { text-align: right; font-variant-numeric: tabular-nums; min-width: 70px; }
 .firma-aviso { min-height: 1.2em; margin: 8px 0; }
 .firma-numeros table { width: auto; }
 .firma-numeros input[type=number] { width: 90px; }

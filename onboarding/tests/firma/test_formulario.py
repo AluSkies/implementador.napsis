@@ -59,3 +59,24 @@ class FormularioTests(SimpleTestCase):
         formulario = self.formulario(imagen(300, 100), conforme_x=120)
         self.assertFalse(formulario.is_valid())
         self.assertIn("conforme_x", formulario.errors)
+
+
+class PaginaDeLaFirmaTests(SimpleTestCase):
+    """La firma va en la primera o en la última página: no existe «todas las páginas»."""
+
+    def test_solo_ofrece_primera_y_ultima(self):
+        from clients.models import UbicacionFirma
+
+        self.assertEqual([c for c, _ in UbicacionFirma.PAGINA_CHOICES], ["primera", "ultima"])
+        self.assertNotIn("Todas las páginas", [n for _, n in FirmaForm(datos_de_formulario()).fields["pagina"].choices])
+
+    def test_rechaza_todas_aunque_se_arme_el_pedido_a_mano(self):
+        formulario = FirmaForm(datos_de_formulario(pagina="todas"), {"imagen": imagen(300, 100, "f.png")})
+        self.assertFalse(formulario.is_valid())
+        self.assertIn("pagina", formulario.errors)
+
+    def test_el_editor_ya_no_habla_de_todas_las_paginas(self):
+        from pathlib import Path
+
+        js = (Path(__file__).resolve().parents[3] / "static" / "firma_editor.js").read_text(encoding="utf-8")
+        self.assertNotIn('"todas"', js)
