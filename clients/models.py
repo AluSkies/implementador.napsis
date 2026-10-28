@@ -216,6 +216,14 @@ class Implementacion(models.Model):
     )
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE)
     paso_actual = models.PositiveSmallIntegerField(default=1)
+    liquidaciones_editables_por_cliente = models.BooleanField(
+        "El cliente puede editar las liquidaciones",
+        default=True,
+        help_text=(
+            "Si está desactivado, el cliente ve en el paso de configuración solo las liquidaciones que "
+            "precargó el equipo, de solo lectura."
+        ),
+    )
     modulos_editables_por_cliente = models.BooleanField(
         "El cliente puede editar los módulos",
         default=True,

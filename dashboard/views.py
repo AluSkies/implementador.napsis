@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date
 from automatizacion.actores import Actor
 from automatizacion.congelada import como_documento as congelada_como_documento
 from automatizacion.models import ConfiguracionCongelada
-from catalog.models import TipoLicencia, TipoNovedad
+from catalog.models import TipoLicencia, TipoLiquidacion, TipoNovedad
 from clients.alcance import alcance_de, contexto_del_editor_de_alcance
 from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, UbicacionFirma
 from clients.services import (
@@ -115,6 +115,8 @@ def _alta_de_implementacion(request, condiciones_form):
         implementador=_implementador_elegido(request), creado_por=request.user,
         modulo_ids={int(v) for v in request.POST.getlist("modulos") if v.isdigit()},
         modulos_editables=bool(request.POST.get("modulos_editables")), condiciones=condiciones_form,
+        liquidacion_ids={int(v) for v in request.POST.getlist("liquidaciones") if v.isdigit()},
+        liquidaciones_editables=not request.POST.get("liquidaciones_bloquear"),
         base_url=_base_url(request),
     )
     if not resultado.ok:
@@ -141,6 +143,8 @@ def home(request):
         "valores": request.POST if es_alta else {},
         "modulos": set(request.POST.getlist("modulos")) if es_alta else set(),
         "editables": bool(request.POST.get("modulos_editables")) if es_alta else True,
+        "liquidaciones": set(request.POST.getlist("liquidaciones")) if es_alta else set(),
+        "liquidaciones_bloqueadas": bool(request.POST.get("liquidaciones_bloquear")) if es_alta else False,
     }
 
     clientes_existentes = Cliente.objects.select_related("usuario").order_by("nombre")
@@ -169,6 +173,7 @@ def home(request):
             "condiciones_form": condiciones_form,
             "alta": alta,
             "modulos": Modulo.objects.all(),
+            "liquidaciones": TipoLiquidacion.objects.all(),
             "estados_choices": Implementacion.opciones_de_filtro_de_estado(),
             "filtros_aplicados": request.GET,
             "sort_links": _sort_links(request),
@@ -283,6 +288,8 @@ def _accion_actualizar_liquidaciones(request, implementacion, actor):
     form = LiquidacionesForm(request.POST, implementacion=implementacion)
     if form.is_valid():
         onboarding_services.guardar_liquidaciones(implementacion, form.cleaned_data["tipos_liquidacion"], actor)
+        implementacion.liquidaciones_editables_por_cliente = not request.POST.get("liquidaciones_bloquear")
+        implementacion.save(update_fields=["liquidaciones_editables_por_cliente"])
         messages.success(request, "Tipos de liquidación actualizados.")
         return _volver(implementacion)
     return {"liquidaciones_form": form}

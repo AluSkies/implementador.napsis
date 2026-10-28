@@ -179,3 +179,48 @@ class NuevaImplementacionDeUnClienteExistenteTests(TestCase):
         resultado = self.crear(datos_cliente={"cuits": "123"})
         self.assertFalse(resultado.ok)
         self.assertEqual(self.cliente.implementaciones.count(), 1)
+
+
+class LiquidacionesAlCrearTests(TestCase):
+    """El equipo puede dejar elegidas, y bloquear, las liquidaciones disponibles para el cliente."""
+
+    def setUp(self):
+        from catalog.models import TipoLiquidacion
+
+        self.ana = User.objects.create_user("ana", password="x", is_staff=True)
+        self.normal = TipoLiquidacion.objects.create(nombre="Liquidación Normal")
+        self.aguinaldo = TipoLiquidacion.objects.create(nombre="Aguinaldo", orden=1)
+
+    def crear(self, **extra):
+        return acciones.crear_implementacion(
+            ANA, datos_cliente={"nombre": "Empresa Nueva"}, implementador=self.ana, base_url=URL, **extra,
+        )
+
+    def activas(self, implementacion):
+        return set(implementacion.liquidaciones.filter(activo=True).values_list("tipo_liquidacion__nombre", flat=True))
+
+    def test_sin_elegir_ninguna_la_implementacion_nace_sin_liquidaciones_y_editable(self):
+        implementacion = self.crear().implementacion
+        self.assertEqual(self.activas(implementacion), set())
+        self.assertTrue(implementacion.liquidaciones_editables_por_cliente)
+
+    def test_las_elegidas_quedan_cargadas_y_el_cliente_las_puede_cambiar(self):
+        implementacion = self.crear(liquidacion_ids={self.normal.pk, self.aguinaldo.pk}).implementacion
+        self.assertEqual(self.activas(implementacion), {"Liquidación Normal", "Aguinaldo"})
+        self.assertTrue(implementacion.liquidaciones_editables_por_cliente)
+
+    def test_bloqueadas_quedan_cargadas_y_fijas(self):
+        implementacion = self.crear(liquidacion_ids={self.aguinaldo.pk}, liquidaciones_editables=False).implementacion
+        self.assertEqual(self.activas(implementacion), {"Aguinaldo"})
+        self.assertFalse(implementacion.liquidaciones_editables_por_cliente)
+
+    def test_no_se_puede_bloquear_sin_elegir_ninguna(self):
+        resultado = self.crear(liquidaciones_editables=False)
+        self.assertFalse(resultado.ok)
+        self.assertIn("elegir al menos una", resultado.errores[0])
+        self.assertFalse(Implementacion.objects.exists())
+
+    def test_el_evento_de_alta_las_registra(self):
+        self.crear(liquidacion_ids={self.aguinaldo.pk}, liquidaciones_editables=False)
+        datos = _eventos("implementacion.creada").get().datos
+        self.assertEqual((datos["liquidaciones"], datos["liquidaciones_editables"]), (["Aguinaldo"], False))

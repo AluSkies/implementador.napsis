@@ -105,3 +105,54 @@ class ReaperturaConErroresTests(BasePanel):
         dialogo = _dialogo(respuesta)
         self.assertIn("Revisá las condiciones del proceso", dialogo)
         self.assertIn('<details class="opciones-avanzadas" open>', dialogo)  # abierto para ver el error
+
+
+class LiquidacionesEnElAltaTests(BasePanel):
+    """El modal ofrece las liquidaciones disponibles y la opción de bloquearlas."""
+
+    def setUp(self):
+        super().setUp()
+        from catalog.models import TipoLiquidacion
+
+        self.normal = TipoLiquidacion.objects.create(nombre="Liquidación Normal")
+        self.aguinaldo = TipoLiquidacion.objects.create(nombre="Aguinaldo", orden=1)
+
+    def test_el_modal_las_ofrece_con_la_opcion_de_bloquear(self):
+        modal = _dialogo(self.client.get(reverse("dashboard:home")))
+        self.assertIn("Liquidaciones disponibles para el cliente", modal)
+        self.assertIn('name="liquidaciones"', modal)
+        self.assertIn("Aguinaldo", modal)
+        self.assertIn('name="liquidaciones_bloquear"', modal)
+        self.assertIn("Estas son las liquidaciones de las que vas a disponer en tu Napsis", modal)
+
+    def test_crear_con_liquidaciones_bloqueadas(self):
+        self.crear(nombre="Textil SA", liquidaciones=[self.aguinaldo.pk], liquidaciones_bloquear="on")
+        implementacion = Implementacion.objects.get(cliente__nombre="Textil SA")
+        self.assertFalse(implementacion.liquidaciones_editables_por_cliente)
+        self.assertEqual(
+            list(implementacion.liquidaciones.filter(activo=True).values_list("tipo_liquidacion__nombre", flat=True)),
+            ["Aguinaldo"],
+        )
+
+    def test_sin_tildar_bloquear_el_cliente_puede_editarlas(self):
+        self.crear(nombre="Textil SA", liquidaciones=[self.aguinaldo.pk])
+        self.assertTrue(Implementacion.objects.get(cliente__nombre="Textil SA").liquidaciones_editables_por_cliente)
+
+    def test_bloquear_sin_elegir_ninguna_reabre_el_modal_con_el_error(self):
+        respuesta = self.crear(nombre="Textil SA", liquidaciones_bloquear="on")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn("elegir al menos una", _dialogo(respuesta))
+        self.assertFalse(Implementacion.objects.filter(cliente__nombre="Textil SA").exists())
+
+    def test_la_ficha_permite_bloquear_y_desbloquear(self):
+        self.crear(nombre="Textil SA", liquidaciones=[self.aguinaldo.pk])
+        implementacion = Implementacion.objects.get(cliente__nombre="Textil SA")
+        url = reverse("dashboard:implementacion_detalle", kwargs={"pk": implementacion.pk})
+        datos = {"accion": "actualizar_liquidaciones", "tipos_liquidacion": [self.aguinaldo.pk]}
+        self.client.post(url, {**datos, "liquidaciones_bloquear": "on"})
+        implementacion.refresh_from_db()
+        self.assertFalse(implementacion.liquidaciones_editables_por_cliente)
+        self.assertContains(self.client.get(url), "El cliente no puede cambiar las liquidaciones")
+        self.client.post(url, datos)
+        implementacion.refresh_from_db()
+        self.assertTrue(implementacion.liquidaciones_editables_por_cliente)

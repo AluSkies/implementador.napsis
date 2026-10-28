@@ -183,6 +183,23 @@
                 </div>
             </div>
 
+            <div class="alta-field">
+                <label>Liquidaciones disponibles para el cliente</label>
+                <div class="modulos-grid">
+                    {% for tipo in liquidaciones %}
+                        <div class="checkbox-row">
+                            <input type="checkbox" name="liquidaciones" value="{{ tipo.id }}" id="liquidacion_{{ tipo.id }}" {% if tipo.id|stringformat:"s" in alta.liquidaciones %}checked{% endif %}>
+                            <label for="liquidacion_{{ tipo.id }}">{{ tipo.nombre }}</label>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="checkbox-row">
+                    <input type="checkbox" name="liquidaciones_bloquear" id="liquidaciones_bloquear" {% if alta.liquidaciones_bloqueadas %}checked{% endif %}>
+                    <label for="liquidaciones_bloquear">Bloquear: el cliente no puede cambiar las liquidaciones</label>
+                </div>
+                <p class="muted">Si no elegís ninguna, las elige el cliente en el paso de configuración. Si las bloqueás, las ve de solo lectura con el texto «Estas son las liquidaciones de las que vas a disponer en tu Napsis» (hay que elegir al menos una).</p>
+            </div>
+
             <div class="checkbox-row">
                 <input type="checkbox" name="modulos_editables" id="modulos_editables" {% if alta.editables %}checked{% endif %}>
                 <label for="modulos_editables">Permitir que el cliente edite los módulos en el wizard</label>

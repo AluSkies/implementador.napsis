@@ -257,7 +257,8 @@ def _step_configuracion(request, implementacion, step):
         form = ConfiguracionForm(request.POST, request.FILES, instance=implementacion)
         if form.is_valid():
             services.guardar_datos_contacto(implementacion, form, _actor(request))
-            services.guardar_liquidaciones(implementacion, form.cleaned_data["tipos_liquidacion"], _actor(request))
+            if implementacion.liquidaciones_editables_por_cliente:  # si están bloqueadas, no se tocan
+                services.guardar_liquidaciones(implementacion, form.cleaned_data["tipos_liquidacion"], _actor(request))
             return _redirect_next(implementacion, step)
         _invalido(request, implementacion, step, form)
     else:

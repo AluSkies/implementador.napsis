@@ -319,12 +319,17 @@
 <div class="card section-readonly">
     <h2>Tipos de liquidación</h2>
     <p>{% for l in liquidaciones_activas %}{{ l.tipo_liquidacion.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">Ninguno elegido</span>{% endfor %}</p>
+    <p class="muted">El cliente {% if implementacion.liquidaciones_editables_por_cliente %}puede{% else %}no puede{% endif %} cambiar las liquidaciones en el wizard.</p>
     <details class="section-edit" {% if liquidaciones_form.errors %}open{% endif %}>
         <summary class="btn secondary">Modificar sección</summary>
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="accion" value="actualizar_liquidaciones">
             {{ liquidaciones_form.as_p }}
+            <div class="checkbox-row">
+                <input type="checkbox" name="liquidaciones_bloquear" id="det_liquidaciones_bloquear" {% if not implementacion.liquidaciones_editables_por_cliente %}checked{% endif %}>
+                <label for="det_liquidaciones_bloquear">Bloquear: el cliente no puede cambiar las liquidaciones</label>
+            </div>
             <div class="actions"><button class="btn secondary" type="submit">Guardar tipos de liquidación</button></div>
         </form>
     </details>

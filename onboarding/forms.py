@@ -256,6 +256,9 @@ class LiquidacionesForm(forms.Form):
         return tipos
 
 
+TEXTO_LIQUIDACIONES_BLOQUEADAS = "Estas son las liquidaciones de las que vas a disponer en tu Napsis"
+
+
 class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelForm):
     class Meta:
         model = Implementacion
@@ -282,6 +285,14 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
                 self.fields[nombre].disabled = True
                 self.fields[nombre].help_text = "Lo definió Napsis para tu implementación: no se puede cambiar."
         self._cantidad_de_capitas_desde_la_nomina()
+        if not self.instance.liquidaciones_editables_por_cliente:
+            # El equipo dejó fijas las liquidaciones: se muestran solo las elegidas, sin poder cambiarlas.
+            campo = self.fields["tipos_liquidacion"]
+            campo.queryset = campo.queryset.filter(
+                pk__in=self.instance.liquidaciones.filter(activo=True).values_list("tipo_liquidacion_id", flat=True)
+            )
+            campo.disabled = True
+            campo.help_text = TEXTO_LIQUIDACIONES_BLOQUEADAS
         campo = self.fields["modelo_recibo"]
         if not self.instance.modelo_recibo:
             campo.required = True

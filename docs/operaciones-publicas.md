@@ -341,11 +341,12 @@ Las operaciones **no impiden** todas las transiciones que el diagrama no muestra
 ```python
 def crear_implementacion(
     actor, *, cliente=None, datos_cliente=None, username="", mail_cliente="", implementador=None, creado_por=None,
-    modulo_ids=(), modulos_editables=True, condiciones=None,
+    modulo_ids=(), modulos_editables=True, liquidacion_ids=(), liquidaciones_editables=True, condiciones=None,
     origen=Implementacion.ORIGEN_PORTAL, id_externo=None, base_url=None,
 ):
 ```
 
+- **Liquidaciones:** `liquidacion_ids` son los tipos de liquidación disponibles para el cliente (vacío: los elige él en el paso 6). Con `liquidaciones_editables=False` quedan **bloqueadas** (el cliente las ve de solo lectura con el texto «Estas son las liquidaciones de las que vas a disponer en tu Napsis») y hay que elegir al menos una, o la operación devuelve un error sin crear nada. El evento `implementacion.creada` registra las liquidaciones y si quedaron bloqueadas.
 - **Parámetros:** `cliente` es una empresa existente (`Cliente`); si no, `datos_cliente` es `{"nombre", "razon_social", "cuits"}`. `username` es el usuario sugerido para la cuenta (se normaliza y, si ya existe, se le agrega un número). `implementador` y `creado_por` son cuentas de usuario del equipo, o `None` si lo crea un sistema. `modulo_ids` son ids de `Modulo`. `condiciones` es un `CondicionesForm` ya validado, o `None`. `origen` + `id_externo` identifican el caso en el sistema que lo originó (`Implementacion.ORIGEN_PORTAL`, `ORIGEN_HUBSPOT`, `ORIGEN_API`).
 - **Precondiciones:** `mail_cliente` vacío o válido; si no se pasa `cliente`, `datos_cliente["nombre"]` no vacío; `datos_cliente["cuits"]` es opcional y, si viene, tiene que pasar la normalización de CUITs. Razón social y CUIT son opcionales acá: si no se cargan, el cliente los completa en el paso 1.
 - **Efecto:** en una transacción crea la empresa (si no se pasó `cliente`), crea la cuenta de acceso (solo si el cliente no tiene cuenta), crea la `Implementacion` (con `mail_contacto` igual a `mail_cliente`) y guarda los módulos con `guardar_modulos` (**Recibo Digital queda siempre activo**). Con `mail_cliente`, la cuenta nueva nace sin contraseña y se le manda una invitación; sin mail se genera una contraseña. Eventos: `paso.guardado` (sección `modulos`), `implementacion.creada` y, si creó la cuenta, `acceso.creado`. Después de la transacción, si hay invitación: `mail.enviado` o `mail.fallido` (tipo `invitacion`).

@@ -75,3 +75,63 @@ class ControlDeFaltantesTests(BaseWizard):
         services.guardar_liquidaciones(self.implementacion, [], CLIENTE)
         mensajes = [p["mensaje"] for p in services.pendientes_de_envio(self.implementacion)]
         self.assertIn("Elegir al menos un tipo de liquidación.", mensajes)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class LiquidacionesBloqueadasTests(BaseWizard):
+    """Si el equipo las bloquea al crear la implementación, el cliente las ve pero no las puede cambiar."""
+
+    TEXTO = "Estas son las liquidaciones de las que vas a disponer en tu Napsis"
+
+    def setUp(self):
+        super().setUp()
+        self.aguinaldo = TipoLiquidacion.objects.create(nombre="Aguinaldo", orden=1)
+        self.anticipo = TipoLiquidacion.objects.create(nombre="Anticipo", orden=2)
+        services.guardar_liquidaciones(self.implementacion, [self.liquidacion, self.aguinaldo], Actor.implementador("ana"))
+
+    def bloquear(self, bloqueadas=True):
+        self.implementacion.liquidaciones_editables_por_cliente = not bloqueadas
+        self.implementacion.save()
+
+    def pagina(self):
+        return self.client.get(_url(self.implementacion, 6)).content.decode()
+
+    def post(self, *tipos):
+        return self.client.post(_url(self.implementacion, 6), {
+            "tipo_firma": "digital", "segmentacion_liquidador": "AREA UNICA", "tipos_liquidacion": [t.pk for t in tipos],
+            "modelo_recibo": SimpleUploadedFile("m.pdf", b"%PDF-1.4"),
+        })
+
+    def activas(self):
+        return set(self.implementacion.liquidaciones.filter(activo=True).values_list("tipo_liquidacion__nombre", flat=True))
+
+    def test_bloqueadas_muestra_el_texto_y_solo_las_elegidas_sin_poder_cambiarlas(self):
+        self.bloquear()
+        pagina = self.pagina()
+        self.assertIn(self.TEXTO, pagina)
+        self.assertIn("Liquidación Normal", pagina)
+        self.assertIn("Aguinaldo", pagina)
+        self.assertNotIn("Anticipo", pagina)  # las no elegidas no se ofrecen
+        casillas = pagina.split('name="tipos_liquidacion"')[1:]
+        self.assertTrue(casillas and all("disabled" in c.split(">")[0] for c in casillas))
+
+    def test_desbloqueadas_las_ofrece_todas_y_no_muestra_el_texto(self):
+        pagina = self.pagina()
+        self.assertNotIn(self.TEXTO, pagina)
+        self.assertIn("Anticipo", pagina)
+
+    def test_bloqueadas_un_pedido_armado_a_mano_no_las_cambia(self):
+        self.bloquear()
+        respuesta = self.post(self.anticipo)
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(self.activas(), {"Liquidación Normal", "Aguinaldo"})
+
+    def test_bloqueadas_guardar_no_deja_historial_de_liquidaciones(self):
+        self.bloquear()
+        antes = self.implementacion.versiones.filter(seccion="liquidaciones").count()
+        self.post(self.liquidacion, self.aguinaldo)
+        self.assertEqual(self.implementacion.versiones.filter(seccion="liquidaciones").count(), antes)
+
+    def test_desbloqueadas_el_cliente_puede_cambiarlas(self):
+        self.post(self.anticipo)
+        self.assertEqual(self.activas(), {"Anticipo"})

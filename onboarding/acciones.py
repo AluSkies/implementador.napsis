@@ -21,6 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from automatizacion import actores, congelada, eventos
+from catalog.models import TipoLiquidacion
 from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, RondaRevision, UbicacionFirma
 from clients.services import cambio_de_seccion, crear_o_resetear_acceso, foto_de_seccion
 from clients.validators import normalizar_cuits
@@ -139,7 +140,7 @@ def _validar_mail(mail):
 
 def crear_implementacion(
     actor, *, cliente=None, datos_cliente=None, username="", mail_cliente="", implementador=None, creado_por=None,
-    modulo_ids=(), modulos_editables=True, condiciones=None,
+    modulo_ids=(), modulos_editables=True, liquidacion_ids=(), liquidaciones_editables=True, condiciones=None,
     origen=Implementacion.ORIGEN_PORTAL, id_externo=None, base_url=None,
 ):
     """Crea una implementación (y la empresa y su acceso, si hacen falta).
@@ -149,6 +150,9 @@ def crear_implementacion(
       se genera una contraseña que el resultado muestra una única vez.
     - `implementador`: la cuenta del equipo que lleva la implementación; `creado_por`: la que la creó
       (ambas son cuentas de usuario, o None si la crea un sistema).
+    - `liquidacion_ids`: los tipos de liquidación disponibles para el cliente (vacío: los elige él).
+      Con `liquidaciones_editables=False` quedan **bloqueados**: el cliente los ve sin poder cambiarlos
+      (hay que elegir al menos uno).
     - `condiciones`: un CondicionesForm ya validado (o None).
     - `origen` + `id_externo` identifican el caso en el sistema que lo originó: si ya existe uno con
       esos valores, no se crea otro y se devuelve el existente (`ya_existia`).
@@ -162,6 +166,10 @@ def crear_implementacion(
     mail = _validar_mail(mail_cliente)
     if mail is None:
         return Resultado(errores=["El mail del cliente no es válido."])
+
+    liquidacion_ids = {int(i) for i in (liquidacion_ids or ())}
+    if not liquidaciones_editables and not TipoLiquidacion.objects.filter(pk__in=liquidacion_ids).exists():
+        return Resultado(errores=["Para bloquear las liquidaciones hay que elegir al menos una."])
 
     acceso = None
     cambios_en_la_empresa = {}
@@ -198,11 +206,14 @@ def crear_implementacion(
             mail_contacto=mail or (anterior.mail_contacto if anterior else ""),  # el paso 1 del cliente ya lo trae cargado
             telefono=anterior.telefono if anterior else "",
             modulos_editables_por_cliente=bool(modulos_editables), origen=origen, id_externo=id_externo or None,
+            liquidaciones_editables_por_cliente=bool(liquidaciones_editables),
         )
         if condiciones is not None:
             condiciones.aplicar(implementacion)
         implementacion.save()
         services.guardar_modulos(implementacion, Modulo.objects.all(), set(modulo_ids), actor)
+        if liquidacion_ids:
+            services.guardar_liquidaciones(implementacion, TipoLiquidacion.objects.filter(pk__in=liquidacion_ids), actor)
         eventos.registrar(actor, "implementacion.creada", implementacion, datos={
             "origen": origen, "id_externo": id_externo, "cliente_id": cliente.pk, "cliente_nuevo": cliente_nuevo,
             "empresa_completada": cambios_en_la_empresa or None,
@@ -210,6 +221,10 @@ def crear_implementacion(
             "modulos": sorted(
                 implementacion.modulos.filter(activo=True).values_list("modulo__codigo", flat=True)
             ),
+            "liquidaciones": sorted(
+                implementacion.liquidaciones.filter(activo=True).values_list("tipo_liquidacion__nombre", flat=True)
+            ),
+            "liquidaciones_editables": bool(liquidaciones_editables),
             "condiciones": foto_de_seccion(implementacion, "condiciones"),
             "con_invitacion": bool(acceso and acceso[1] is None),
         })
