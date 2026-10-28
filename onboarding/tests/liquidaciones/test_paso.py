@@ -109,6 +109,8 @@ class LiquidacionesBloqueadasTests(BaseWizard):
         self.bloquear()
         pagina = self.pagina()
         self.assertIn(self.TEXTO, pagina)
+        self.assertIn("Estas son las liquidaciones que tienen disponible en Napsis", pagina)  # el título del campo
+        self.assertNotIn("Tipos de liquidación que usa la empresa", pagina)
         self.assertIn("Liquidación Normal", pagina)
         self.assertIn("Aguinaldo", pagina)
         self.assertNotIn("Anticipo", pagina)  # las no elegidas no se ofrecen
@@ -118,6 +120,7 @@ class LiquidacionesBloqueadasTests(BaseWizard):
     def test_desbloqueadas_las_ofrece_todas_y_no_muestra_el_texto(self):
         pagina = self.pagina()
         self.assertNotIn(self.TEXTO, pagina)
+        self.assertIn("Tipos de liquidación que usa la empresa", pagina)
         self.assertIn("Anticipo", pagina)
 
     def test_bloqueadas_un_pedido_armado_a_mano_no_las_cambia(self):

@@ -257,6 +257,7 @@ class LiquidacionesForm(forms.Form):
 
 
 TEXTO_LIQUIDACIONES_BLOQUEADAS = "Estas son las liquidaciones de las que vas a disponer en tu Napsis"
+TITULO_LIQUIDACIONES_BLOQUEADAS = "Estas son las liquidaciones que tienen disponible en Napsis"
 
 
 class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelForm):
@@ -292,6 +293,7 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
                 pk__in=self.instance.liquidaciones.filter(activo=True).values_list("tipo_liquidacion_id", flat=True)
             )
             campo.disabled = True
+            campo.label = TITULO_LIQUIDACIONES_BLOQUEADAS
             campo.help_text = TEXTO_LIQUIDACIONES_BLOQUEADAS
         campo = self.fields["modelo_recibo"]
         if not self.instance.modelo_recibo:
