@@ -341,7 +341,7 @@ El principio del registro de eventos: **se guarda lo que la base pisa o borra; n
 |---|---|
 | Alta y acceso | `implementacion.creada`, `acceso.creado`, `implementacion.reasignada` |
 | Pasos del cliente | `paso.guardado` (con el antes y el después), `validacion.fallida` (qué no pudo completar, sin los valores) |
-| Nómina | `nomina.importada`, `empleado.agregado`, `empleado.editado`, `empleado.eliminado` |
+| Nómina | `nomina.importada`, `empleado.agregado`, `empleado.editado`, `empleado.eliminado`, `nomina.vaciada` |
 | Envío | `envio.confirmado` |
 | Estados | `estado.validada`, `estado.validacion_revocada`, `estado.cumplida`, `estado.cancelada`, `estado.reabierta` |
 | Devoluciones | `ronda.devuelta` |

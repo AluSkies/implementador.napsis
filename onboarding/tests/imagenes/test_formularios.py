@@ -87,11 +87,18 @@ class AccesoAlLogoTests(BaseWizard):
         ruta = self.implementacion.logo.name
         self.assertEqual(self.client.get(reverse("media", kwargs={"ruta": ruta})).status_code, 404)
 
-    def test_el_equipo_lo_ve(self):
+    def test_el_equipo_lo_ve_si_ve_la_implementacion(self):
         from django.contrib.auth.models import User
 
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
-        self.assertEqual(self.client.get(reverse("media", kwargs={"ruta": self.implementacion.logo.name})).status_code, 200)
+        ana = User.objects.create_user("ana", password="x", is_staff=True)
+        otra = User.objects.create_user("otra", password="x", is_staff=True)
+        self.implementacion.implementador_asignado = ana
+        self.implementacion.save()
+        ruta = reverse("media", kwargs={"ruta": self.implementacion.logo.name})
+        self.client.force_login(ana)
+        self.assertEqual(self.client.get(ruta).status_code, 200)
+        self.client.force_login(otra)
+        self.assertEqual(self.client.get(ruta).status_code, 404)
 
     def test_queda_en_el_historial_de_datos(self):
         from clients.services import foto_de_seccion

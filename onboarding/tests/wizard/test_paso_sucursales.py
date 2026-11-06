@@ -2,13 +2,13 @@
 
 import tempfile
 
-from django.contrib.auth.models import User
 from django.test import override_settings
 from django.urls import reverse
 
 from clients.models import Sucursal
 from onboarding.services import PASO_SUCURSALES
 from onboarding.tests.base import BaseWizard, _url
+from dashboard.tests.base import crear_operador
 
 
 def datos_de_sucursales(*sucursales, existentes=0):
@@ -78,15 +78,17 @@ class FormularioTests(SucursalesBase):
         self.assertIn("form-__prefix__-nombre", plantilla)
 
     def test_la_casilla_de_eliminar_no_se_muestra_como_un_campo_mas(self):
+        from django.utils.translation import gettext
+
         pagina = self.pagina().split("<template")[0]
-        self.assertNotIn("Delete:", pagina)
+        self.assertNotIn(f"{gettext('Delete')}:", pagina)  # la etiqueta de Django, en el idioma del portal (no «Delete:» a secas)
         self.assertIn('<span hidden><input type="checkbox" name="form-0-DELETE"', pagina)
 
     def test_el_script_que_suma_tarjetas_se_incluye(self):
         self.assertIn("sucursales_formset.js", self.pagina())
 
     def test_tambien_se_usa_en_la_ficha_del_equipo(self):
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         ficha = self.client.get(reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})).content.decode()
         self.assertIn("data-sucursales", ficha)
         self.assertIn("Agregar sucursal", ficha)

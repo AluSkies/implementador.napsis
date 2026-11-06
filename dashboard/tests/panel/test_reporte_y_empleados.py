@@ -45,6 +45,12 @@ class ReporteExportableTests(BasePanel):
             self.assertIn(columna, cabecera)
         self.assertEqual(len(filas), 2)
 
+    def test_los_cuit_salen_sin_guiones_aunque_se_guarden_con_ellos(self):
+        self.implementacion.cliente.cuits = "30-50001091-2, 20-11111111-2"
+        self.implementacion.cliente.save()
+        _r, filas = self.descargar()
+        self.assertEqual(dict(zip(filas[0], filas[1], strict=True))["CUIT(s)"], "30500010912, 20111111112")
+
     def test_la_fila_trae_los_datos_de_la_implementacion(self):
         _r, filas = self.descargar()
         fila = dict(zip(filas[0], filas[1], strict=True))

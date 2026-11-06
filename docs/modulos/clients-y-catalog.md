@@ -276,7 +276,7 @@ classDiagram
 | Identificación | `token`, `uuid`, `origen`, `id_externo` | El `token` es secreto: es el link del cliente (`get_absolute_url`). El `uuid` es público y no revela nada. `origen` (`portal`, `hubspot` o `api`) más `id_externo` identifican el caso en el sistema que lo originó y evitan duplicarlo (restricción `implementacion_origen_id_externo_unico`). `id_externo` queda en `NULL` y no en cadena vacía: con `NULL` varios casos sin ID externo conviven, y MySQL no admite índices parciales. |
 | Estado y fechas | `estado`, `paso_actual`, `enviado`, `validada_en`, `cumplida_en`, `cancelada_en`, `expira`, `creado`, `actualizado` | `estado` es `pendiente`, `cumplida` o `cancelada`. `paso_actual` es el paso del wizard en el que está el cliente: `onboarding/views.py` lo sube a medida que avanza, `acciones.reabrir` lo vuelve a 1 y `acciones.devolver_al_cliente` lo lleva al paso de revisión. `enviado` es cuándo el cliente envió el relevamiento; `validada_en`, cuándo el equipo lo validó. `expira` existe en el modelo pero el código de la aplicación no lo usa (el admin de Django lo muestra como campo editable). |
 | Datos de contacto y empresa | `telefono`, `mail_contacto`, `tipo_firma`, `liquidador_utilizado`, `nomenclatura_pdf`, `cantidad_capitas`, `segmentacion_liquidador` | Lo que releva el wizard: `telefono` y `mail_contacto` en el paso de datos (`EmpresaForm`) y el resto en el de configuración (`ConfiguracionForm`, que también pide el banner, el logo y el modelo de recibo). La razón social y los CUIT no están acá: viven en `Cliente`. `segmentacion_liquidador` arranca en «AREA UNICA». |
-| Condiciones del proceso | `modulos_editables_por_cliente`, `tipo_firma_editable`, `nomenclatura_editable`, `segmentacion_editable`, `max_roles` | Qué decide el cliente y qué deja fijo el equipo. Con un dato bloqueado, el valor lo carga el implementador y el cliente lo ve sin poder cambiarlo. `max_roles` va de 3 (uno por rol obligatorio) a 6. |
+| Condiciones del proceso | `modulos_editables_por_cliente`, `tipo_firma_editable`, `nomenclatura_editable`, `segmentacion_editable`, `max_roles`, `max_documentos` | Qué decide el cliente y qué deja fijo el equipo. Con un dato bloqueado, el valor lo carga el implementador y el cliente lo ve sin poder cambiarlo. `max_roles` va de 3 (uno por rol obligatorio) a 6. `max_documentos` es cuántos tipos de documento del legajo puede elegir el cliente (0 = sin límite; el wizard lo valida en el servidor y lo muestra como un contador). |
 | Archivos | `banner`, `logo`, `modelo_recibo` | Se guardan en `implementaciones/banners/`, `implementaciones/logos/` e `implementaciones/modelos_recibo/`, y validan el tamaño con `validar_tamanio_archivo`. |
 | Fecha de implementación | `fecha_salida_productivo` | Fecha estimada de salida en productivo. Es única para toda la implementación, no por ítem. |
 | Pedido de revisión | `revision_solicitada`, `revision_solicitada_en`, `revision_mensaje`, `revision_atendida_en` | El cliente le avisa al equipo que necesita que lo contacten (`pedir_revision`) y el equipo lo marca atendido (`marcar_revision_atendida`). |
@@ -663,14 +663,19 @@ flowchart TD
     C --> D{"¿queda dentro de MEDIA_ROOT<br/>y es un archivo?"}
     D -- no --> N["404"]
     D -- sí --> E{"¿es del equipo: is_staff?"}
-    E -- sí --> OK["200: FileResponse con el archivo"]
+    E -- sí --> G{"¿es admin (superusuario)?"}
+    G -- sí --> OK["200: FileResponse con el archivo"]
+    G -- no --> H{"¿el archivo es de una implementación<br/>que el usuario ve?"}
+    H -- sí --> OK
+    H -- no --> N
     E -- no --> F{"¿el usuario tiene un Cliente con una implementación<br/>que use ese archivo como banner, logo,<br/>modelo de recibo o imagen de firma?"}
     F -- sí --> OK
     F -- no --> N
 ```
 
-- **El equipo** accede a cualquier archivo.
-- **Un cliente** solo a los suyos. «Suyo» es: existe una implementación de su `Cliente` cuyo `banner`, `logo`, `modelo_recibo` o `firmas__imagen` es exactamente esa ruta relativa a `MEDIA_ROOT`. Cualquier otro archivo (por ejemplo, planillas de nómina importadas antes de que se dejara de guardarlas) solo lo ve el equipo.
+- **El admin** accede a cualquier archivo.
+- **El resto del equipo** solo a los de las implementaciones que ve (`dashboard.permisos.implementaciones_visibles`: las suyas, o también las de los integrantes de sus grupos si es supervisor). `_implementaciones_del_archivo` atribuye cada archivo a su implementación por `banner`, `logo`, `modelo_recibo`, `firmas__imagen`, `import_batches__archivo` o, para las copias congeladas, por el `uuid` que lleva la ruta (`congeladas/<uuid>/v<n>/...`). Un archivo que no es de ninguna implementación solo lo abre el admin: conocer la URL no alcanza.
+- **Un cliente** solo a los suyos. «Suyo» es: existe una implementación de su `Cliente` cuyo `banner`, `logo`, `modelo_recibo` o `firmas__imagen` es exactamente esa ruta relativa a `MEDIA_ROOT`. Cualquier otro archivo (por ejemplo, planillas de nómina importadas antes de que se dejara de guardarlas) solo lo ve el equipo, y de él solo quien ve esa implementación.
 - **No se revela si el archivo existe**: ante cualquier negativa (no existe, no es tuyo, intenta salir de la carpeta) la respuesta es 404, no 403.
 - **Protección contra `..`**: la ruta se resuelve a su forma absoluta antes de compararla; si queda fuera de `MEDIA_ROOT`, es 404 (`test_no_se_puede_salir_de_media_con_dos_puntos`).
 - `request.user.cliente` es la relación inversa de `Cliente.usuario`; un usuario sin `Cliente` (el equipo, por ejemplo) devuelve `None` por el `getattr`.

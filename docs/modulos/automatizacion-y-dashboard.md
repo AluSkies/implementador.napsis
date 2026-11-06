@@ -399,6 +399,7 @@ La tabla sale del código. Incluye acciones que el resumen de `arquitectura.md` 
 | `empleado.agregado` | `agregar_empleado` | `empleado_id` |
 | `empleado.editado` | `editar_empleado` | `empleado_id`, `cambios` |
 | `empleado.eliminado` | `eliminar_empleado` | `empleado_id`, `foto` (todos los campos, porque la base los pierde) |
+| `nomina.vaciada` | `eliminar_todos_los_empleados` | `cantidad` (la nómina completa queda en la versión que se guarda antes de borrar) |
 
 Los tipos de mail que se registran son `invitacion`, `cliente_devuelta`, `cliente_cumplida`, `equipo_resumen`, `cliente_recibido` y `equipo_revision_solicitada`. Un mail que falla no deshace lo hecho: queda como `mail.fallido`.
 
@@ -426,9 +427,9 @@ Al validar la documentación se arma, de una sola vez, la foto de lo que el equi
 |---|---|
 | `esquema` | `VERSION_ESQUEMA` |
 | `implementacion` | `uuid`, `origen`, `id_externo` |
-| `empresa` | `razon_social`, `cuits` (como lista), `telefono`, `mail_contacto` |
+| `empresa` | `razon_social`, `cuits` (como lista, cada uno de 11 dígitos sin guiones), `telefono`, `mail_contacto` |
 | `fecha_salida_productivo` | Fecha ISO o `None` |
-| `condiciones` | `tipo_firma`, `nomenclatura_pdf`, `segmentacion_liquidador`, `liquidador_utilizado`, `cantidad_capitas`, `max_roles` |
+| `condiciones` | `tipo_firma`, `nomenclatura_pdf`, `segmentacion_liquidador`, `liquidador_utilizado`, `cantidad_capitas`, `max_roles`, `max_documentos` |
 | `modulos`, `liquidaciones`, `licencias`, `novedades` | Listas ordenadas de códigos de los ítems activos |
 | `firma` | `None` si no hay, o `pagina`, `geometria` y `estado` |
 | `roles` | Lista ordenada de `rol`, `apellido_nombre`, `cuil`, `mail` |
@@ -577,7 +578,6 @@ Los dos modelos se ven en `/admin/` y son de solo lectura (sin permiso de alta, 
 | `VERSION_ESQUEMA` | Versión del formato del contenido (hoy 1). | `contenido_de`, `congelar`, tests |
 | `ArchivoNoDisponible` | Excepción: un archivo de la configuración no se pudo leer; guarda el `campo`. | `_copiar_archivos` la levanta; `acciones.aprobar_para_configurar` la atrapa |
 | `_codigo(item)` | Código estable de un ítem de catálogo (o `nombre:<nombre>`). | `contenido_de`, `_documentos` |
-| `_cuits(texto)` | Parte el texto de CUITs por comas. | `contenido_de` |
 | `_documentos(implementacion)` | Arma la lista de documentos de legajo activos, ordenada. | `contenido_de` |
 | `contenido_de(implementacion)` | Arma el contenido estructurado y ordenado. | `congelar`, tests |
 | `_archivos_de(implementacion)` | Lista los archivos que forman parte de la configuración. | `_copiar_archivos` |
@@ -618,10 +618,10 @@ Se corren con, por ejemplo, `venv/Scripts/python manage.py test automatizacion.t
 Es el panel del equipo de implementación (`/panel/`). Trabaja con tres ideas:
 
 1. **Delega las reglas de negocio.** La vista recibe el pedido, identifica al actor (`Actor.de_usuario(request.user)`), llama a una operación de `onboarding/acciones.py` o de `onboarding/services/` y muestra el resultado. Las reglas viven allá (las pocas excepciones están anotadas en «Detalles que conviene conocer»).
-2. **Es solo para el equipo.** Cada vista exige cuenta de staff; las dos de gestión de implementadores exigen además ser admin.
+2. **Es solo para el equipo.** Cada vista exige cuenta de staff; las de gestión de cuentas y grupos exigen además ser admin. Y cada cuenta ve solo las implementaciones que le corresponden por su rol y su grupo (ver «Roles del equipo»).
 3. **Compone a las demás apps.** Por eso también aloja el comando `seed_demo`, que ya necesita a todas (es un comando local: ver 2.11).
 
-`dashboard` **no define modelos**: `models.py` y `admin.py` están vacíos y no hay migraciones. Guarda sus cuentas en `django.contrib.auth.User` y sus datos en los modelos de `clients`, `employees` y `automatizacion`.
+`dashboard` define **tres modelos propios**, todos sobre el equipo y no sobre las implementaciones: `GrupoDeTrabajo`, `Membresia` y `EventoDeCuenta` (ver 2.10). Guarda sus cuentas en `django.contrib.auth.User` y el resto de sus datos en los modelos de `clients`, `employees` y `automatizacion`.
 
 Dos alias para no confundirse al leer `dashboard/views.py`: `cuentas` es `dashboard/services.py` (cuentas de implementadores) y `onboarding_services` es el paquete `onboarding/services/` (guardado de secciones).
 
@@ -632,11 +632,12 @@ Dos alias para no confundirse al leer `dashboard/views.py`: `cuentas` es `dashbo
 ```mermaid
 flowchart LR
     subgraph sg_dash["dashboard/"]
-        URL["urls.py<br/>8 rutas bajo /panel/"]
-        VIE["views.py<br/>8 vistas, 26 manejadores _accion_*<br/>ACCIONES_DE_LA_FICHA"]
-        SRV["services.py<br/>implementadores(), asignables(),<br/>crear_implementador(), resetear_password(),<br/>dar_de_baja(), reactivar()"]
-        FRM["forms.py<br/>ImplementadorEdicionForm<br/>ImplementadorAltaForm"]
-        PER["permisos.py<br/>admin_requerido()"]
+        URL["urls.py<br/>10 rutas bajo /panel/"]
+        VIE["views.py<br/>10 vistas, 26 manejadores _accion_*<br/>ACCIONES_DE_LA_FICHA"]
+        SRV["services.py<br/>cuentas_del_equipo(), asignables(usuario),<br/>crear_implementador(), asignar_rol(), dar_de_baja(),<br/>grupos(), crear_grupo(), actualizar_grupo(), borrar_grupo()"]
+        MDL["models.py<br/>GrupoDeTrabajo, Membresia,<br/>EventoDeCuenta"]
+        FRM["forms.py<br/>ImplementadorEdicionForm<br/>ImplementadorAltaForm, GrupoForm"]
+        PER["permisos.py<br/>implementaciones_visibles(), puede_ver(),<br/>puede_accionar(), clientes_visibles(),<br/>admin_requerido()"]
         REP["reportes.py<br/>generar_reporte_implementaciones_xlsx()"]
         SED["management/commands/<br/>seed_demo.py"]
     end
@@ -646,6 +647,8 @@ flowchart LR
         T3["implementacion_detalle.html"]
         T4["implementadores.html"]
         T5["implementador_detalle.html"]
+        T6["grupos.html"]
+        T7["grupo_detalle.html"]
     end
 
     URL --> VIE
@@ -658,6 +661,9 @@ flowchart LR
     VIE --> T3
     VIE --> T4
     VIE --> T5
+    VIE --> T6
+    VIE --> T7
+    SRV --> MDL
     SED --> SRV
 ```
 
@@ -701,7 +707,7 @@ flowchart LR
 
 ### 2.3 Modelos
 
-`dashboard` no tiene modelos propios. Este diagrama muestra sus dos clases (los formularios de implementadores) y los modelos de otras apps que el panel lee y escribe, con los campos que aparecen en el código del panel.
+`dashboard` tiene tres modelos propios (`GrupoDeTrabajo`, `Membresia` y `EventoDeCuenta`, descritos en 2.10). Este diagrama muestra sus clases de formularios de cuentas y los modelos de otras apps que el panel lee y escribe, con los campos que aparecen en el código del panel.
 
 ```mermaid
 classDiagram
@@ -771,9 +777,11 @@ classDiagram
 | `/panel/implementaciones/<pk>/` | `implementacion_detalle` | `implementacion_detalle.html` | La ficha: todo lo relevado, las acciones sobre el caso y los registros (ver más abajo) | Equipo |
 | `/panel/implementaciones/<pk>/congelada/<version>/` | `descargar_congelada` | (descarga) | Una versión de la configuración congelada como `.json` | Equipo |
 | `/panel/implementaciones/<pk>/nomina.xlsx` | `descargar_nomina` | (descarga) | La nómina cargada, en `.xlsx` | Equipo |
-| `/panel/exportar/` | `exportar_implementaciones` | (descarga) | Reporte `.xlsx` de todas las implementaciones | Equipo |
-| `/panel/implementadores/` | `implementadores_lista` | `implementadores.html` | Lista de implementadores y alta de uno nuevo | Solo admin |
-| `/panel/implementadores/<pk>/` | `implementador_detalle` | `implementador_detalle.html` | Editar datos, reiniciar contraseña, dar de baja o reactivar | Solo admin |
+| `/panel/exportar/` | `exportar_implementaciones` | (descarga) | Reporte `.xlsx` de las implementaciones que ve quien exporta | Equipo |
+| `/panel/implementadores/` | `implementadores_lista` | `implementadores.html` | Lista de cuentas del equipo (con rol y grupo) y alta de una nueva | Solo admin |
+| `/panel/implementadores/<pk>/` | `implementador_detalle` | `implementador_detalle.html` | Editar datos y rol (Admin incluido), reiniciar contraseña, dar de baja o reactivar | Solo admin |
+| `/panel/grupos/` | `grupos_lista` | `grupos.html` | Lista de grupos de trabajo y alta de uno nuevo | Solo admin |
+| `/panel/grupos/<pk>/` | `grupo_detalle` | `grupo_detalle.html` | Renombrar, cambiar supervisor, sumar o sacar integrantes, borrar el grupo | Solo admin |
 
 ```mermaid
 flowchart LR
@@ -826,14 +834,15 @@ Los roles del equipo se definen en `permisos.py`:
 | Rol | Cómo se reconoce | Qué puede |
 |---|---|---|
 | Cliente | Cuenta sin `is_staff` | No entra al panel: lo redirigen al login. Completa su wizard en `/r/`. |
-| Implementador | `is_staff` y no superusuario | Todo el panel, menos gestionar implementadores (recibe 403). |
-| Admin | Superusuario | Todo el panel, incluida la gestión de implementadores. |
+| Implementador | `is_staff` y no superusuario | El panel, pero solo ve y toca las implementaciones que tiene asignadas; no gestiona cuentas ni grupos (recibe 403). |
+| Supervisor | `is_staff`, no superusuario, del grupo de Django `Supervisor` | Ve y toca las suyas y las de los integrantes de sus grupos; no gestiona cuentas ni grupos (recibe 403). |
+| Admin | Superusuario | Todo el panel, incluida la gestión de cuentas (con el rol Admin) y de grupos. |
 | Cuenta dada de baja | `is_active` en falso | Ninguna vista del panel la deja pasar: ambos controles piden cuenta activa. |
 
 Hay dos controles:
 
-- **Equipo** (6 vistas): el decorador `staff_member_required(login_url="login")` de Django, que exige cuenta activa con `is_staff` y, si no, redirige al login.
-- **Admin** (2 vistas, las de implementadores): `admin_requerido`, definido en `permisos.py`.
+- **Equipo** (6 vistas): el decorador `staff_member_required(login_url="login")` de Django, que exige cuenta activa con `is_staff` y, si no, redirige al login. Después, cada vista restringe lo que se ve con `implementaciones_visibles` (ver «Roles del equipo y quién actúa sobre cada implementación»).
+- **Admin** (4 vistas: cuentas y grupos): `admin_requerido`, definido en `permisos.py`.
 
 ```mermaid
 flowchart TD
@@ -857,9 +866,9 @@ flowchart TD
     E -->|"no"| P403
 ```
 
-A un implementador logueado se le responde 403 en lugar de redirigirlo al login: el login lo devolvería al mismo panel (ya está autenticado) y se armaría un bucle de redirecciones. El menú (`templates/base.html`) muestra el enlace «Implementadores» solo si el usuario es superusuario, y rotula al usuario como «Admin» o «Implementador».
+A un implementador o supervisor logueado se le responde 403 en lugar de redirigirlo al login: el login lo devolvería al mismo panel (ya está autenticado) y se armaría un bucle de redirecciones. El menú de usuario, el de la hamburguesa (`templates/base.html`; sus estilos están en `static/portal.css`, la hoja compartida con las variables de marca), muestra el enlace «Equipo» (cuentas y grupos) solo si el usuario es superusuario, y rotula al usuario como «Admin», «Supervisor» o «Implementador» (filtro `rol_del_equipo`).
 
-El rol también se refleja en el actor: `Actor.de_usuario` convierte un superusuario en `admin` y un staff en `implementador`, y eso queda en los eventos (`actor_tipo` y `actor_ref`). El historial de versiones guarda solo un texto, `Actor.etiqueta`: «Cliente» o el nombre de usuario, sin distinguir `admin` de `implementador`.
+El rol también se refleja en el actor: `Actor.de_usuario` convierte un superusuario en `admin`, un staff del grupo `Supervisor` en `supervisor` y el resto del staff en `implementador`, y eso queda en los eventos (`actor_tipo` y `actor_ref`). El historial de versiones guarda solo un texto, `Actor.etiqueta`: «Cliente» o el nombre de usuario, sin distinguir los roles.
 
 ### 2.6 Alta de una implementación
 
@@ -1013,7 +1022,7 @@ Con `?editar_empleado=<id>` en un GET se abre el formulario de edición de ese e
 
 ### 2.8 El listado: filtros y orden
 
-`home` arma el listado con `filtrar_y_ordenar_implementaciones(queryset, request.GET)`, que vive en `clients/services.py`. Los parámetros llegan por querystring (lo que va después del `?` en la URL).
+`home` arma el listado con `filtrar_y_ordenar_implementaciones(queryset, request.GET)`, que vive en `clients/services.py`, sobre las implementaciones que el usuario ve (`implementaciones_visibles`). Los parámetros llegan por querystring (lo que va después del `?` en la URL). El panel de filtros de la izquierda lo arma `dashboard/filtros.py` (`panel_de_filtros`).
 
 ```mermaid
 flowchart LR
@@ -1021,7 +1030,7 @@ flowchart LR
     B["Implementacion.objects<br/>con select_related de cliente<br/>e implementador_asignado"]
     C["con_ultimo_movimiento()<br/>agrega movimiento_en"]
     D["annotate: estado_orden,<br/>ronda_abierta_numero,<br/>fecha_implementacion"]
-    E["Filtros opcionales:<br/>cliente, estado,<br/>fechas de carga y de implementación"]
+    E["Filtros opcionales:<br/>cliente, empresa, implementador, estado,<br/>fechas de carga y de implementación"]
     F["order_by según<br/>ordenar y direccion"]
     G["home.html<br/>con los sort_links"]
 
@@ -1047,7 +1056,9 @@ flowchart LR
 | Parámetro | Efecto |
 |---|---|
 | `cliente` | Nombre de la empresa que contenga el texto (sin distinguir mayúsculas). |
-| `estado` | Ver la tabla siguiente. |
+| `empresa` | Ids de empresa. Se puede repetir (`?empresa=3&empresa=5`): alcanza con que sea de una de ellas. Lo que no es un número se ignora. |
+| `implementador` | Ids de cuenta, o `sin` para las que no tienen asignado. Se puede repetir. Solo filtra dentro de lo que el usuario ya ve: pedir una cuenta ajena a su vista no devuelve nada. |
+| `estado` | Ver la tabla siguiente. Se puede repetir (`?estado=a_completar&estado=completo`): alcanza con cumplir uno; los valores desconocidos se ignoran. |
 | `creado_desde`, `creado_hasta` | Fecha de creación, ambos extremos inclusive. |
 | `fecha_impl_desde`, `fecha_impl_hasta` | Sobre `fecha_implementacion`, ambos extremos inclusive. |
 
@@ -1062,20 +1073,29 @@ Valores de `estado` (los ofrece `Implementacion.opciones_de_filtro_de_estado()`)
 | `cancelada` | `estado` cancelada |
 | `sin_movimiento` | Pendiente y con `movimiento_en` de hace 7 días o más (`DIAS_SIN_MOVIMIENTO`). Es una marca derivada, no un estado más |
 
+Entre filtros distintos se combina con «y»; dentro de un mismo filtro repetido, con «o». `valores_del_filtro` e `ids_del_filtro` (en `clients/services.py`) leen tanto un `QueryDict` como un diccionario.
+
+**El panel lateral** (`dashboard/filtros.py`, `panel_de_filtros(usuario, visibles, params, ruta)`). Devuelve lo que dibuja `home.html`:
+
+- `estados`, `empresas` e `implementadores`: las opciones con su cantidad (`n`) y si están marcadas. Las cantidades salen de las implementaciones que el usuario ve, sin cruzarlas con los otros filtros. Las empresas ofrecidas son solo las que tienen alguna implementación visible.
+- `implementadores` es `None` para un implementador (solo ve lo suyo, no tiene qué elegir). El supervisor ve «Mías» y una sección por cada grupo a su cargo (el título marca a todos los integrantes); el admin ve todos los grupos con sus supervisores, «Sin grupo» (cuentas con algo asignado que no están en ningún grupo) y «Sin asignar».
+- `chips`: un chip por filtro aplicado, con la URL que lo quita (conserva el resto y el orden). El rango de fechas es un solo chip.
+- `static/panel_filtros.js` es solo comodidad: aplica el formulario al tildar una casilla o cambiar una fecha, hace que el título de un grupo marque a sus integrantes, recorta la lista de empresas mientras se escribe, recuerda el desplazamiento de las listas y no manda los campos vacíos. Sin JavaScript sigue funcionando con el botón «Aplicar filtros».
+
 **Orden:** `ordenar` acepta `cliente`, `estado`, `fecha_implementacion` y `creado` (las claves de `COLUMNAS_ORDENABLES`); cualquier otro valor cae en `creado`. `direccion` es `asc` o `desc`; por defecto es `desc` para `creado` y `asc` para el resto, y cualquier valor distinto de `desc` ordena ascendente.
 
 **Los links de las columnas** (`_sort_links` en `dashboard/views.py`): para cada columna ordenable arma la URL que alterna ascendente y descendente conservando los demás filtros, e indica si esa columna es la activa y en qué dirección (la plantilla dibuja ▲ o ▼).
 
 ### 2.9 Reportes y descargas
 
-**Reporte de implementaciones** (`exportar_implementaciones`, botón «Exportar (.xlsx)» al pie del listado). Descarga `implementaciones_AAAA-MM-DD.xlsx` con todas las implementaciones, **sin aplicar los filtros del listado**, de la más nueva a la más vieja. Lo genera `generar_reporte_implementaciones_xlsx()` en `reportes.py`:
+**Reporte de implementaciones** (`exportar_implementaciones`, botón «Exportar (.xlsx)» al pie del listado). Descarga `implementaciones_AAAA-MM-DD.xlsx` con las implementaciones que ve quien exporta, **sin aplicar los filtros del listado**, de la más nueva a la más vieja. Lo genera `generar_reporte_implementaciones_xlsx()` en `reportes.py`:
 
 - La consulta usa `con_ultimo_movimiento`, `select_related` de cliente, implementador asignado y creador, `prefetch_related` de los módulos, y tres conteos con `Count(..., distinct=True)` (empleados, sucursales, rondas) para que los cruces entre tablas no multipliquen filas.
 - Hoja «Implementaciones», con encabezado en negrita y primera fila fija. Una fila por implementación, con las 21 columnas de `COLUMNAS`:
 
 | Columnas |
 |---|
-| Empresa · Razón social · CUIT(s) · Estado · Paso actual · Implementador asignado · Creada por · Mail de contacto · Teléfono · Fecha de solicitud · Fecha de envío del cliente · Fecha de implementación · Tipo de fecha de implementación · Módulos · Empleados · Sucursales · Pidió contacto sin atender · Fecha de validación · Rondas de devolución · Última actividad · Sin movimiento |
+| Empresa · Razón social · CUIT(s) (sin guiones) · Estado · Paso actual · Implementador asignado · Creada por · Mail de contacto · Teléfono · Fecha de solicitud · Fecha de envío del cliente · Fecha de implementación · Tipo de fecha de implementación · Módulos · Empleados · Sucursales · Pidió contacto sin atender · Fecha de validación · Rondas de devolución · Última actividad · Sin movimiento |
 
 - **Estado** es la marca «Devuelta, ronda N» si la hay, o si no la etiqueta del estado visual. **Paso actual** solo se llena si está a completar por el cliente.
 - **Fecha de implementación** y su **tipo**: `Real` (la de `cumplida_en`) si está cumplida; `Estimada` (`fecha_salida_productivo`) si no, y vacío si no hay ninguna.
@@ -1089,32 +1109,56 @@ Valores de `estado` (los ofrece `Implementacion.opciones_de_filtro_de_estado()`)
 | `descargar_nomina` | `nomina_<cliente>.xlsx` (espacios cambiados por `_`) con la nómina de la implementación, con `generar_nomina_xlsx` de `employees` |
 | `descargar_congelada` | `configuracion_<pk>_v<version>.json` con `como_documento(congelada)`: JSON con sangría y claves ordenadas. Si la versión no existe, 404 |
 
-Los archivos copiados de una versión congelada se enlazan desde la ficha por `/media/<ruta>`: esa vista (`media_protegida`) deja pasar al equipo a cualquier archivo, y a un cliente solo a su logo, banner, firma y modelo de recibo, así que las copias congeladas le dan 404.
+Los archivos copiados de una versión congelada se enlazan desde la ficha por `/media/<ruta>`: esa vista (`media_protegida`) deja pasar al admin a cualquier archivo, al resto del equipo solo a los de las implementaciones que ve (las copias congeladas llevan el `uuid` de su implementación en la ruta), y a un cliente solo a su logo, banner, firma y modelo de recibo, así que las copias congeladas le dan 404.
 
-### 2.10 Gestión de implementadores
+### 2.10 Gestión de cuentas y grupos
 
-Solo para admins. El implementador es una cuenta de staff sin superusuario.
+Solo para admins. Una cuenta del equipo es de staff; su rol es **Implementador** (nada más), **Supervisor** (pertenece al grupo de Django `Supervisor`) o **Admin** (`is_superuser`).
 
-| Función (`services.py`) | Qué hace |
+**Modelos** (`dashboard/models.py`)
+
+| Modelo | Qué guarda |
 |---|---|
-| `implementadores()` | Las cuentas con rol Implementador: `is_staff` y no superusuario, con la cantidad de implementaciones que crearon (`creadas`), activas primero y por usuario. Los admins y los clientes no aparecen, así que no se pueden tocar por esta vía. |
-| `asignables()` | Las cuentas a las que se puede asignar una implementación: todo el equipo activo, implementadores y admins. |
-| `crear_implementador(username, first_name, last_name, email)` | Crea la cuenta con una contraseña generada (`generar_password`, de `clients/services.py`). Devuelve `(usuario, password_en_claro)`: la contraseña solo se ve esa vez. |
-| `resetear_password(usuario)` | Genera una contraseña nueva; según su docstring, la anterior y las sesiones abiertas dejan de valer. |
-| `dar_de_baja(usuario)` | Baja lógica: `is_active` en falso. La cuenta se conserva para no perder a quién se atribuyen las implementaciones que creó. |
-| `reactivar(usuario)` | `is_active` en verdadero. |
+| `GrupoDeTrabajo` | `nombre` (único) y `supervisor` (cuenta; `PROTECT`: no se borra una cuenta con grupos a cargo). Un supervisor puede tener varios. |
+| `Membresia` | `usuario` (**único**: un implementador pertenece a un solo grupo) y `grupo`. Si se borra la cuenta, se borra la membresía. |
+| `EventoDeCuenta` | Registro de solo agregado (`momento`, `actor`, `sujeto`, `accion`, `datos`), con los mismos querysets y bloqueos de los eventos de las implementaciones. Los nombres van como texto: sobrevive a las cuentas. Se ve solo lectura en `/admin/`. |
 
-Las vistas:
+**Funciones** (`services.py`)
 
-- `implementadores_lista`: muestra la lista y el formulario `ImplementadorAltaForm`. Con un POST válido llama a `crear_implementador(**form.cleaned_data)` y muestra el usuario y la contraseña **una única vez**, en un aviso (`_avisar_credenciales`).
-- `implementador_detalle(pk)`: abre solo cuentas de `implementadores()` (un admin o un cliente da 404) y procesa la `accion` del POST.
-
-| `accion` | Qué hace |
+| Función | Qué hace |
 |---|---|
-| `guardar` | Valida `ImplementadorEdicionForm` y guarda nombre, apellido y mail. El usuario no se cambia: el historial de versiones lo guarda como texto para atribuir cada edición. |
+| `cuentas_del_equipo()` | Todas las cuentas de staff, con cualquier rol, con la cantidad de implementaciones que crearon (`creadas`), si son supervisoras (`es_supervisor`), su grupo y los grupos a cargo; activas primero y por usuario. Los clientes no aparecen. |
+| `rol_de(usuario)` | `admin`, `supervisor` o `implementador`. |
+| `asignables(para=None)` | A quién puede asignar `para`: el admin (o nadie en particular), todo el equipo activo; un supervisor, a sí mismo y a los integrantes de sus grupos; cualquier otro, solo a sí mismo. |
+| `crear_implementador(username, first_name, last_name, email, rol, por)` | Crea la cuenta con una contraseña generada (`generar_password`, de `clients/services.py`) y el rol. Devuelve `(usuario, password_en_claro)`: la contraseña solo se ve esa vez. |
+| `asignar_rol(usuario, rol, por)` | Cambia el rol. Un supervisor o admin no integra grupos: si estaba en uno, sale (devuelve su nombre). Levanta `CambioNoPermitido` según `error_de_cambio_de_rol`. |
+| `error_de_cambio_de_rol(usuario, rol, por)` / `error_de_baja(usuario, por)` | Por qué no se puede (o `None`): no cambiarse el propio rol ni darse de baja, no quedar sin admin activo, no cambiar de rol a quien tiene grupos a cargo. |
+| `resetear_password(usuario, por)` | Genera una contraseña nueva; según su docstring, la anterior y las sesiones abiertas dejan de valer. |
+| `dar_de_baja(usuario, por)` | Baja lógica: `is_active` en falso. La cuenta y su lugar en el grupo se conservan: su supervisor sigue viendo (y pudiendo reasignar) lo que tenía asignado. |
+| `reactivar(usuario, por)` | `is_active` en verdadero. |
+| `grupos()`, `supervisores_posibles()`, `integrantes_posibles()` | El listado con integrantes e implementaciones; las cuentas activas con rol Supervisor; las de rol Implementador. |
+| `crear_grupo(nombre, supervisor, integrantes, por)`, `actualizar_grupo(...)`, `borrar_grupo(grupo, por)` | Alta, edición y baja de grupos. `actualizar_grupo` devuelve a quienes salieron; `borrar_grupo`, cuántas implementaciones dejan de verse. Quien ya estaba en otro grupo se mueve (queda en `vienen_de` del evento). |
+| `cantidad_asignada_a(usuarios)` | Cuántas implementaciones tienen asignadas esas cuentas (para el aviso al sacar a alguien). |
+
+Cada función que cambia algo deja su `EventoDeCuenta`.
+
+**Vistas**
+
+- `implementadores_lista`: muestra la lista y `ImplementadorAltaForm`. Con un POST válido llama a `crear_implementador(**form.cleaned_data, por=...)` y muestra el usuario y la contraseña **una única vez**, en un aviso (`_avisar_credenciales`).
+- `implementador_detalle(pk)`: abre cualquier cuenta de `cuentas_del_equipo()` (un cliente da 404) y procesa la `accion` del POST.
+- `grupos_lista` y `grupo_detalle(pk)`: alta y edición con `GrupoForm`; al sacar a alguien o borrar el grupo, un aviso dice cuántas implementaciones dejan de verse para el supervisor.
+
+| `accion` (cuenta) | Qué hace |
+|---|---|
+| `guardar` | Valida `ImplementadorEdicionForm` y guarda nombre, apellido, mail y rol. El usuario no se cambia: el historial de versiones lo guarda como texto para atribuir cada edición. El campo de rol queda deshabilitado en la propia cuenta. |
 | `resetear_password` | `resetear_password` y muestra la contraseña nueva una vez. |
-| `dar_de_baja` | `dar_de_baja`: ya no puede ingresar, ni siquiera con una sesión abierta (ambos controles piden cuenta activa). |
+| `dar_de_baja` | `dar_de_baja`: ya no puede ingresar, ni siquiera con una sesión abierta (ambos controles piden cuenta activa). No vale para uno mismo ni para el último admin. |
 | `reactivar` | `reactivar`. |
+
+| `accion` (grupo) | Qué hace |
+|---|---|
+| `guardar` | Valida `GrupoForm` (nombre único sin distinguir mayúsculas, supervisor con rol Supervisor, integrantes con rol Implementador) y llama a `actualizar_grupo`. |
+| `borrar` | `borrar_grupo`: se borra el grupo, no las cuentas. |
 
 ### 2.11 El comando `seed_demo`
 
@@ -1145,6 +1189,7 @@ venv/Scripts/python manage.py seed_demo --reset    # borra y regenera solo los c
 | `_sort_links(request)` | Arma los links de orden de cada columna. | `home` |
 | `_alta_de_implementacion(request, condiciones_form)` | Valida y crea la implementación con `acciones.crear_implementacion`. Devuelve `(implementacion, errores)`. | `home` |
 | `home(request)` | Listado, filtros, orden y alta. | `urls.py` (`dashboard:home`) |
+| `panel_de_filtros(...)` (`filtros.py`) | Opciones con cantidades, marcas y chips del panel lateral. | `home` |
 | `cliente_detalle(request, pk)` | Ficha de la empresa, su acceso y sus implementaciones. | `urls.py`; enlaces de `home.html` y de la ficha |
 | `_empleado_del_panel(implementacion, empleado_id)` | El empleado de esa implementación, o `None`. | `_accion_editar_empleado`, `implementacion_detalle` |
 | `_volver(implementacion)` | Redirect a la ficha. | Todos los manejadores |
@@ -1154,38 +1199,41 @@ venv/Scripts/python manage.py seed_demo --reset    # borra y regenera solo los c
 | `implementacion_detalle(request, pk)` | Despacha los POST y arma la ficha. | `urls.py`; enlaces de `home.html`, `cliente_detalle.html` y del alta |
 | `descargar_congelada(request, pk, version)` | Descarga una versión congelada como `.json`. | `urls.py`; enlace de la ficha |
 | `descargar_nomina(request, pk)` | Descarga la nómina como `.xlsx`. | `urls.py`; enlace de la ficha |
-| `exportar_implementaciones(request)` | Descarga el reporte de todas las implementaciones. | `urls.py`; botón de `home.html` |
-| `implementadores_lista(request)` | Lista y alta de implementadores (admin). | `urls.py`; enlace del menú |
-| `implementador_detalle(request, pk)` | Edición, contraseña, baja y reactivación (admin). | `urls.py`; enlace de `implementadores.html` |
+| `exportar_implementaciones(request)` | Descarga el reporte de las implementaciones que ve quien exporta. | `urls.py`; botón de `home.html` |
+| `implementadores_lista(request)` | Lista y alta de cuentas del equipo (admin). | `urls.py`; enlace del menú |
+| `implementador_detalle(request, pk)` | Edición con rol, contraseña, baja y reactivación (admin). | `urls.py`; enlace de `implementadores.html` |
+| `grupos_lista(request)`, `grupo_detalle(request, pk)` | Alta, edición y baja de grupos de trabajo (admin). | `urls.py`; pestaña «Grupos» |
 
 #### `dashboard/services.py`
 
 | Función, clase o modelo | Qué hace | Quién la usa |
 |---|---|---|
-| `implementadores()` | Cuentas con rol Implementador, con su cantidad de creadas. | `implementadores_lista`, `implementador_detalle` |
-| `asignables()` | Equipo activo al que se puede asignar una implementación. | `home`, `implementacion_detalle`, `_implementador_elegido`, `_accion_reasignar` |
-| `crear_implementador(...)` | Crea la cuenta con contraseña generada. | `implementadores_lista`, `seed_demo` |
-| `resetear_password(usuario)` | Genera una contraseña nueva. | `implementador_detalle` |
-| `dar_de_baja(usuario)` | Baja lógica. | `implementador_detalle` |
-| `reactivar(usuario)` | Vuelve a activar la cuenta. | `implementador_detalle` |
+| `cuentas_del_equipo()` | Cuentas de staff con cualquier rol, con su cantidad de creadas. | `implementadores_lista`, `implementador_detalle` |
+| `asignables(para)` | Equipo activo al que `para` puede asignar una implementación. | `home`, `implementacion_detalle`, `_implementador_elegido`, `_accion_reasignar` |
+| `crear_implementador(...)`, `asignar_rol(...)` | Crea la cuenta con contraseña generada; cambia su rol. | `implementadores_lista`, `ImplementadorEdicionForm`, `seed_demo` |
+| `resetear_password(usuario, por)`, `dar_de_baja(usuario, por)`, `reactivar(usuario, por)` | Contraseña nueva, baja lógica y reactivación; dejan evento. | `implementador_detalle` |
+| `crear_grupo`, `actualizar_grupo`, `borrar_grupo`, `grupos`, `supervisores_posibles`, `integrantes_posibles`, `cantidad_asignada_a` | Grupos de trabajo (ver 2.10). | `grupos_lista`, `grupo_detalle`, `GrupoForm`, `seed_demo` |
+| `CambioNoPermitido` | El cambio dejaría al portal sin admin o rompe una regla de grupos. | `asignar_rol`, `dar_de_baja`, vistas de cuentas |
 
 #### `dashboard/forms.py`, `permisos.py`, `reportes.py`, `urls.py`
 
 | Función, clase o modelo | Qué hace | Quién la usa |
 |---|---|---|
-| `ImplementadorEdicionForm` | `ModelForm` de `User`: nombre, apellido y mail, todos obligatorios. | `implementador_detalle`; base de `ImplementadorAltaForm` |
+| `ImplementadorEdicionForm` | `ModelForm` de `User`: nombre, apellido, mail y rol (Implementador, Supervisor o Admin), todos obligatorios. En la propia cuenta el rol queda deshabilitado. | `implementador_detalle`; base de `ImplementadorAltaForm` |
 | `ImplementadorAltaForm` | Suma `username` y rechaza uno repetido sin distinguir mayúsculas (`clean_username`). | `implementadores_lista` |
-| `admin_requerido(vista)` | Decorador: solo deja pasar a superusuarios (ver 2.5). | `implementadores_lista`, `implementador_detalle` |
+| `GrupoForm` | Nombre (único sin distinguir mayúsculas), supervisor e integrantes. `filas_de_integrantes()` arma la tabla de integrantes (nombre, grupo en el que está hoy, si está de baja, si está tildado): primero los tildados, después los activos, por nombre. Si el formulario vuelve con un error, conserva lo tildado. | `grupos_lista`, `grupo_detalle`, `_form_grupo.html` |
+| `admin_requerido(vista)` | Decorador: solo deja pasar a superusuarios (ver 2.5). | `implementadores_lista`, `implementador_detalle`, `grupos_lista`, `grupo_detalle` |
+| `implementaciones_visibles(usuario)`, `puede_ver`, `puede_accionar`, `clientes_visibles`, `puede_accionar_sobre_el_cliente` | La regla de qué se ve y qué se puede tocar (ver «Roles del equipo»). | Todas las vistas del panel |
 | `COLUMNAS` (`reportes.py`) | Título y ancho de las 21 columnas del reporte. | `generar_reporte_implementaciones_xlsx` |
 | `_fecha(valor)` | Fecha `dd/mm/aaaa` en hora local, o vacío. | `generar_reporte_implementaciones_xlsx` |
-| `generar_reporte_implementaciones_xlsx()` | Arma el reporte y devuelve el archivo en memoria. | `exportar_implementaciones`, tests |
-| `app_name`, `urlpatterns` (`urls.py`) | Las 8 rutas del panel, con el espacio de nombres `dashboard`. | `config/urls.py` (bajo `panel/`) |
+| `generar_reporte_implementaciones_xlsx(queryset=None)` | Arma el reporte con las implementaciones que se le pasan (el panel pasa las visibles; sin argumento, todas) y devuelve el archivo en memoria. | `exportar_implementaciones`, tests |
+| `app_name`, `urlpatterns` (`urls.py`) | Las 10 rutas del panel, con el espacio de nombres `dashboard`. | `config/urls.py` (bajo `panel/`) |
 
 #### El resto
 
 | Archivo | Qué hace | Quién lo usa |
 |---|---|---|
-| `models.py`, `admin.py`, `migrations/` | Vacíos: la app no tiene modelos propios. | |
+| `models.py`, `admin.py`, `migrations/` | `GrupoDeTrabajo`, `Membresia` y `EventoDeCuenta` (ver 2.10); el admin muestra el registro de cuentas en solo lectura; una migración inicial. | `permisos.py`, `services.py`, `/admin/` |
 | `apps.py`: `DashboardConfig` | Configuración de la app. | Django, al arrancar |
 | `management/commands/seed_demo.py`: `Command` y sus ayudas (`_con_verificador`, `_cuits_validos`, `_cuil`, `_persona`, `_banner_png`, `_pdf_minimo`) | Datos de demostración (ver 2.11). | Quien lo corre a mano; `dashboard/tests/test_seed_demo.py` |
 
@@ -1193,11 +1241,15 @@ venv/Scripts/python manage.py seed_demo --reset    # borra y regenera solo los c
 
 | Plantilla | Vista | Qué envía |
 |---|---|---|
-| `home.html` | `home` | GET de filtros y orden; POST `crear_implementacion` desde el modal (el modal lo abre y cierra un script dentro de la misma plantilla) |
+| `home.html` | `home` | GET de filtros (panel lateral, `static/panel_filtros.css` y `.js`) y orden; POST `crear_implementacion` desde el modal (el modal lo abre y cierra un script dentro de la misma plantilla) |
 | `cliente_detalle.html` | `cliente_detalle` | `regenerar_acceso`, `enviar_invitacion` |
 | `implementacion_detalle.html` | `implementacion_detalle` | Las 26 acciones de `ACCIONES_DE_LA_FICHA`; incluye `onboarding/_editor_firma.html` y `clients/_historial_versiones.html` |
 | `implementadores.html` | `implementadores_lista` | POST de alta (`ImplementadorAltaForm`) |
 | `implementador_detalle.html` | `implementador_detalle` | `guardar`, `resetear_password`, `dar_de_baja`, `reactivar` |
+| `grupos.html` | `grupos_lista` | alta de un grupo (POST sin `accion`) |
+| `grupo_detalle.html` | `grupo_detalle` | `guardar`, `borrar` |
+| `_form_grupo.html` | (parcial de las dos pantallas de grupos) | Nombre, supervisor e integrantes. Los integrantes van en una tabla compacta (casilla, Nombre, Grupo, Estado) con altura limitada, buscador y contador de tildados (`static/grupo_integrantes.js`): una lista de casillas con texto se haría interminable con muchos implementadores. Las casillas se llaman `integrantes`, así que sin JavaScript sigue funcionando |
+| `_equipo_nav.html` | (parcial de las cuatro pantallas de cuentas y grupos) | Volver al panel y las pestañas Cuentas y Grupos. Las cuatro pantallas son de ancho amplio y acomodan sus tarjetas en una fila flexible (`.equipo-layout`): la lista a la izquierda y el formulario al costado, o una sobre otra si no entran |
 
 ### 2.13 Dónde ver ejemplos en los tests
 
@@ -1209,7 +1261,12 @@ venv/Scripts/python manage.py seed_demo --reset    # borra y regenera solo los c
 | `dashboard/tests/panel/test_modal_alta.py` | El modal del alta y cómo se reabre con errores |
 | `dashboard/tests/panel/test_reporte_y_empleados.py` | El reporte `.xlsx`, la edición e importación de empleados desde la ficha y el alta atómica |
 | `dashboard/tests/panel/test_seguimiento.py` | La marca «Implementación sin movimiento», su filtro y los comentarios internos |
-| `dashboard/tests/equipo/test_implementadores.py` | Permisos por rol y alta, edición, baja y reactivación de implementadores |
+| `dashboard/tests/panel/test_filtros.py` | El panel de filtros: qué ofrece a cada rol, las cantidades, cómo filtra (varios valores, sin asignar, nada de lo que no se ve) y los chips |
+| `dashboard/tests/equipo/test_implementadores.py` | Permisos por rol y alta, edición, baja y reactivación de cuentas |
+| `dashboard/tests/equipo/test_permisos_por_asignacion.py` | Quién ve y quién actúa sobre cada implementación: por rol y por grupo, en el listado, la ficha, las descargas, la exportación, la ficha de la empresa, el alta y la reasignación |
+| `dashboard/tests/equipo/test_grupos.py` | Alta, edición y baja de grupos, integrantes que se mueven, avisos y registro |
+| `dashboard/tests/equipo/test_rol_admin.py` | Dar el rol Admin, guardas (propio rol, último admin, grupos a cargo) y el registro de cuentas |
+| `dashboard/tests/base.py` | `BaseGrupos`: dos supervisores con sus equipos, una implementadora sin grupo y una implementación sin asignar; `crear_operador` (un Admin para operar sin asignar cada implementación) |
 | `dashboard/tests/test_seed_demo.py` | El comando `seed_demo` |
 | `dashboard/tests/configuracion/test_settings.py` | Configuración del proyecto (clave secreta, HTTPS, correo, log de errores): no es del panel, solo vive en esta carpeta |
 | `automatizacion/tests/congelada/test_panel.py` | La sección «Configuración congelada» de la ficha y su descarga |
@@ -1233,14 +1290,17 @@ Cosas que salen de leer el código y que sorprenden si no se saben:
 
 | Rol | Cómo se reconoce | Ve | Actúa sobre | Asigna |
 |---|---|---|---|---|
-| Implementador | cuenta de staff | todas | las que tiene asignadas | no |
-| Supervisor | cuenta de staff del grupo `Supervisor` (no superusuario) | todas | todas | sí |
-| Admin | superusuario | todas | todas | sí (y administra las cuentas del equipo) |
+| Implementador | cuenta de staff | las que tiene asignadas | las que tiene asignadas | no |
+| Supervisor | cuenta de staff del grupo `Supervisor` (no superusuario) | las suyas y las de los integrantes de los grupos que tiene a cargo | todas las que ve | sí, a sí mismo y a su equipo |
+| Admin | superusuario | todas, también las sin asignar | todas | sí, a cualquiera (y administra cuentas y grupos) |
 
-- La regla vive en un solo lugar, `dashboard/permisos.py`: `puede_asignar`, `puede_accionar` y `puede_accionar_sobre_el_cliente`.
-- En la ficha, cualquier acción (`ACCIONES_DE_LA_FICHA`) sobre una implementación ajena responde 403, y la pantalla se muestra en solo lectura (sin formularios, con un aviso). Reasignar solo lo hacen supervisor y admin.
-- Al crear una implementación, un implementador se la asigna a sí mismo; el supervisor y el admin eligen a quién.
-- En la ficha de la empresa, gestionar el acceso del cliente lo puede hacer quien lleva alguna de sus implementaciones, el supervisor o el admin.
-- Ver, descargar la nómina y exportar es para todo el equipo.
+- **Qué se ve lo decide una sola función**, `dashboard/permisos.implementaciones_visibles(usuario)`; todo lo demás pasa por ella: el listado (`home`), la ficha, `descargar_nomina`, `descargar_congelada`, el reporte (`exportar_implementaciones`, que le pasa el queryset a `generar_reporte_implementaciones_xlsx`), la ficha de la empresa (`clientes_visibles`) y la lista de empresas del alta. Lo que no se ve responde **404** (no 403: no se revela que existe).
+- Un **grupo de trabajo** (`GrupoDeTrabajo`) tiene un supervisor y una lista de integrantes (`Membresia`, con `usuario` único: un implementador integra un solo grupo). El supervisor ve lo asignado a él y a los integrantes de sus grupos (`implementador_asignado__membresia__grupo__supervisor`). Un supervisor o un admin no integra grupos. Las implementaciones sin asignar las ve solo el admin.
+- `puede_accionar` = `puede_ver` y (`puede_asignar` o ser quien la tiene asignada). Hoy equivale a `puede_ver`, pero se mantiene separado: la ficha tiene un modo de solo lectura (`puede_accionar` falso) por si algún día se ve sin poder tocar.
+- En la ficha, cualquier acción (`ACCIONES_DE_LA_FICHA`) sobre una implementación que no se ve responde 404. Reasignar solo lo hacen supervisor y admin, y `asignables(usuario)` limita el destino: el supervisor, a sí mismo y a su equipo activo; el admin, a todo el equipo activo. Si al reasignar la implementación sale de la vista de quien la reasigna, vuelve al listado.
+- Al crear una implementación, un implementador se la asigna a sí mismo; el supervisor elige entre él y su equipo (si manda otro id, queda a su nombre); el admin, a cualquiera.
+- **Empresas del alta.** La lista (`cliente_id`) es global, para no duplicar empresas. De las que el usuario no ve (`datos_de_clientes[...]["ajena"]`) solo se manda nombre, razón social y CUIT: sin usuario, mail, teléfono ni cantidad. Al crear una implementación para una empresa ajena, `_alta_de_implementacion` descarta los datos de empresa del formulario y pasa `heredar_contacto=False` a `crear_implementacion`, así que no se corrige la empresa ni se copia el contacto de implementaciones que no se ven.
+- En la ficha de la empresa, gestionar el acceso del cliente lo puede hacer el admin o quien ve alguna de sus implementaciones.
 - El supervisor tiene su propio tipo de actor (`supervisor`), así que los eventos registran quién asignó o actuó con ese rol.
-- El admin crea las cuentas y elige el rol en `dashboard/implementadores/` (`dashboard/services.py`: `crear_implementador`, `asignar_rol`); también puede cambiarlo después.
+- **Cuentas.** El admin crea las cuentas y elige el rol (Implementador, Supervisor o Admin) en `dashboard/implementadores/`; también puede cambiarlo después (`dashboard/services.py`: `crear_implementador`, `asignar_rol`). El rol Admin es `is_superuser`. Guardas (`error_de_cambio_de_rol`, `error_de_baja`, que levantan `CambioNoPermitido` en los servicios y se muestran como error del formulario o del mensaje): nadie cambia su propio rol ni se da de baja a sí mismo; siempre queda un admin activo; un supervisor con grupos a cargo no cambia de rol. Pasar a Supervisor o Admin saca a la cuenta del grupo en el que estaba (y el panel lo avisa).
+- **Registro.** Cada cambio de cuentas y grupos deja un `EventoDeCuenta` (`cuenta.creada`, `cuenta.rol_cambiado`, `cuenta.baja`, `cuenta.reactivada`, `cuenta.password_reiniciada`, `grupo.creado`, `grupo.modificado`, `grupo.borrado`): quién (`actor`), a quién o a qué grupo (`sujeto`) y un detalle (`datos`, nunca contraseñas). Es de solo agregado, como los eventos de las implementaciones, y se ve solo lectura en `/admin/`.

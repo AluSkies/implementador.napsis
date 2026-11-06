@@ -114,3 +114,47 @@ class PasoNominaTests(BaseWizard):
         self.agregar_empleado()
         respuesta = self.client.post(_url(self.implementacion, 4), {"accion": "continuar"})
         self.assertEqual(respuesta.status_code, 302)
+
+
+class BorrarTodosLosEmpleadosTests(BaseWizard):
+    """Después de un archivo masivo equivocado, el cliente puede vaciar la nómina de una vez."""
+
+    def setUp(self):
+        super().setUp()
+        for i in range(3):
+            self.agregar_empleado(f"2000000000{i}", f"N{i}", f"A{i}")
+
+    def borrar_todos(self):
+        return self.client.post(_url(self.implementacion, 4), {"accion": "eliminar_todos"})
+
+    def test_el_boton_aparece_solo_si_hay_empleados(self):
+        self.assertContains(self.client.get(_url(self.implementacion, 4)), "Borrar todos")
+        self.implementacion.empleados.all().delete()
+        self.assertNotContains(self.client.get(_url(self.implementacion, 4)), "Borrar todos")
+
+    def test_el_boton_pide_confirmacion_con_la_cantidad(self):
+        self.assertContains(self.client.get(_url(self.implementacion, 4)), "¿Borrar los 3 empleados de la nómina?")
+
+    def test_borra_toda_la_nomina_y_avisa(self):
+        respuesta = self.borrar_todos()
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(self.implementacion.empleados.count(), 0)
+        self.assertContains(respuesta, "Se borraron los 3 empleados de la nómina.")
+
+    def test_no_toca_la_nomina_de_otra_implementacion(self):
+        otra = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="Otra"))
+        Empleado.objects.create(implementacion=otra, cuil="20999999990", nombre="X", apellido="Y")
+        self.borrar_todos()
+        self.assertEqual(otra.empleados.count(), 1)
+
+    def test_las_personas_con_rol_quedan_sin_empleado_vinculado(self):
+        self.cargar_roles_completos()
+        self.borrar_todos()
+        self.assertTrue(all(r.empleado_id is None for r in self.implementacion.roles.all()))
+        self.assertEqual(self.implementacion.roles.count(), 3)
+
+    def test_con_la_nomina_vacia_no_hace_nada(self):
+        self.implementacion.empleados.all().delete()
+        antes = self.implementacion.versiones.count()
+        self.borrar_todos()
+        self.assertEqual(self.implementacion.versiones.count(), antes)

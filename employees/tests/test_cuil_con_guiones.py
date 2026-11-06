@@ -5,7 +5,6 @@ import tempfile
 from datetime import date
 
 import openpyxl
-from django.contrib.auth.models import User
 from django.template import Context, Template
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -16,6 +15,7 @@ from employees.models import Empleado
 from employees.services import formatear_cuil, generar_nomina_xlsx, normalizar_cuil
 from onboarding.services import PASO_NOMINA, PASO_ROLES
 from onboarding.tests.base import BaseWizard, _url
+from dashboard.tests.base import crear_operador
 
 
 class FormatearTests(SimpleTestCase):
@@ -93,7 +93,7 @@ class FormularioDeEmpleadoTests(TestCase):
 
 
 class NominaDescargadaTests(TestCase):
-    def test_la_planilla_que_baja_el_equipo_trae_los_cuil_con_guiones(self):
+    def test_la_planilla_que_baja_el_equipo_trae_los_cuil_siempre_sin_guiones(self):
         implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="A"))
         jefe = Empleado.objects.create(implementacion=implementacion, cuil="20111111112", nombre="J", apellido="J")
         Empleado.objects.create(
@@ -103,9 +103,17 @@ class NominaDescargadaTests(TestCase):
         hoja = openpyxl.load_workbook(io.BytesIO(buffer.getvalue())).active
         encabezados = [c.value for c in hoja[1]]
         fila = dict(zip(encabezados, [c.value for c in hoja[3]], strict=True))
-        self.assertEqual(fila["CUIL"], "27-33333333-4")
-        self.assertEqual(fila["Reporta A (CUIL)"], "20-11111111-2")
-        self.assertEqual(fila["Aprobador (CUIL)"], "20-11111111-2")
+        self.assertEqual(fila["CUIL"], "27333333334")
+        self.assertEqual(fila["Reporta A (CUIL)"], "20111111112")
+        self.assertEqual(fila["Aprobador (CUIL)"], "20111111112")
+
+    def test_aunque_se_haya_cargado_con_guiones_sale_sin_ellos(self):
+        implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="A"))
+        empleado = Empleado.objects.create(implementacion=implementacion, cuil="20-11111111-2", nombre="J", apellido="J")
+        buffer = generar_nomina_xlsx([empleado])
+        hoja = openpyxl.load_workbook(io.BytesIO(buffer.getvalue())).active
+        fila = dict(zip([c.value for c in hoja[1]], [c.value for c in hoja[2]], strict=True))
+        self.assertEqual(fila["CUIL"], "20111111112")
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
@@ -130,7 +138,7 @@ class PantallasTests(BaseWizard):
     def test_la_ficha_del_equipo_muestra_nomina_y_roles_con_guiones(self):
         self.agregar_empleado("20111111112", "ANA", "GOMEZ")
         self.role()
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         ficha = self.client.get(url).content.decode()
         self.assertIn("<td>20-11111111-2</td>", ficha)

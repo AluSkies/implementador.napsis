@@ -154,7 +154,7 @@
         function segunRol() { caja.hidden = campoRol.value !== "liquidador"; }
         campoRol.addEventListener("change", segunRol);
         segunRol();
-        grupo.appendChild(caja);
+        (grupo.querySelector("[data-persona-cuerpo]") || grupo).appendChild(caja);  // dentro del cuerpo: se pliega al quitar la persona
         dibujar();
     }
 

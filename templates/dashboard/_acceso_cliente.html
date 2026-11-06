@@ -1,0 +1,26 @@
+{# Acceso del cliente. Sin cuenta: formulario para crearlo. Con cuenta: «Reiniciar contraseña» y «Enviar mail para crear contraseña» en una sola fila, con la aclaración del mail abajo. Lo usan la ficha de la implementación y la de la empresa (`prefijo` evita ids repetidos). #}
+{% if not cliente.usuario %}
+<form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="accion" value="regenerar_acceso">
+    <label for="username_{{ prefijo }}">Usuario</label>
+    <input type="text" name="username" id="username_{{ prefijo }}" placeholder="Se sugiere a partir del nombre si lo dejás vacío">
+    <label for="mail_{{ prefijo }}">Mail del cliente <span class="muted">(opcional)</span></label>
+    <input type="email" name="mail_cliente" id="mail_{{ prefijo }}" placeholder="Si lo cargás, le llega un mail para crear su contraseña">
+    <div class="actions"><button class="btn secondary" type="submit">Crear acceso</button></div>
+</form>
+{% else %}
+<div class="actions compacta">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="regenerar_acceso">
+        <button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button>
+    </form>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="enviar_invitacion">
+        <button class="btn secondary" type="submit">Enviar mail para crear contraseña</button>
+    </form>
+</div>
+<p class="muted">El mail va a {% if cliente.usuario.email %}{{ cliente.usuario.email }}{% else %}la dirección de contacto de la implementación{% endif %}. No cambia la contraseña actual hasta que el cliente use el link.</p>
+{% endif %}

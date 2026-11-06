@@ -99,6 +99,37 @@ class FiltrarYOrdenarImplementacionesTests(TestCase):
         pks = self._pks({"ordenar": "columna-inventada"})
         self.assertCountEqual(pks, [self.pendiente.pk, self.cumplida.pk])
 
+    def test_varios_estados_alcanza_con_cumplir_uno(self):
+        self.assertCountEqual(self._pks({"estado": ["completo", "a_completar"]}), [self.pendiente.pk, self.cumplida.pk])
+        self.assertEqual(self._pks({"estado": ["completo", "no-existe"]}), [self.cumplida.pk])
+
+    def test_un_querydict_con_el_estado_repetido(self):
+        from django.http import QueryDict
+
+        params = QueryDict("estado=completo&estado=a_completar")
+        self.assertCountEqual(self._pks(params), [self.pendiente.pk, self.cumplida.pk])
+
+    def test_filtra_por_empresas_elegidas(self):
+        self.assertEqual(self._pks({"empresa": [str(self.cliente_b.pk)]}), [self.cumplida.pk])
+        self.assertCountEqual(
+            self._pks({"empresa": [str(self.cliente_a.pk), str(self.cliente_b.pk)]}), [self.pendiente.pk, self.cumplida.pk],
+        )
+        self.assertCountEqual(self._pks({"empresa": ["no-es-un-id"]}), [self.pendiente.pk, self.cumplida.pk])
+
+    def test_filtra_por_implementador_y_por_sin_asignar(self):
+        ana = User.objects.create_user("ana", password="x", is_staff=True)
+        self.pendiente.implementador_asignado = ana
+        self.pendiente.save()
+        self.assertEqual(self._pks({"implementador": [str(ana.pk)]}), [self.pendiente.pk])
+        self.assertEqual(self._pks({"implementador": ["sin"]}), [self.cumplida.pk])
+        self.assertCountEqual(
+            self._pks({"implementador": [str(ana.pk), "sin"]}), [self.pendiente.pk, self.cumplida.pk],
+        )
+
+    def test_los_filtros_se_combinan_con_y(self):
+        self.assertEqual(self._pks({"empresa": [str(self.cliente_b.pk)], "estado": "a_completar"}), [])
+        self.assertEqual(self._pks({"empresa": [str(self.cliente_b.pk)], "estado": "completo"}), [self.cumplida.pk])
+
 
 class RegistroDeSnapshotBuildersTests(TestCase):
     """guardar_version() delega en el registro de _SNAPSHOT_BUILDERS — este es el

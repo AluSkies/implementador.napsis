@@ -81,7 +81,7 @@ Para el segundo grupo, el chequeo es `any(a.nivel == messages.ERROR for a in res
 
 **6. Nunca se saltea una acción tocando los modelos.** Escribir directo en un modelo (`implementacion.estado = "cumplida"`, `Empleado.objects.create(...)`) se saltea las precondiciones, el historial, la baja de la validación, el evento y los mails. Si falta una operación, se agrega (checklist de [1.5](#15-checklist-para-agregar-una-operación-nueva)); no se rodea.
 
-**7. Los permisos son de quien llama.** Las operaciones **no verifican permisos** (la única excepción es `agregar_comentario`, que exige un actor del equipo). Hoy los verifica la vista: `staff_member_required` en el panel, `_verificar_acceso_cliente` en el wizard (la cuenta logueada tiene que ser la del cliente de esa implementación) y `admin_requerido` en la gestión de implementadores. Una API tiene que replicar esos controles. También son de la vista y los formularios los bloqueos de edición del cliente: `wizard_step` muestra la pantalla de caso cancelado sin llamar a ningún paso y pasa a solo lectura un caso ya enviado (solo acepta el pedido de revisión), `_step_modulos` ignora el POST si el equipo no dejó editar los módulos y los formularios bloquean los campos que el equipo fijó con las condiciones. Ningún `guardar_*` ni ninguna acción revisa nada de eso: quien los llame directo podría editar un caso cancelado o ya enviado, así que una API tiene que replicar también estos bloqueos. Lo mismo vale para algunas precondiciones que la operación no repite (por ejemplo, `enviar_relevamiento` no vuelve a calcular `pendientes_de_envio`): están marcadas en cada detalle como «de quien llama».
+**7. Los permisos son de quien llama.** Las operaciones **no verifican permisos** (la única excepción es `agregar_comentario`, que exige un actor del equipo). Hoy los verifica la vista: `staff_member_required` en el panel, `_verificar_acceso_cliente` en el wizard (la cuenta logueada tiene que ser la del cliente de esa implementación) y `admin_requerido` en la gestión de cuentas y grupos. Qué implementaciones ve cada cuenta lo decide `dashboard.permisos.implementaciones_visibles` (implementador: las suyas; supervisor: las suyas y las de los integrantes de sus grupos; admin: todas). Una API tiene que replicar esos controles. También son de la vista y los formularios los bloqueos de edición del cliente: `wizard_step` muestra la pantalla de caso cancelado sin llamar a ningún paso y pasa a solo lectura un caso ya enviado (solo acepta el pedido de revisión), `_step_modulos` ignora el POST si el equipo no dejó editar los módulos y los formularios bloquean los campos que el equipo fijó con las condiciones. Ningún `guardar_*` ni ninguna acción revisa nada de eso: quien los llame directo podría editar un caso cancelado o ya enviado, así que una API tiene que replicar también estos bloqueos. Lo mismo vale para algunas precondiciones que la operación no repite (por ejemplo, `enviar_relevamiento` no vuelve a calcular `pendientes_de_envio`): están marcadas en cada detalle como «de quien llama».
 
 #### Anatomía de una operación
 
@@ -231,6 +231,7 @@ Todas las operaciones públicas. «Quién» es quién la ejecuta hoy en el produ
 | `agregar_empleado` | `onboarding/services/nomina.py` | Agrega un empleado a mano | cliente o equipo | `empleado.agregado` |
 | `editar_empleado` | `onboarding/services/nomina.py` | Cambia los datos de un empleado | cliente o equipo | `empleado.editado` |
 | `eliminar_empleado` | `onboarding/services/nomina.py` | Borra un empleado de la nómina | cliente o equipo | `empleado.eliminado` |
+| `eliminar_todos_los_empleados` | `onboarding/services/nomina.py` | Vacía la nómina («Borrar todos»); devuelve cuántos borró | cliente o equipo | `nomina.vaciada` |
 | `vincular_roles_con_nomina` | `onboarding/services/roles.py` | Liga cada rol a su empleado por CUIL (auxiliar) | sistema (la llaman `guardar_roles`, la importación y el alta y la edición de empleados) | ninguno propio |
 | `enviar_relevamiento` | `onboarding/acciones.py` | El cliente envía el relevamiento completo | cliente | `envio.confirmado` (+ `implementacion.fecha_cambiada`, `mail.*`) |
 | `pedir_revision` | `onboarding/acciones.py` | El cliente pide que lo contacten | cliente | `revision.solicitada` (+ `mail.*`) |
@@ -260,7 +261,7 @@ Todas las operaciones públicas. «Quién» es quién la ejecuta hoy en el produ
 | `resumen_importacion` | `onboarding/services/nomina.py` | Mensajes para mostrar después de importar | cualquiera |
 | `leer_archivo_empleados` | `employees/services.py` | Lee y valida un archivo de nómina sin guardar nada | cualquiera |
 | `resumen_implementacion` | `clients/services.py` | Todo lo relevado en un caso, para mostrar | cualquiera |
-| `filtrar_y_ordenar_implementaciones`, `con_ultimo_movimiento` | `clients/services.py` | El listado del panel, con filtros, orden y último movimiento | equipo |
+| `filtrar_y_ordenar_implementaciones`, `con_ultimo_movimiento` | `clients/services.py` | El listado del panel, con filtros (varios valores por filtro: empresa, implementador, estado), orden y último movimiento | equipo |
 | `foto_de_seccion` | `clients/services.py` | Cómo está hoy una sección (formato del historial) | cualquiera |
 | Estado de `Implementacion` (`estado_visual`, `marca_de_devolucion`, `sin_movimiento`…) | `clients/models.py` | Estado visible, devolución abierta y marca de «sin movimiento» | cualquiera |
 | `generar_nomina_xlsx`, `generar_plantilla_xlsx`, `generar_reporte_implementaciones_xlsx` | `employees/services.py`, `dashboard/reportes.py` | Exportaciones a .xlsx | equipo (la nómina y el reporte); cliente (la plantilla) |
@@ -342,10 +343,11 @@ Las operaciones **no impiden** todas las transiciones que el diagrama no muestra
 def crear_implementacion(
     actor, *, cliente=None, datos_cliente=None, username="", mail_cliente="", implementador=None, creado_por=None,
     modulo_ids=(), modulos_editables=True, liquidacion_ids=(), liquidaciones_editables=True, condiciones=None,
-    origen=Implementacion.ORIGEN_PORTAL, id_externo=None, base_url=None,
+    origen=Implementacion.ORIGEN_PORTAL, id_externo=None, base_url=None, heredar_contacto=True,
 ):
 ```
 
+- **Contacto heredado:** en una empresa que ya tuvo implementaciones, el teléfono y (si no se escribió otro) el mail salen de la última; con `heredar_contacto=False` no se copia nada (el panel lo apaga cuando quien crea no ve esas implementaciones).
 - **Liquidaciones:** `liquidacion_ids` son los tipos de liquidación disponibles para el cliente (vacío: los elige él en el paso 6). Con `liquidaciones_editables=False` quedan **bloqueadas** (el cliente las ve de solo lectura con el texto «Estas son las liquidaciones de las que vas a disponer en tu Napsis») y hay que elegir al menos una, o la operación devuelve un error sin crear nada. El evento `implementacion.creada` registra las liquidaciones y si quedaron bloqueadas.
 - **Parámetros:** `cliente` es una empresa existente (`Cliente`); si no, `datos_cliente` es `{"nombre", "razon_social", "cuits"}`. `username` es el usuario sugerido para la cuenta (se normaliza y, si ya existe, se le agrega un número). `implementador` y `creado_por` son cuentas de usuario del equipo, o `None` si lo crea un sistema. `modulo_ids` son ids de `Modulo`. `condiciones` es un `CondicionesForm` ya validado, o `None`. `origen` + `id_externo` identifican el caso en el sistema que lo originó (`Implementacion.ORIGEN_PORTAL`, `ORIGEN_HUBSPOT`, `ORIGEN_API`).
 - **Precondiciones:** `mail_cliente` vacío o válido; si no se pasa `cliente`, `datos_cliente["nombre"]` no vacío; `datos_cliente["cuits"]` es opcional y, si viene, tiene que pasar la normalización de CUITs. Razón social y CUIT son opcionales acá: si no se cargan, el cliente los completa en el paso 1.
@@ -414,7 +416,7 @@ if not resultado.ok:
 def reasignar(actor, implementacion, nuevo):
 ```
 
-- **Precondiciones (de quien llama):** `nuevo` es una cuenta de usuario del equipo y está activa; el panel la elige entre `dashboard.services.asignables()`. La operación no lo verifica.
+- **Precondiciones (de quien llama):** `nuevo` es una cuenta de usuario del equipo y está activa; el panel la elige entre `dashboard.services.asignables(usuario)` (el supervisor, solo dentro de su equipo). La operación no lo verifica.
 - **Efecto:** en una transacción guarda `implementador_asignado = nuevo` y registra `{desde, hacia}` con los nombres de usuario (`desde` es `None` si no tenía a nadie).
 - **Devuelve:** `Resultado(implementacion, avisos)` con un aviso `SUCCESS` («Implementación asignada a …»).
 - **Errores:** ninguno propio. Con `nuevo=None` falla con una excepción y se deshace.
@@ -694,7 +696,7 @@ print(firma.estado)   # «propuesta»
 
 #### 3.2.2 Nómina de empleados
 
-Estas operaciones guardan antes la foto de la sección `empleados` en el historial, registran sus eventos con `seccion="empleados"` y, si dejaron la nómina distinta, le quitan la validación al caso (`estado.validacion_revocada`): `agregar_empleado` y `eliminar_empleado` siempre, `editar_empleado` solo si hubo cambios e `importar_archivo_empleados` solo si hubo empleados nuevos o con datos actualizados (un archivo que únicamente cambia `reporta_a` o `aprobador` no la quita). El evento nunca copia lo que la base ya conserva (los empleados nuevos); sí guarda lo que pisa o borra.
+Estas operaciones guardan antes la foto de la sección `empleados` en el historial, registran sus eventos con `seccion="empleados"` y, si dejaron la nómina distinta, le quitan la validación al caso (`estado.validacion_revocada`): `agregar_empleado`, `eliminar_empleado` y `eliminar_todos_los_empleados` (si había empleados) siempre, `editar_empleado` solo si hubo cambios e `importar_archivo_empleados` solo si hubo empleados nuevos o con datos actualizados (un archivo que únicamente cambia `reporta_a` o `aprobador` no la quita). El evento nunca copia lo que la base ya conserva (los empleados nuevos); sí guarda lo que pisa o borra.
 
 #### `importar_archivo_empleados`
 
@@ -916,7 +918,7 @@ def validar_firma(actor, implementacion):
 - **Precondiciones:** hay una firma con imagen cargada.
 - **Efecto:** dentro del patrón de sección (`firma`): estado «validada», sin motivos ni comentario, `validada_por` = etiqueta del actor, `validada_en` = ahora. Si la firma **ya estaba validada**, no hace nada (sin evento ni avisos).
 - **Devuelve:** `Resultado(implementacion, avisos)` con `SUCCESS` «Firma validada.» (sin avisos si ya estaba).
-- **Errores:** un `Aviso` de nivel `ERROR`: «Todavía no hay una firma cargada para validar.».
+- **Errores:** un `Aviso` de nivel `ERROR`: «Todavía no hay una firma ubicada para validar.».
 - **La llama hoy:** `dashboard/views.py::_accion_validar_firma`.
 
 ```python
@@ -936,7 +938,7 @@ def observar_firma(actor, implementacion, motivos, comentario="", base_url=None)
 - **Precondiciones:** hay una firma con imagen; `motivos` es una lista de códigos del catálogo cerrado (`ilegible`, `baja_calidad`, `tamano_excesivo`, `superpone_texto`, `no_replicable`, `otro`) con al menos uno válido (se quitan los repetidos y los desconocidos); el caso está pendiente y enviado por el cliente. `comentario` es opcional.
 - **Efecto:** deja la firma «observada» con sus motivos y comentario (evento `firma.observada` con `{"motivos", "comentario", "cambios"}`; si el caso estaba validado, a continuación queda `estado.validacion_revocada`, de la sección `firma`) y **devuelve el caso al cliente** llamando a `devolver_al_cliente` con un texto armado con los motivos y la observación de la sección `firma`: ronda, evento `ronda.devuelta` y mail. Son **dos transacciones seguidas**: si la segunda falla con una excepción, la firma queda observada sin ronda.
 - **Devuelve:** lo mismo que `devolver_al_cliente`.
-- **Errores:** un `Aviso` de nivel `ERROR` sin tocar nada: «Todavía no hay una firma cargada para observar.», «Elegí al menos un motivo de la lista.» o «Solo se puede devolver una implementación que el cliente ya envió.».
+- **Errores:** un `Aviso` de nivel `ERROR` sin tocar nada: «Todavía no hay una firma ubicada para observar.», «Elegí al menos un motivo de la lista.» o «Solo se puede devolver una implementación que el cliente ya envió.».
 - **La llama hoy:** `dashboard/views.py::_accion_observar_firma`.
 
 ```python
@@ -1300,7 +1302,7 @@ SISTEMA_PORTAL  # Actor("sistema", "portal")
 ```
 
 - **Precondiciones:** `tipo` es uno de `actores.TIPOS`; otro valor levanta `ValueError`. **Efecto:** ninguno.
-- **Devuelve:** un `Actor` inmutable. `de_usuario` da: superusuario → `admin`, staff → `implementador`, el resto → `cliente`; sin cuenta o anónimo → `SISTEMA_PORTAL`. Un servicio o un agente se arma a mano.
+- **Devuelve:** un `Actor` inmutable. `de_usuario` da: superusuario → `admin`, staff del grupo `Supervisor` → `supervisor`, el resto del staff → `implementador`, el resto → `cliente`; sin cuenta o anónimo → `SISTEMA_PORTAL`. Un servicio o un agente se arma a mano.
 
 ```python
 actor = Actor.de_usuario(request.user)      # desde una vista
@@ -1534,7 +1536,7 @@ Dataclasses de `onboarding/acciones.py`. Las **acciones** devuelven un `Resultad
 | Con Recibo Digital o Legajos: un Apoderado o Liquidador cuyo CUIL no figura en la nómina (también si no tiene CUIL cargado) | 5 | … no figura en la nómina: cargalo como empleado o corregí su CUIL. |
 | Con Recibo Digital: sin modelo de recibo | 6 | Subir el modelo de recibo (PDF). |
 | Con Recibo Digital: ningún tipo de liquidación activo | 6 | Elegir al menos un tipo de liquidación. |
-| Con Recibo Digital: sin firma o sin imagen | 7 | Subir la imagen de la firma y ubicarla sobre el recibo. |
+| Con Recibo Digital: sin firma ubicada | 7 | Ubicar la firma sobre el recibo. (La imagen de la firma es opcional.) |
 | Con Recibo Digital: firma «observada» | 7 | Ajustar la firma según lo que pidió el equipo de Napsis. |
 | Sin empleados | 4 | Cargar la nómina de empleados (al menos una persona). |
 | Con empleados y Recibo Digital: algunos sin fecha de ingreso | 4 | Completar la fecha de ingreso de N empleado(s) (es obligatoria para Recibo Digital). |
@@ -1577,9 +1579,9 @@ Una fila de `ConfiguracionCongelada` por cada validación. Es de **solo lectura*
 |---|---|
 | `esquema` | La versión del esquema (el valor de `VERSION_ESQUEMA`) |
 | `implementacion` | `{"uuid", "origen", "id_externo"}` |
-| `empresa` | `{"razon_social", "cuits" (lista de textos), "telefono", "mail_contacto"}` |
+| `empresa` | `{"razon_social", "cuits" (lista de textos, de 11 dígitos sin guiones), "telefono", "mail_contacto"}` |
 | `fecha_salida_productivo` | Fecha ISO (`AAAA-MM-DD`) o `None` |
-| `condiciones` | `{"tipo_firma", "nomenclatura_pdf", "segmentacion_liquidador", "liquidador_utilizado", "cantidad_capitas", "max_roles"}` |
+| `condiciones` | `{"tipo_firma", "nomenclatura_pdf", "segmentacion_liquidador", "liquidador_utilizado", "cantidad_capitas", "max_roles", "max_documentos"}` |
 | `modulos` | Lista ordenada de códigos de los módulos activos |
 | `liquidaciones` | Lista ordenada de códigos de los tipos de liquidación activos |
 | `firma` | `None` o `{"pagina", "geometria", "estado"}` (`geometria`: tres recuadros `empresa`, `conforme` y `disconforme`, cada uno con `x`, `y`, `ancho` y `alto` entre 0 y 1) |
@@ -1614,7 +1616,7 @@ El guion bajo marca que son detalles de implementación. No las importes ni las 
 | `onboarding/acciones.py` | `_avisar_por_mail`, `_invitar`, `_aviso_de_credenciales`, `_validar_mail`, `_puede_revisarse` |
 | `onboarding/services/nomina.py` | `_valor_json`, `_resolver_jerarquia_importada`, `_cargar_empleados` |
 | `clients/services.py` | `_snapshot_*` (una por sección), `_SNAPSHOT_BUILDERS`, `_fresca` |
-| `automatizacion/congelada.py` | `_codigo`, `_cuits`, `_documentos`, `_archivos_de`, `_copiar_archivos` |
+| `automatizacion/congelada.py` | `_codigo`, `_documentos`, `_archivos_de`, `_copiar_archivos` |
 | `automatizacion/correlacion.py` | `_actual`, `_VALIDO` |
 | `notifications/services.py` | `_resumen_dict`, `_destinatarios`, `_base_url`, `_detalle_url`, `_enviar_mail_equipo`, `_enviar_mail_cliente` |
 | `onboarding/views.py` y `dashboard/views.py` | Todo lo que empieza con `_` (`_actor`, `_invalido`, `_accion_*`, `_manejar_accion_implementacion`…): las vistas **usan** el contrato, no son parte de él |
@@ -1625,8 +1627,8 @@ No tienen guion bajo, pero **no son operaciones del contrato**: son piezas con l
 
 - **`notifications/services.py`** (`notificar_implementacion_completa`, `notificar_revision_solicitada`, `notificar_cliente_relevamiento_recibido`, `notificar_cliente_devuelta`, `notificar_cliente_implementacion_cumplida`, `enviar_invitacion`, `mail_del_cliente`): llamarlos directo saltea el control de que un mail caído no rompa nada y no deja `mail.enviado` ni `mail.fallido`. Los mails salen por las acciones.
 - **`clients/services.py`**: `cambio_de_seccion`, `guardar_version`, `revocar_validacion`, `registrar_snapshot_builder` (piezas para escribir operaciones), `crear_o_resetear_acceso` (la usan `crear_implementacion` y `entregar_acceso`; usada suelta crea cuentas o reinicia contraseñas sin dejar evento) y `generar_password` (la usan esa función y `dashboard/services.py`; solo devuelve una contraseña al azar, no toca cuentas).
-- **`dashboard/services.py`** (`crear_implementador`, `resetear_password`, `dar_de_baja`, `reactivar`, `implementadores`, `asignables`): administración de las cuentas del equipo. No reciben actor y no dejan evento: están fuera del contrato (`asignables()` es solo la lista de a quién se puede reasignar).
-- **`employees/services.py`**: `parse_archivo_empleados`, `normalizar_texto`, `normalizar_cuil`, `snapshot_empleados`. Utilidades de parseo y normalización.
+- **`dashboard/services.py`** (`crear_implementador`, `asignar_rol`, `resetear_password`, `dar_de_baja`, `reactivar`, `cuentas_del_equipo`, `asignables`, y los grupos de trabajo: `crear_grupo`, `actualizar_grupo`, `borrar_grupo`): administración de las cuentas del equipo y de sus grupos. No reciben el actor de las operaciones: dejan un `EventoDeCuenta` propio (quién, a quién, qué) y están fuera del contrato (`asignables(usuario)` es solo la lista de a quién puede reasignar esa cuenta).
+- **`employees/services.py`**: `normalizar_texto`, `normalizar_cuil`, `snapshot_empleados`. Utilidades de parseo y normalización.
 - **Constantes de `onboarding/services/`** que el `__init__.py` re-exporta en `__all__` además de las operaciones: `LOTE_ACTUALIZACION`, `CAMPOS_EMPLEADO_IMPORTADOS`, `MAX_CORRECCIONES_EN_EVENTO`, `MAX_ERRORES_EN_EVENTO`, `PASO_REQUIERE_MODULO` y `TOTAL_PASOS`. Son detalles de la importación, de los eventos y de los pasos: no son parte del contrato.
 - **`automatizacion/correlacion.py`**: aparte de `nueva` y `actual`, `desde_encabezado`, `CorrelacionMiddleware` y `CorrelacionFilter` son infraestructura (el middleware asigna el identificador en cada pedido web y el filtro lo agrega a cada línea del log): no se llaman desde una operación.
 - **`notifications/alertas.py`**: el aviso por mail de los errores 500 (un handler de logging), sin relación con las operaciones.

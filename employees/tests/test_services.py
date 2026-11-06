@@ -5,8 +5,8 @@ from clients.models import Cliente, Implementacion
 from employees.models import Empleado
 from employees.services import (
     normalizar_cuil,
+    leer_archivo_empleados,
     normalizar_texto,
-    parse_archivo_empleados,
     snapshot_empleados,
 )
 
@@ -32,10 +32,11 @@ class NormalizarTests(TestCase):
         self.assertEqual(normalizar_cuil(None), "")
 
 
-class ParseArchivoEmpleadosTests(TestCase):
+class LeerArchivoEmpleadosTests(TestCase):
     def test_fila_valida_se_parsea_correctamente(self):
         archivo = _csv("CUIL,Nombre,Apellido,Mail\n20111111112,Juan,Pérez,juan@example.com\n")
-        filas, errores = parse_archivo_empleados(archivo)
+        lectura = leer_archivo_empleados(archivo)
+        filas, errores = lectura.filas, lectura.errores
 
         self.assertEqual(errores, [])
         self.assertEqual(len(filas), 1)
@@ -46,7 +47,8 @@ class ParseArchivoEmpleadosTests(TestCase):
 
     def test_falta_un_campo_obligatorio(self):
         archivo = _csv("CUIL,Nombre,Apellido\n20111111112,Juan,\n")
-        filas, errores = parse_archivo_empleados(archivo)
+        lectura = leer_archivo_empleados(archivo)
+        filas, errores = lectura.filas, lectura.errores
 
         self.assertEqual(filas, [])
         self.assertEqual(len(errores), 1)
@@ -55,7 +57,8 @@ class ParseArchivoEmpleadosTests(TestCase):
 
     def test_cuil_invalido_por_longitud(self):
         archivo = _csv("CUIL,Nombre,Apellido\n123,Juan,Pérez\n")
-        _filas, errores = parse_archivo_empleados(archivo)
+        lectura = leer_archivo_empleados(archivo)
+        _filas, errores = lectura.filas, lectura.errores
 
         self.assertEqual(len(errores), 1)
         self.assertIn("CUIL inválido", errores[0]["mensaje"])
@@ -66,7 +69,8 @@ class ParseArchivoEmpleadosTests(TestCase):
             "20111111112,Juan,Pérez\n"
             "20111111112,Otro,Empleado\n"
         )
-        filas, errores = parse_archivo_empleados(archivo)
+        lectura = leer_archivo_empleados(archivo)
+        filas, errores = lectura.filas, lectura.errores
 
         self.assertEqual(len(filas), 1)
         self.assertEqual(len(errores), 1)
@@ -75,7 +79,8 @@ class ParseArchivoEmpleadosTests(TestCase):
 
     def test_header_con_variacion_de_mayusculas_y_espacios_igual_matchea(self):
         archivo = _csv("cuil ,  nombre,APELLIDO\n20111111112,Juan,Pérez\n")
-        filas, errores = parse_archivo_empleados(archivo)
+        lectura = leer_archivo_empleados(archivo)
+        filas, errores = lectura.filas, lectura.errores
 
         self.assertEqual(errores, [])
         self.assertEqual(filas[0]["cuil"], "20111111112")
@@ -85,7 +90,8 @@ class ParseArchivoEmpleadosTests(TestCase):
             "CUIL,Nombre,Apellido,Es Supervisor (SI/NO),Home Office (SI/NO)\n"
             "20111111112,Juan,Pérez,SI,NO\n"
         )
-        filas, _errores = parse_archivo_empleados(archivo)
+        lectura = leer_archivo_empleados(archivo)
+        filas, _errores = lectura.filas, lectura.errores
 
         self.assertTrue(filas[0]["es_supervisor"])
         self.assertFalse(filas[0]["home_office"])

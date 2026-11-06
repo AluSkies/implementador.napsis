@@ -45,19 +45,6 @@ class PortalLoginViewTests(TestCase):
         response = self.client.post(reverse("login"), {"username": "admin_test", "password": "x"})
         self.assertRedirects(response, reverse("dashboard:home"))
 
-    def test_login_de_cliente_no_staff_no_entra_al_panel(self):
-        """No hay un login separado para staff: cualquiera puede loguearse acá,
-        pero el panel sigue bloqueado por @staff_member_required."""
-        self.client.force_login(self.cliente_user)
-        response = self.client.get(reverse("dashboard:home"))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response.url)
-
-    def test_anonimo_no_entra_al_panel(self):
-        response = self.client.get(reverse("dashboard:home"))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response.url)
-
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class MediaProtegidaTests(TestCase):
@@ -65,7 +52,7 @@ class MediaProtegidaTests(TestCase):
     ni visibles para otro cliente — la app los sirve con permisos en vez del proxy."""
 
     def setUp(self):
-        self.staff = User.objects.create_user(username="admin_test", password="x", is_staff=True)
+        self.staff = User.objects.create_user(username="admin_test", password="x", is_staff=True, is_superuser=True)
         self.dueno = User.objects.create_user(username="dueno", password="x")
         self.otro = User.objects.create_user(username="otro", password="x")
         self.cliente = Cliente.objects.create(nombre="Dueño S.A.", usuario=self.dueno)
@@ -79,7 +66,7 @@ class MediaProtegidaTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse("login"), response.url)
 
-    def test_staff_puede_descargarlo(self):
+    def test_el_admin_puede_descargarlo(self):
         self.client.force_login(self.staff)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)

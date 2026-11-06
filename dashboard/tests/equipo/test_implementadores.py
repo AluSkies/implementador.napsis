@@ -119,21 +119,25 @@ class AltaDeImplementadorTests(BaseRoles):
 
 
 class ListadoTests(BaseRoles):
-    def test_lista_solo_implementadores_no_admins_ni_clientes(self):
+    def test_lista_a_todo_el_equipo_y_no_a_los_clientes(self):
         self.client.force_login(self.admin)
         nombres = [u.username for u in self.client.get(reverse(LISTA)).context["implementadores"]]
-        self.assertEqual(nombres, ["impl_t"])
+        self.assertEqual(nombres, ["admin_t", "impl_t"])
 
     def test_cuenta_las_implementaciones_que_creo_cada_uno(self):
         cliente = Cliente.objects.get(nombre="Empresa de Prueba")
         Implementacion.objects.create(cliente=cliente, creado_por=self.impl)
         Implementacion.objects.create(cliente=cliente, creado_por=self.impl)
-        self.assertEqual(services.implementadores().get(pk=self.impl.pk).creadas, 2)
+        self.assertEqual(services.cuentas_del_equipo().get(pk=self.impl.pk).creadas, 2)
 
-    def test_un_admin_o_un_cliente_no_se_pueden_abrir_por_esta_pantalla(self):
+    def test_una_cuenta_de_cliente_no_se_puede_abrir_por_esta_pantalla(self):
         self.client.force_login(self.admin)
-        self.assertEqual(self.client.get(self.detalle(self.admin)).status_code, 404)
         self.assertEqual(self.client.get(self.detalle(self.cliente_user)).status_code, 404)
+
+    def test_otro_admin_si_se_puede_abrir(self):
+        otro = User.objects.create_user(username="admin_2", password="x", is_staff=True, is_superuser=True)
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(self.detalle(otro)).status_code, 200)
 
 
 class ModificacionYBajaTests(BaseRoles):

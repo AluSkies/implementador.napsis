@@ -265,7 +265,7 @@ class ConfiguracionForm(ImagenesConMedidasMixin, LiquidacionesForm, forms.ModelF
         model = Implementacion
         fields = CAMPOS_CONFIGURACION
         help_texts = {
-            "tipo_firma": "Digital requiere token físico ENCODE. Electrónica requiere adjuntar imagen de firma hológrafa.",
+            "tipo_firma": "Digital requiere token físico ENCODE. Electrónica lleva el certificado de firma electrónica en el recuadro de la firma; la imagen de la firma hológrafa es opcional.",
             "segmentacion_liquidador": "Por defecto 'AREA UNICA' si el liquidador ve todos los recibos sin segmentar.",
         }
 
@@ -332,7 +332,7 @@ class FirmaForm(forms.Form):
     —así los edita una persona—; se guardan como fracciones (0 a 1) para que no dependan del tamaño del PDF."""
 
     imagen = forms.FileField(
-        required=False, label="Imagen de la firma del apoderado", validators=[validar_tamanio_archivo],
+        required=False, label="Imagen de la firma del apoderado (OPCIONAL)", validators=[validar_tamanio_archivo],
         widget=forms.ClearableFileInput(attrs={"accept": "image/png,image/jpeg"}),
         help_text="JPG o PNG. Lo ideal es la firma sobre fondo blanco liso, o un PNG con fondo transparente.",
     )
@@ -390,8 +390,6 @@ class FirmaForm(forms.Form):
 
     def clean(self):
         datos = super().clean()
-        if not datos.get("imagen") and not (self.firma and self.firma.imagen):
-            self.add_error("imagen", "Subí la imagen de la firma.")
         for codigo, nombre in UbicacionFirma.ELEMENTOS:
             recuadro = {campo: datos.get(f"{codigo}_{campo}") for campo in CAMPOS_DE_RECUADRO}
             if None in recuadro.values():
@@ -459,14 +457,27 @@ class DocumentosLegajoForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, tipos_qs=None, estado_por_tipo=None, **kwargs):
+    def __init__(self, *args, tipos_qs=None, estado_por_tipo=None, max_documentos=0, **kwargs):
         super().__init__(*args, **kwargs)
+        self.max_documentos = max_documentos  # 0 = sin límite
         estado_por_tipo = estado_por_tipo or {}
         for tipo in tipos_qs:
             estado = estado_por_tipo.get(tipo.id, {})
             self.fields[f"tipo_{tipo.id}_activo"] = forms.BooleanField(
                 label=tipo.nombre, required=False, initial=estado.get("activo", False)
             )
+
+    def clean(self):
+        datos = super().clean()
+        if self.max_documentos:
+            elegidos = sum(1 for nombre, valor in datos.items() if nombre.startswith("tipo_") and valor)
+            elegidos += len(self.parse_otros_documentos())
+            if elegidos > self.max_documentos:
+                self.add_error(None, (
+                    f"Podés elegir hasta {self.max_documentos} documentos y elegiste {elegidos}. "
+                    "Quitá los que sobran para continuar."
+                ))
+        return datos
 
     def parse_otros_documentos(self):
         """Devuelve [(nombre, [campo1, campo2, ...]), ...] a partir del textarea libre."""
@@ -509,10 +520,16 @@ class CondicionesForm(forms.Form):
                   "cargar al menos un Apoderado/Firmante, un Liquidador y un Admin. de RRHH.",
     )
 
+    max_documentos = forms.IntegerField(
+        label="Documentos que puede elegir el cliente", min_value=0, max_value=99, required=False, initial=0,
+        help_text="Cuántos tipos de documento del legajo digital puede elegir el cliente. 0 = sin límite.",
+    )
+
     def __init__(self, *args, implementacion=None, **kwargs):
         super().__init__(*args, **kwargs)
         if implementacion is not None:
             self.initial.update({
+                "max_documentos": implementacion.max_documentos,
                 "tipo_firma": "" if implementacion.tipo_firma_editable else implementacion.tipo_firma,
                 "nomenclatura_pdf": "" if implementacion.nomenclatura_editable else implementacion.nomenclatura_pdf,
                 "area_unica": not implementacion.segmentacion_editable,
@@ -522,10 +539,14 @@ class CondicionesForm(forms.Form):
     def clean_max_roles(self):
         return self.cleaned_data.get("max_roles") or 6
 
+    def clean_max_documentos(self):
+        return self.cleaned_data.get("max_documentos") or 0
+
     def aplicar(self, implementacion):
         """Vuelca las condiciones en la implementación (sin guardarla)."""
         datos = self.cleaned_data
         implementacion.max_roles = datos["max_roles"]
+        implementacion.max_documentos = datos["max_documentos"]
 
         implementacion.tipo_firma_editable = not datos["tipo_firma"]
         if datos["tipo_firma"]:

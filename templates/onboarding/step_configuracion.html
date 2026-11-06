@@ -2,7 +2,47 @@
 {% block step_content %}
 <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    {{ form.as_p }}
+    {% for campo in form.hidden_fields %}{{ campo }}{% endfor %}
+    {% if form.non_field_errors %}<ul class="errorlist nonfield">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+
+    <section class="seccion">
+        <h3>Firma y recibos</h3>
+        <div class="grilla">
+            {% include "onboarding/_campo.html" with campo=form.tipo_firma %}
+            {% include "onboarding/_campo.html" with campo=form.liquidador_utilizado %}
+            {% include "onboarding/_campo.html" with campo=form.nomenclatura_pdf %}
+            {% include "onboarding/_campo.html" with campo=form.cantidad_capitas %}
+        </div>
+        {% include "onboarding/_campo.html" with campo=form.segmentacion_liquidador %}
+    </section>
+
+    <section class="seccion liquidaciones">
+        <h3>Liquidaciones {% include "onboarding/_ayuda.html" with texto=form.tipos_liquidacion.help_text %}</h3>
+        {% if implementacion.liquidaciones_editables_por_cliente %}
+            <p class="muted">{{ form.tipos_liquidacion.label }}</p>
+        {% else %}
+            <p class="bloqueo">&#128274; {{ form.tipos_liquidacion.label }}</p>
+        {% endif %}
+        <div data-seleccionable="todas">{{ form.tipos_liquidacion }}</div>
+        {{ form.tipos_liquidacion.errors }}
+    </section>
+
+    <section class="seccion">
+        <h3>Modelo de recibo {% if not implementacion.modelo_recibo %}<span class="oblig">obligatorio</span>{% endif %}</h3>
+        {% include "onboarding/_campo.html" with campo=form.modelo_recibo %}
+    </section>
+
+    <details class="desplegable" {% if form.banner.errors or form.logo.errors %}open{% endif %}>
+        <summary><span>Elementos gráficos <em>(OPCIONAL)</em></span><span class="resumen">Banner, logo y firma</span></summary>
+        <div class="desplegable-cuerpo">
+            {% include "onboarding/_campo.html" with campo=form.banner %}
+            {% include "onboarding/_campo.html" with campo=form.logo %}
+            <p class="muted">La imagen de la firma del apoderado <strong>(OPCIONAL)</strong> se sube en el paso
+                <a href="{% url 'onboarding:wizard_step' token=implementacion.token step=paso_firma %}">Firma del recibo</a>,
+                junto con el lugar donde va.</p>
+        </div>
+    </details>
+
     <div class="actions">
         <button class="btn" type="submit">Continuar</button>
     </div>

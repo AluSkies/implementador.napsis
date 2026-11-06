@@ -57,3 +57,42 @@ class EmpleadosTests(TestCase):
     def test_eliminar_empleado_con_id_no_numerico_no_guarda_version(self):
         services.eliminar_empleado(self.implementacion, "abc", TEST)
         self.assertFalse(self.implementacion.versiones.filter(seccion="empleados").exists())
+
+
+class VaciarLaNominaTests(TestCase):
+    """Borrar todos los empleados deja la foto anterior y el evento."""
+
+    def setUp(self):
+        self.implementacion = Implementacion.objects.create(cliente=Cliente.objects.create(nombre="Empresa de Prueba"))
+
+    def cargar(self, cantidad):
+        from employees.models import Empleado
+
+        for i in range(cantidad):
+            Empleado.objects.create(implementacion=self.implementacion, cuil=f"2000000000{i}", nombre=f"N{i}", apellido="A")
+
+    def test_borra_todo_y_devuelve_la_cantidad(self):
+        self.cargar(4)
+        self.assertEqual(services.eliminar_todos_los_empleados(self.implementacion, TEST), 4)
+        self.assertEqual(self.implementacion.empleados.count(), 0)
+
+    def test_deja_la_foto_de_la_nomina_completa_en_el_historial(self):
+        self.cargar(2)
+        services.eliminar_todos_los_empleados(self.implementacion, TEST)
+        version = self.implementacion.versiones.get(seccion="empleados")
+        self.assertEqual(len(version.datos), 2)
+
+    def test_registra_el_evento_con_la_cantidad(self):
+        from automatizacion.models import EventoImplementacion
+
+        self.cargar(2)
+        services.eliminar_todos_los_empleados(self.implementacion, TEST)
+        evento = EventoImplementacion.objects.get(accion="nomina.vaciada")
+        self.assertEqual((evento.seccion, evento.datos["cantidad"]), ("empleados", 2))
+
+    def test_sin_empleados_no_guarda_version_ni_evento(self):
+        from automatizacion.models import EventoImplementacion
+
+        self.assertEqual(services.eliminar_todos_los_empleados(self.implementacion, TEST), 0)
+        self.assertFalse(self.implementacion.versiones.filter(seccion="empleados").exists())
+        self.assertFalse(EventoImplementacion.objects.filter(accion="nomina.vaciada").exists())

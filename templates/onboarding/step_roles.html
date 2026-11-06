@@ -24,8 +24,13 @@
         <ul class="messages"><li class="error">{{ formset.non_form_errors|join:" " }}</li></ul>
     {% endif %}
     {% for f in formset %}
-        <fieldset>
+        <fieldset data-persona>
             <legend>Persona {{ forloop.counter }}</legend>
+            <p class="persona-aviso" data-persona-aviso hidden>
+                Persona {{ forloop.counter }}: se va a quitar cuando toques «Continuar».
+                <button type="button" class="btn secondary" data-persona-deshacer>Deshacer</button>
+            </p>
+            <div data-persona-cuerpo>
             {% if nomina %}
             <p>
                 <label>Buscar en la nómina
@@ -33,7 +38,18 @@
                 </label>
             </p>
             {% endif %}
-            {{ f.as_p }}
+            {% for campo in f %}
+                {% if campo.name == "DELETE" %}
+                    <span data-quitar-casilla hidden>{{ campo }}</span>
+                {% elif campo.is_hidden %}
+                    {{ campo }}
+                {% endif %}
+            {% endfor %}
+            <div class="grilla">
+                {% for campo in f.visible_fields %}{% if campo.name != "DELETE" %}{% include "onboarding/_campo.html" %}{% endif %}{% endfor %}
+            </div>
+            </div>
+            <button type="button" class="btn danger persona-quitar" data-persona-quitar>Quitar</button>
         </fieldset>
     {% endfor %}
     <div class="actions">
@@ -41,6 +57,7 @@
     </div>
 </form>
 {% load static %}
+<script src="{% static 'roles_formset.js' %}"></script>
 {{ alcance|json_script:"alcance-datos" }}
 <script src="{% static 'alcance_liquidador.js' %}"></script>
 {% if nomina %}

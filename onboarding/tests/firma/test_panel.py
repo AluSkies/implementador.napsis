@@ -2,7 +2,7 @@
 
 import tempfile
 
-from dashboard.tests.base import crear_supervisor
+from dashboard.tests.base import crear_operador
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -21,7 +21,7 @@ class PanelYArchivosTests(BaseWizard):
         self.firma.estado = UbicacionFirma.ESTADO_PROPUESTA
         self.firma.save()
         self.implementacion.modelo_recibo.save("m.pdf", SimpleUploadedFile("m.pdf", b"%PDF-1.4"))
-        self.ana = crear_supervisor("ana")
+        self.ana = crear_operador("ana")
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
 
     def como_equipo(self):

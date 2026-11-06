@@ -1,6 +1,6 @@
 """Validar y devolver desde la ficha, el listado y el reporte."""
 
-from dashboard.tests.base import crear_supervisor
+from dashboard.tests.base import crear_operador
 from django.urls import reverse
 
 from automatizacion.actores import Actor
@@ -14,7 +14,7 @@ ANA = Actor.implementador("ana")
 class PanelTests(EnviadaBase):
     def setUp(self):
         super().setUp()
-        self.client.force_login(crear_supervisor("ana"))
+        self.client.force_login(crear_operador("ana"))
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
 
     def test_la_ficha_ofrece_validar_y_devolver(self):
@@ -73,7 +73,7 @@ class AvisoAlPerderLaValidacionTests(EnviadaBase):
 
     def setUp(self):
         super().setUp()
-        self.client.force_login(crear_supervisor("ana"))
+        self.client.force_login(crear_operador("ana"))
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         acciones.aprobar_para_configurar(ANA, self.implementacion)
 

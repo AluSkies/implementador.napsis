@@ -14,7 +14,7 @@
         {% csrf_token %}
         <input type="hidden" name="accion" value="guardar_edicion">
         <input type="hidden" name="empleado_id" value="{{ editando.id }}">
-        {{ edicion_form.as_p }}
+        {% include "onboarding/_form.html" with form=edicion_form %}
         <button class="btn" type="submit">Guardar cambios</button>
         <a class="btn secondary" href="{% url 'onboarding:wizard_step' token=implementacion.token step=paso %}">Cancelar</a>
     </form>
@@ -36,7 +36,7 @@
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="accion" value="agregar_manual">
-                {{ empleado_form.as_p }}
+                {% include "onboarding/_form.html" with form=empleado_form %}
                 <button class="btn secondary" type="submit">Agregar empleado</button>
             </form>
         </fieldset>
@@ -48,7 +48,7 @@
             <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <input type="hidden" name="accion" value="importar">
-                {{ import_form.as_p }}
+                {% include "onboarding/_form.html" with form=import_form %}
                 <button class="btn" type="submit">Importar archivo</button>
             </form>
             {% if errores_import %}
@@ -63,7 +63,16 @@
     </div>
 </div>
 
-<h3>Empleados cargados ({{ empleados|length }})</h3>
+<div class="nomina-cabecera">
+    <h3>Empleados cargados ({{ empleados|length }})</h3>
+    {% if empleados %}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="accion" value="eliminar_todos">
+        <button class="btn danger" type="submit" onclick="return confirm('¿Borrar los {{ empleados|length }} empleados de la nómina? No se puede deshacer: vas a tener que volver a cargarlos.')">Borrar todos</button>
+    </form>
+    {% endif %}
+</div>
 <table>
     <thead><tr><th>CUIL</th><th>Apellido y Nombre</th><th>Legajo</th><th>Puesto</th><th></th></tr></thead>
     <tbody>

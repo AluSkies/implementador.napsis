@@ -19,6 +19,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 
 from clients.alcance import alcance_de
+from clients.validators import cuits_sin_guiones
 
 from .models import ConfiguracionCongelada
 
@@ -36,10 +37,6 @@ class ArchivoNoDisponible(Exception):
 def _codigo(item):
     """Identificador estable de un ítem de catálogo (si todavía no tuviera código, su nombre)."""
     return item.codigo or f"nombre:{item.nombre}"
-
-
-def _cuits(texto):
-    return [cuit.strip() for cuit in (texto or "").split(",") if cuit.strip()]
 
 
 def _documentos(implementacion):
@@ -72,7 +69,7 @@ def contenido_de(implementacion):
             "uuid": str(implementacion.uuid), "origen": implementacion.origen, "id_externo": implementacion.id_externo,
         },
         "empresa": {
-            "razon_social": cliente.razon_social, "cuits": _cuits(cliente.cuits),
+            "razon_social": cliente.razon_social, "cuits": cuits_sin_guiones(cliente.cuits),
             "telefono": implementacion.telefono, "mail_contacto": implementacion.mail_contacto,
         },
         "fecha_salida_productivo": (
@@ -83,6 +80,7 @@ def contenido_de(implementacion):
             "segmentacion_liquidador": implementacion.segmentacion_liquidador,
             "liquidador_utilizado": implementacion.liquidador_utilizado,
             "cantidad_capitas": implementacion.cantidad_capitas, "max_roles": implementacion.max_roles,
+            "max_documentos": implementacion.max_documentos,
         },
         "modulos": sorted(
             _codigo(m.modulo) for m in implementacion.modulos.filter(activo=True).select_related("modulo")

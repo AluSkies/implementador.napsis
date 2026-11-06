@@ -2,7 +2,6 @@
 
 import tempfile
 
-from django.contrib.auth.models import User
 from django.test import override_settings
 from django.urls import reverse
 
@@ -11,6 +10,7 @@ from clients.models import Modulo, Sucursal
 from onboarding import acciones, services
 from onboarding.forms import ModulosForm
 from onboarding.tests.base import GEOMETRIA, BaseWizard, EnviadaBase, _url
+from dashboard.tests.base import crear_operador
 
 ANA = Actor.implementador("ana")
 CLIENTE = Actor.cliente("cliente_a")
@@ -51,7 +51,7 @@ class ReciboDigitalObligatorioTests(BaseWizard):
         self.assertIn((services.PASO_MODULOS, "Recibo Digital es obligatorio en toda implementación."), mensajes)
 
     def test_en_el_panel_figura_marcado_y_como_obligatorio(self):
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         pagina = self.client.get(url)
         self.assertContains(pagina, "(obligatorio)")
@@ -109,13 +109,27 @@ class QueFaltaParaValidarTests(EnviadaBase):
         firma = self.implementacion.firma
         firma.estado = "propuesta"
         firma.save()
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         pagina = self.client.get(url)
         self.assertContains(pagina, "Para poder validar falta")
         self.assertContains(pagina, "Falta validar la firma del recibo.")
 
+    def test_el_aviso_va_arriba_de_los_botones_y_no_adentro_de_la_fila(self):
+        firma = self.implementacion.firma
+        firma.estado = "propuesta"
+        firma.save()
+        self.client.force_login(crear_operador("ana"))
+        url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
+        pagina = self.client.get(url).content.decode()
+        aviso = pagina.index("Para poder validar falta")
+        boton_de_validar = pagina.index('value="aprobar_para_configurar"')
+        fila = pagina.rindex('<div class="actions">', 0, boton_de_validar)  # la fila de botones que lo contiene
+        self.assertLess(aviso, fila)  # el aviso se lee antes de que empiece la fila de botones
+        self.assertIn('<div class="aviso warning" role="alert">', pagina)
+        self.assertNotIn('style="list-style:none', pagina)  # sin estilos escritos a mano
+
     def test_sin_faltantes_la_ficha_no_muestra_el_aviso(self):
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         self.assertNotContains(self.client.get(url), "Para poder validar falta")

@@ -1,43 +1,60 @@
 {% extends "base.html" %}
+{% load equipo %}
+{% block main_class %}wide{% endblock %}
 {% block content %}
-<div class="card">
-    <p><a href="{% url 'dashboard:implementadores' %}">&larr; Volver a las cuentas del equipo</a></p>
-    <h1>{{ usuario.username }}</h1>
-    <p>
-        <strong>Estado:</strong> {% if usuario.is_active %}Activo{% else %}Dado de baja (no puede ingresar){% endif %}
-        &nbsp;·&nbsp; <strong>Último ingreso:</strong> {{ usuario.last_login|date:"d/m/Y H:i"|default:"Nunca" }}
-        &nbsp;·&nbsp; <strong>Implementaciones creadas:</strong> {{ usuario.creadas }}
-    </p>
-</div>
-
-<div class="card">
-    <h2>Datos</h2>
-    <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="accion" value="guardar">
-        {{ form.as_p }}
-        <div class="actions"><button class="btn" type="submit">Guardar cambios</button></div>
-    </form>
-</div>
-
-<div class="card">
-    <h2>Acceso</h2>
-    <div class="actions">
-        <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="resetear_password">
-            <button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button>
-        </form>
-        <form method="post">
-            {% csrf_token %}
-            {% if usuario.is_active %}
-                <input type="hidden" name="accion" value="dar_de_baja">
-                <button class="btn danger" type="submit" onclick="return confirm('¿Dar de baja a {{ usuario.username }}? Ya no va a poder ingresar (se conserva la cuenta y su historial).')">Dar de baja</button>
+{% include "dashboard/_equipo_nav.html" with seccion="cuentas" %}
+<div class="equipo-layout">
+    <div class="card equipo-completa">
+        <h1>{{ usuario.username }}</h1>
+        <p>
+            <strong>Rol:</strong> {{ usuario|rol_del_equipo }}
+            &nbsp;·&nbsp; <strong>Estado:</strong> {% if usuario.is_active %}Activo{% else %}Dado de baja (no puede ingresar){% endif %}
+            &nbsp;·&nbsp; <strong>Último ingreso:</strong> {{ usuario.last_login|date:"d/m/Y H:i"|default:"Nunca" }}
+            &nbsp;·&nbsp; <strong>Implementaciones creadas:</strong> {{ usuario.creadas }}
+        </p>
+        <p>
+            {% if usuario.membresia %}
+                <strong>Grupo:</strong> <a href="{% url 'dashboard:grupo_detalle' pk=usuario.membresia.grupo_id %}">{{ usuario.membresia.grupo.nombre }}</a>
+            {% elif usuario.grupos_a_cargo.all %}
+                <strong>A cargo de:</strong>
+                {% for g in usuario.grupos_a_cargo.all %}<a href="{% url 'dashboard:grupo_detalle' pk=g.pk %}">{{ g.nombre }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% elif usuario.is_superuser %}
+                <span class="muted">Un admin ve todas las implementaciones: no integra grupos.</span>
             {% else %}
-                <input type="hidden" name="accion" value="reactivar">
-                <button class="btn" type="submit">Reactivar</button>
+                <span class="muted">Sin grupo: {% if usuario.es_supervisor %}ve solo las implementaciones que tiene asignadas hasta que se le asigne un grupo{% else %}ve solo las que tiene asignadas; su supervisor no la ve hasta que se sume a un grupo{% endif %}. Se arma desde <a href="{% url 'dashboard:grupos' %}">Grupos</a>.</span>
             {% endif %}
+        </p>
+    </div>
+
+    <div class="card equipo-principal">
+        <h2>Datos</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="guardar">
+            {{ form.as_p }}
+            <div class="actions"><button class="btn" type="submit">Guardar cambios</button></div>
         </form>
+    </div>
+
+    <div class="card equipo-lateral">
+        <h2>Acceso</h2>
+        <div class="actions" style="margin-top:0; flex-wrap:wrap">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="accion" value="resetear_password">
+                <button class="btn secondary" type="submit" onclick="return confirm('¿Reiniciar la contraseña? La anterior deja de funcionar de inmediato.')">Reiniciar contraseña</button>
+            </form>
+            <form method="post">
+                {% csrf_token %}
+                {% if usuario.is_active %}
+                    <input type="hidden" name="accion" value="dar_de_baja">
+                    <button class="btn danger" type="submit" onclick="return confirm('¿Dar de baja a {{ usuario.username }}? Ya no va a poder ingresar (se conserva la cuenta y su historial).')">Dar de baja</button>
+                {% else %}
+                    <input type="hidden" name="accion" value="reactivar">
+                    <button class="btn" type="submit">Reactivar</button>
+                {% endif %}
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}

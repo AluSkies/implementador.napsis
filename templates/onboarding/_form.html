@@ -1,0 +1,6 @@
+{% comment %}Todos los campos de un formulario, con el diseño del wizard (en vez de form.as_p).{% endcomment %}
+{% for campo in form.hidden_fields %}{{ campo }}{% endfor %}
+{% if form.non_field_errors %}<ul class="errorlist nonfield">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<div class="grilla">
+    {% for campo in form.visible_fields %}{% include "onboarding/_campo.html" %}{% endfor %}
+</div>

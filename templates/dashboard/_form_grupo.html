@@ -1,0 +1,40 @@
+{% load static %}{# Los tres campos del grupo. Los integrantes van en una tabla compacta (Nombre, Grupo, Estado) con buscador: con muchos implementadores una lista de casillas con texto se haría interminable. #}
+<p>
+    {{ form.nombre.label_tag }}
+    {{ form.nombre }}
+    {{ form.nombre.errors }}
+</p>
+<p>
+    {{ form.supervisor.label_tag }}
+    {{ form.supervisor }}
+    {{ form.supervisor.errors }}
+    <span class="helptext">{{ form.supervisor.help_text }}</span>
+</p>
+<div class="integrantes" data-integrantes>
+    <label>{{ form.integrantes.label }}</label>
+    <div class="integrantes-cabecera">
+        <input type="search" placeholder="Buscar…" aria-label="Buscar entre los implementadores" data-buscar autocomplete="off">
+        <span class="muted" data-contador></span>
+    </div>
+    <div class="integrantes-scroll">
+        <table>
+            <thead><tr><th></th><th>Nombre</th><th>Grupo</th><th>Estado</th></tr></thead>
+            <tbody>
+            {% for f in form.filas_de_integrantes %}
+                <tr data-fila>
+                    <td><input type="checkbox" name="integrantes" value="{{ f.pk }}" id="integrante-{{ f.pk }}" {% if f.marcado %}checked{% endif %}></td>
+                    <td><label for="integrante-{{ f.pk }}" title="{{ f.usuario }}">{{ f.nombre }}</label></td>
+                    <td>{% if f.grupo %}{{ f.grupo }}{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{% if f.de_baja %}<span class="muted">De baja</span>{% else %}Activo{% endif %}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="4" class="muted">Todavía no hay implementadores.</td></tr>
+            {% endfor %}
+                <tr data-sin-coincidencias hidden><td colspan="4" class="muted">Nadie coincide.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    {{ form.integrantes.errors }}
+    <span class="helptext">{{ form.integrantes.help_text }}</span>
+</div>
+<script src="{% static 'grupo_integrantes.js' %}"></script>

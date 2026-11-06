@@ -18,10 +18,12 @@ class FormularioTests(SimpleTestCase):
                 self.assertTrue(formulario.is_valid(), formulario.errors)
         self.assertEqual(formulario.geometria(), GEOMETRIA)
 
-    def test_sin_imagen_pide_subirla(self):
+    def test_la_imagen_es_opcional_pero_los_recuadros_se_siguen_pidiendo(self):
         formulario = self.formulario()
-        self.assertFalse(formulario.is_valid())
-        self.assertIn("Subí la imagen de la firma.", formulario.errors["imagen"])
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        self.assertEqual(formulario.geometria(), GEOMETRIA)
+        self.assertIn("(OPCIONAL)", formulario.fields["imagen"].label)
+        self.assertFalse(self.formulario(empresa_x="").is_valid())
 
     def test_rechaza_lo_que_no_es_jpg_o_png(self):
         from io import BytesIO

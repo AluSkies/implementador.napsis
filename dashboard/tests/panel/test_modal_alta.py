@@ -25,10 +25,8 @@ class BotonYModalTests(BasePanel):
         self.assertIn("<svg", boton)  # el cuadradito con la pluma
         self.assertIn("Nueva implementación", boton)
 
-    def test_el_alta_es_un_dialog_y_no_una_tarjeta_fija(self):
-        respuesta = self.client.get(reverse("dashboard:home"))
-        self.assertContains(respuesta, '<dialog id="modal-alta" class="modal"')
-        self.assertNotContains(respuesta, "dashboard-alta")
+    def test_el_alta_es_un_dialog(self):
+        self.assertContains(self.client.get(reverse("dashboard:home")), '<dialog id="modal-alta" class="modal"')
 
     def test_el_formulario_esta_dentro_del_modal(self):
         dialogo = _dialogo(self.client.get(reverse("dashboard:home")))
@@ -47,8 +45,12 @@ class BotonYModalTests(BasePanel):
         self.assertNotContains(self.client.get(reverse("dashboard:home")), "data-abrir=")
 
     def test_tiene_el_fondo_oscuro_y_se_puede_cerrar(self):
+        from django.contrib.staticfiles import finders
+
         respuesta = self.client.get(reverse("dashboard:home"))
-        self.assertContains(respuesta, "dialog.modal::backdrop")
+        self.assertContains(respuesta, "portal.css")  # los estilos base (el fondo oscuro del modal incluido) están en la hoja compartida
+        with open(finders.find("portal.css"), encoding="utf-8") as hoja:
+            self.assertIn("dialog.modal::backdrop", hoja.read())
         self.assertContains(respuesta, "data-cerrar-alta")
 
 
@@ -156,3 +158,40 @@ class LiquidacionesEnElAltaTests(BasePanel):
         self.client.post(url, datos)
         implementacion.refresh_from_db()
         self.assertTrue(implementacion.liquidaciones_editables_por_cliente)
+
+
+class MaximoDeDocumentosEnElAltaTests(BasePanel):
+    """En las opciones avanzadas se fija cuántos documentos del legajo puede elegir el cliente."""
+
+    def test_el_modal_ofrece_el_campo_con_su_ayuda(self):
+        modal = _dialogo(self.client.get(reverse("dashboard:home")))
+        self.assertIn('name="max_documentos"', modal)
+        self.assertIn("0 = sin límite", modal)
+
+    def test_crear_con_maximo(self):
+        self.crear(nombre="Textil SA", max_documentos=3)
+        self.assertEqual(Implementacion.objects.get(cliente__nombre="Textil SA").max_documentos, 3)
+
+    def test_sin_completarlo_no_hay_limite(self):
+        self.crear(nombre="Textil SA")
+        self.assertEqual(Implementacion.objects.get(cliente__nombre="Textil SA").max_documentos, 0)
+
+
+class SeleccionarTodasEnElAltaTests(BasePanel):
+    def setUp(self):
+        super().setUp()
+        from clients.models import Modulo
+
+        self.obligatorio = Modulo.objects.create(nombre="Recibo Digital")
+        self.otro = Modulo.objects.create(nombre="Fichada")
+
+    def test_modulos_y_liquidaciones_ofrecen_seleccionar_todas(self):
+        modal = _dialogo(self.client.get(reverse("dashboard:home")))
+        self.assertIn('data-seleccionable="todos"', modal)
+        self.assertIn('data-seleccionable="todas"', modal)
+
+    def test_el_modulo_obligatorio_queda_fuera_de_la_seleccion_masiva(self):
+        modal = _dialogo(self.client.get(reverse("dashboard:home")))
+        entrada = lambda modulo: modal.split(f'id="modulo_{modulo.id}"')[1].split(">")[0]  # noqa: E731
+        self.assertIn("data-fijo", entrada(self.obligatorio))
+        self.assertNotIn("data-fijo", entrada(self.otro))

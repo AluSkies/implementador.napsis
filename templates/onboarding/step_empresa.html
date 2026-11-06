@@ -2,7 +2,9 @@
 {% block step_content %}
 <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
+    <section class="seccion">
+        {% include "onboarding/_form.html" %}
+    </section>
     <div class="actions">
         <button class="btn" type="submit">Continuar</button>
     </div>

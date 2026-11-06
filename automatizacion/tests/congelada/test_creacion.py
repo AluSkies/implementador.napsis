@@ -43,7 +43,7 @@ class CongelarAlValidarTests(EnviadaBase):
         self.assertEqual(contenido["modulos"], ["recibo_digital"])
         self.assertEqual(contenido["liquidaciones"], ["liquidacion_normal"])
         self.assertEqual(contenido["empresa"]["razon_social"], "Empresa A S.A.")
-        self.assertEqual(contenido["empresa"]["cuits"], ["30-50001091-2"])
+        self.assertEqual(contenido["empresa"]["cuits"], ["30500010912"])  # sin guiones: es lo que se exporta
         self.assertEqual(contenido["implementacion"]["uuid"], str(self.implementacion.uuid))
         self.assertEqual([r["rol"] for r in contenido["roles"]], ["admin_rrhh", "apoderado", "liquidador"])
         self.assertEqual(contenido["firma"]["pagina"], "primera")
@@ -98,5 +98,11 @@ class CongelarAlValidarTests(EnviadaBase):
         ruta = congelada.archivos[0]["ruta"]
         url = reverse("media", kwargs={"ruta": ruta})
         self.assertEqual(self.client.get(url).status_code, 404)  # el cliente dueño no las ve
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
-        self.assertEqual(self.client.get(url).status_code, 200)
+        ana = User.objects.create_user("ana", password="x", is_staff=True)
+        otra = User.objects.create_user("otra", password="x", is_staff=True)
+        self.implementacion.implementador_asignado = ana
+        self.implementacion.save()
+        self.client.force_login(otra)
+        self.assertEqual(self.client.get(url).status_code, 404)  # un implementador al que no se la asignaron, tampoco
+        self.client.force_login(ana)
+        self.assertEqual(self.client.get(url).status_code, 200)  # quien la lleva, sí

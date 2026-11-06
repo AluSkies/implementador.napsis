@@ -197,6 +197,23 @@ def editar_empleado(implementacion, empleado_form, actor):
     return True
 
 
+def eliminar_todos_los_empleados(implementacion, actor):
+    """Vacía la nómina (por ejemplo, después de subir un archivo masivo equivocado). Devuelve cuántos borró.
+
+    La foto de la nómina completa queda en el historial de versiones (`guardar_version`) y el evento
+    `nomina.vaciada` guarda la cantidad: no se repite cada empleado en el evento, como sí se hace al borrar uno.
+    Las personas con rol quedan sin su empleado vinculado (se avisa en los pendientes de envío)."""
+    with transaction.atomic():
+        cantidad = implementacion.empleados.count()
+        if not cantidad:
+            return 0
+        guardar_version(implementacion, "empleados", actor)
+        implementacion.empleados.all().delete()
+        eventos.registrar(actor, "nomina.vaciada", implementacion, seccion="empleados", datos={"cantidad": cantidad})
+        revocar_validacion(implementacion, actor, "empleados")
+    return cantidad
+
+
 def eliminar_empleado(implementacion, empleado_id, actor):
     if not str(empleado_id).isdigit():
         return

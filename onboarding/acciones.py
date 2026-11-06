@@ -141,7 +141,7 @@ def _validar_mail(mail):
 def crear_implementacion(
     actor, *, cliente=None, datos_cliente=None, username="", mail_cliente="", implementador=None, creado_por=None,
     modulo_ids=(), modulos_editables=True, liquidacion_ids=(), liquidaciones_editables=True, condiciones=None,
-    origen=Implementacion.ORIGEN_PORTAL, id_externo=None, base_url=None,
+    origen=Implementacion.ORIGEN_PORTAL, id_externo=None, base_url=None, heredar_contacto=True,
 ):
     """Crea una implementación (y la empresa y su acceso, si hacen falta).
 
@@ -154,6 +154,8 @@ def crear_implementacion(
       Con `liquidaciones_editables=False` quedan **bloqueados**: el cliente los ve sin poder cambiarlos
       (hay que elegir al menos uno).
     - `condiciones`: un CondicionesForm ya validado (o None).
+    - `heredar_contacto`: en una empresa que ya tuvo implementaciones, el teléfono y el mail salen de la última. El
+      panel lo apaga cuando quien crea no ve esas implementaciones (las trabaja otro equipo).
     - `origen` + `id_externo` identifican el caso en el sistema que lo originó: si ya existe uno con
       esos valores, no se crea otro y se devuelve el existente (`ya_existia`).
     Todo o nada: empresa, cuenta, implementación y módulos se guardan juntos.
@@ -200,7 +202,9 @@ def crear_implementacion(
 
         # Una empresa que ya tuvo una implementación no vuelve a cargar lo que ya sabemos de ella:
         # el teléfono y, si no se escribió otro, el mail salen de la última.
-        anterior = None if cliente_nuevo else cliente.implementaciones.order_by("-creado", "-pk").first()
+        anterior = None
+        if heredar_contacto and not cliente_nuevo:
+            anterior = cliente.implementaciones.order_by("-creado", "-pk").first()
         implementacion = Implementacion(
             cliente=cliente, creado_por=creado_por, implementador_asignado=implementador,
             mail_contacto=mail or (anterior.mail_contacto if anterior else ""),  # el paso 1 del cliente ya lo trae cargado
@@ -375,9 +379,9 @@ def aprobar_para_configurar(actor, implementacion):
 def validar_firma(actor, implementacion):
     """El equipo da por buena la ubicación de la firma que propuso el cliente."""
     firma = implementacion.firma
-    if firma is None or not firma.imagen:
+    if firma is None:
         return Resultado(implementacion=implementacion, avisos=[
-            Aviso(messages.ERROR, "Todavía no hay una firma cargada para validar."),
+            Aviso(messages.ERROR, "Todavía no hay una firma ubicada para validar."),
         ])
     if firma.estado == UbicacionFirma.ESTADO_VALIDADA:
         return Resultado(implementacion=implementacion)
@@ -393,9 +397,9 @@ def observar_firma(actor, implementacion, motivos, comentario="", base_url=None)
     """El equipo no acepta la firma: la marca como observada (con motivos del catálogo cerrado) y la
     devuelve al cliente para que la ubique de nuevo, con el mismo recorrido que cualquier devolución."""
     firma = implementacion.firma
-    if firma is None or not firma.imagen:
+    if firma is None:
         return Resultado(implementacion=implementacion, avisos=[
-            Aviso(messages.ERROR, "Todavía no hay una firma cargada para observar."),
+            Aviso(messages.ERROR, "Todavía no hay una firma ubicada para observar."),
         ])
     nombres = dict(UbicacionFirma.MOTIVOS)
     motivos = [m for m in dict.fromkeys(motivos or []) if m in nombres]

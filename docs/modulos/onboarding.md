@@ -749,7 +749,7 @@ flowchart TD
 | Cada persona con rol de `PersonaRol.ROLES_EN_NOMINA` figura en la nómina, por CUIL | `PASO_ROLES` | el paso de roles está activo |
 | Modelo de recibo subido | `PASO_CONFIGURACION` | el paso de configuración está activo |
 | Al menos un tipo de liquidación activo | `PASO_CONFIGURACION` | el paso de configuración está activo |
-| Imagen de la firma cargada; y que la firma no esté observada | `PASO_FIRMA` | el paso de firma está activo |
+| Firma ubicada (la imagen es opcional); y que la firma no esté observada | `PASO_FIRMA` | el paso de firma está activo |
 | Al menos un empleado en la nómina | `PASO_NOMINA` | siempre |
 | Todos los empleados con fecha de ingreso | `PASO_NOMINA` | hay empleados y la implementación usa Recibo Digital |
 

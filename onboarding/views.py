@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.http import FileResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 
 from automatizacion.actores import Actor
 from catalog.models import TipoLicencia, TipoNovedad
@@ -161,9 +161,24 @@ def _devolucion(implementacion, paso):
     }
 
 
+def _barra_de_pasos(implementacion, step, activos):
+    """Los pasos para el panel lateral: cada uno con su estado (hecho / actual / pendiente) y, si el cliente
+    ya llegó hasta ahí, el enlace para volver a verlo. `paso_actual` guarda hasta dónde llegó."""
+    alcanzado = max(implementacion.paso_actual, step)
+    barra = []
+    for n in activos:
+        estado = "actual" if n == step else ("hecho" if n < alcanzado else "pendiente")
+        url = reverse("onboarding:wizard_step", kwargs={"token": implementacion.token, "step": n}) if n <= alcanzado else ""
+        barra.append({"numero": n, "titulo": TITULOS_PASO[n], "estado": estado, "url": url})
+    return barra
+
+
 def _wizard_context(implementacion, step, extra=None):
     activos = services.pasos_activos(implementacion)
+    barra = _barra_de_pasos(implementacion, step, activos)
     ctx = {
+        "pasos_barra": barra,
+        "avance": round(100 * sum(1 for p in barra if p["estado"] == "hecho") / len(barra)) if barra else 0,
         "implementacion": implementacion,
         "cliente": implementacion.cliente,
         "paso": step,
@@ -263,7 +278,10 @@ def _step_configuracion(request, implementacion, step):
         _invalido(request, implementacion, step, form)
     else:
         form = ConfiguracionForm(instance=implementacion)
-    return render(request, "onboarding/step_configuracion.html", _wizard_context(implementacion, step, {"form": form}))
+    return render(
+        request, "onboarding/step_configuracion.html",
+        _wizard_context(implementacion, step, {"form": form, "paso_firma": PASO_FIRMA}),
+    )
 
 
 def _step_firma(request, implementacion, step):
@@ -350,12 +368,17 @@ def _step_documentos(request, implementacion, step):
     estado_por_tipo = services.estado_actual_documentos(implementacion)
 
     if request.method == "POST":
-        form = DocumentosLegajoForm(request.POST, tipos_qs=todos_qs, estado_por_tipo=estado_por_tipo)
+        form = DocumentosLegajoForm(
+            request.POST, tipos_qs=todos_qs, estado_por_tipo=estado_por_tipo, max_documentos=implementacion.max_documentos,
+        )
         if form.is_valid():
             services.guardar_documentos(implementacion, form, todos_qs, _actor(request))
             return _redirect_next(implementacion, step)
+        _invalido(request, implementacion, step, form)
     else:
-        form = DocumentosLegajoForm(tipos_qs=todos_qs, estado_por_tipo=estado_por_tipo)
+        form = DocumentosLegajoForm(
+            tipos_qs=todos_qs, estado_por_tipo=estado_por_tipo, max_documentos=implementacion.max_documentos,
+        )
 
     tipos_rows = [
         (tipo, form[f"tipo_{tipo.id}_activo"])
@@ -432,6 +455,10 @@ def _step_empleados(request, implementacion, step):
     elif accion == "eliminar":
         services.eliminar_empleado(implementacion, request.POST.get("empleado_id"), _actor(request))
         messages.info(request, "Empleado eliminado.")
+    elif accion == "eliminar_todos":
+        cantidad = services.eliminar_todos_los_empleados(implementacion, _actor(request))
+        if cantidad:
+            messages.info(request, "Se borró el empleado de la nómina." if cantidad == 1 else f"Se borraron los {cantidad} empleados de la nómina.")
     elif accion == "continuar":
         if implementacion.empleados.exists():
             return _redirect_next(implementacion, step)

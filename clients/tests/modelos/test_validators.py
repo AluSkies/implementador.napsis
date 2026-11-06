@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
-from clients.validators import normalizar_cuits
+from clients.validators import cuits_sin_guiones, normalizar_cuits
 
 
 class NormalizarCuitsTests(SimpleTestCase):
@@ -60,3 +60,13 @@ class MensajesDelCuitTests(SimpleTestCase):
 
     def test_el_verificador_correcto_de_esos_diez_digitos_es_valido(self):
         self.assertEqual(normalizar_cuits("30521315128"), "30-52131512-8")
+
+
+class CuitsSinGuionesTests(SimpleTestCase):
+    def test_deja_los_once_digitos_pegados(self):
+        self.assertEqual(cuits_sin_guiones("30-50001091-2"), ["30500010912"])
+
+    def test_varios_cuit_y_vacios(self):
+        self.assertEqual(cuits_sin_guiones("30-50001091-2, 20-11111111-2"), ["30500010912", "20111111112"])
+        self.assertEqual(cuits_sin_guiones(""), [])
+        self.assertEqual(cuits_sin_guiones(None), [])

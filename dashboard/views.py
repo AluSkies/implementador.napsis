@@ -13,7 +13,7 @@ from automatizacion.congelada import como_documento as congelada_como_documento
 from automatizacion.models import ConfiguracionCongelada
 from catalog.models import TipoLicencia, TipoLiquidacion, TipoNovedad
 from clients.alcance import alcance_de, contexto_del_editor_de_alcance
-from clients.models import Cliente, ComentarioInterno, Implementacion, Modulo, UbicacionFirma
+from clients.models import Cliente, ComentarioInterno, Modulo, UbicacionFirma
 from clients.services import (
     COLUMNAS_ORDENABLES,
     filtrar_y_ordenar_implementaciones,
@@ -35,8 +35,12 @@ from onboarding.forms import (
 )
 
 from . import services as cuentas
-from .forms import ImplementadorAltaForm, ImplementadorEdicionForm
-from .permisos import admin_requerido, puede_accionar, puede_accionar_sobre_el_cliente, puede_asignar
+from .filtros import panel_de_filtros
+from .forms import GrupoForm, ImplementadorAltaForm, ImplementadorEdicionForm
+from .permisos import (
+    admin_requerido, clientes_visibles, implementaciones_visibles, puede_accionar, puede_accionar_sobre_el_cliente,
+    puede_asignar, puede_ver,
+)
 from .reportes import generar_reporte_implementaciones_xlsx
 
 
@@ -61,12 +65,12 @@ def _base_url(request):
 
 
 def _implementador_elegido(request):
-    """El implementador elegido en el formulario (campo implementador_id). Si no vino, no es una cuenta
-    activa del equipo o quien la crea no puede asignar (solo el supervisor y el admin reparten), queda
-    asignada a quien la está creando."""
+    """El implementador elegido en el formulario (campo implementador_id). Si no vino, no es una cuenta a la
+    que quien la crea pueda asignar (el supervisor, a su equipo; el admin, a todos; el implementador, solo a sí
+    mismo) o no puede asignar, queda asignada a quien la está creando."""
     elegido = request.POST.get("implementador_id", "")
     if elegido.isdigit() and puede_asignar(request.user):
-        encontrado = cuentas.asignables().filter(pk=elegido).first()
+        encontrado = cuentas.asignables(request.user).filter(pk=elegido).first()
         if encontrado:
             return encontrado
     return request.user
@@ -108,6 +112,11 @@ def _alta_de_implementacion(request, condiciones_form):
         "nombre": request.POST.get("nombre", ""), "razon_social": request.POST.get("razon_social", ""),
         "cuits": request.POST.get("cuits", ""),
     }
+    # Una empresa que ya trabaja otro equipo se puede elegir (para no duplicarla), pero no se corrigen sus datos
+    # ni se hereda el contacto de sus implementaciones, que el usuario no ve.
+    es_ajena = cliente is not None and not puede_accionar_sobre_el_cliente(request.user, cliente)
+    if es_ajena:
+        datos_cliente = {}
 
     resultado = acciones.crear_implementacion(
         Actor.de_usuario(request.user), cliente=cliente, datos_cliente=datos_cliente,
@@ -117,7 +126,7 @@ def _alta_de_implementacion(request, condiciones_form):
         modulos_editables=bool(request.POST.get("modulos_editables")), condiciones=condiciones_form,
         liquidacion_ids={int(v) for v in request.POST.getlist("liquidaciones") if v.isdigit()},
         liquidaciones_editables=not request.POST.get("liquidaciones_bloquear"),
-        base_url=_base_url(request),
+        base_url=_base_url(request), heredar_contacto=not es_ajena,
     )
     if not resultado.ok:
         return None, resultado.errores
@@ -148,19 +157,30 @@ def home(request):
     }
 
     clientes_existentes = Cliente.objects.select_related("usuario").order_by("nombre")
-    # Lo que ya se sabe de cada empresa, para mostrarlo en el alta al elegirla (no se vuelve a pedir).
+    visibles = implementaciones_visibles(request.user)
+    # Lo que ya se sabe de cada empresa, para mostrarlo en el alta al elegirla (no se vuelve a pedir). De las que
+    # el usuario no ve (las trabaja otro equipo) solo se muestra cómo se llaman, para no duplicarlas: nada de
+    # contacto, usuario ni cantidad de implementaciones.
+    empresas_a_la_vista = None if request.user.is_superuser else set(visibles.values_list("cliente_id", flat=True))
     datos_de_clientes = {}
     for cliente in clientes_existentes:
-        ultima = cliente.implementaciones.order_by("-creado", "-pk").first()
-        datos_de_clientes[cliente.pk] = {
+        datos = {
             "nombre": cliente.nombre, "razon_social": cliente.razon_social, "cuits": cliente.cuits,
-            "usuario": cliente.usuario.get_username() if cliente.usuario else "",
-            "mail": ultima.mail_contacto if ultima else "", "telefono": ultima.telefono if ultima else "",
-            "implementaciones": cliente.implementaciones.count(),
+            "usuario": "", "mail": "", "telefono": "", "implementaciones": 0, "ajena": True,
         }
+        if empresas_a_la_vista is None or cliente.pk in empresas_a_la_vista:
+            propias = (visibles if empresas_a_la_vista is not None else cliente.implementaciones.all()).filter(cliente=cliente)
+            ultima = propias.order_by("-creado", "-pk").first()
+            datos.update({
+                "usuario": cliente.usuario.get_username() if cliente.usuario else "",
+                "mail": ultima.mail_contacto if ultima else "", "telefono": ultima.telefono if ultima else "",
+                "implementaciones": propias.count(), "ajena": False,
+            })
+        datos_de_clientes[cliente.pk] = datos
     implementaciones = filtrar_y_ordenar_implementaciones(
-        Implementacion.objects.select_related("cliente", "implementador_asignado"), request.GET
+        visibles.select_related("cliente", "implementador_asignado"), request.GET
     )
+    mostrando = len(implementaciones)  # la consulta se hace acá, una sola vez: la plantilla recorre el resultado ya cargado
 
     return render(
         request, "dashboard/home.html",
@@ -168,14 +188,16 @@ def home(request):
             "implementaciones": implementaciones,
             "clientes_existentes": clientes_existentes,
             "datos_de_clientes": datos_de_clientes,
-            "asignables": cuentas.asignables(),
+            "asignables": cuentas.asignables(request.user),
             "puede_asignar": puede_asignar(request.user),
             "condiciones_form": condiciones_form,
             "alta": alta,
             "modulos": Modulo.objects.all(),
             "liquidaciones": TipoLiquidacion.objects.all(),
-            "estados_choices": Implementacion.opciones_de_filtro_de_estado(),
+            "filtros": panel_de_filtros(request.user, visibles, request.GET, request.path),
             "filtros_aplicados": request.GET,
+            "mostrando": mostrando,
+            "total_visibles": visibles.count(),
             "sort_links": _sort_links(request),
         },
     )
@@ -183,7 +205,7 @@ def home(request):
 
 @staff_member_required(login_url="login")
 def cliente_detalle(request, pk):
-    cliente = get_object_or_404(Cliente, pk=pk)
+    cliente = get_object_or_404(clientes_visibles(request.user), pk=pk)
     actor = Actor.de_usuario(request.user)
     puede_actuar = puede_accionar_sobre_el_cliente(request.user, cliente)
     if request.method == "POST" and not puede_actuar:
@@ -200,7 +222,7 @@ def cliente_detalle(request, pk):
         _mostrar(request, acciones.invitar_cliente(actor, cliente, base_url=_base_url(request)))
         return redirect("dashboard:cliente_detalle", pk=pk)
 
-    implementaciones = cliente.implementaciones.order_by("-creado")
+    implementaciones = implementaciones_visibles(request.user).filter(cliente=cliente).order_by("-creado")
     return render(
         request, "dashboard/cliente_detalle.html",
         {"cliente": cliente, "implementaciones": implementaciones, "puede_actuar": puede_actuar},
@@ -378,9 +400,11 @@ def _accion_reasignar(request, implementacion, actor):
     if not puede_asignar(request.user):
         raise PermissionDenied  # repartir las implementaciones es del supervisor y el admin
     elegido = request.POST.get("implementador_id", "")
-    nuevo = cuentas.asignables().filter(pk=elegido).first() if elegido.isdigit() else None
+    nuevo = cuentas.asignables(request.user).filter(pk=elegido).first() if elegido.isdigit() else None
     if nuevo:
         _mostrar(request, acciones.reasignar(actor, implementacion, nuevo))
+        if not puede_ver(request.user, implementacion):  # se la pasó a alguien fuera de su vista
+            return redirect("dashboard:home")
     return _volver(implementacion)
 
 
@@ -508,7 +532,7 @@ def _manejar_accion_implementacion(request, implementacion):
 @staff_member_required(login_url="login")
 def implementacion_detalle(request, pk):
     implementacion = get_object_or_404(
-        Implementacion.objects.select_related("cliente").prefetch_related(
+        implementaciones_visibles(request.user).select_related("cliente").prefetch_related(
             "modulos__modulo", "roles", "sucursales", "licencias__tipo_licencia",
             "novedades__tipo_novedad", "documentos_legajo__tipo_documento", "empleados",
         ),
@@ -577,7 +601,7 @@ def implementacion_detalle(request, pk):
             (onboarding_services.CODIGO_DE_PASO[n], onboarding_services.TITULOS_PASO[n])
             for n in onboarding_services.pasos_activos(implementacion) if n != onboarding_services.PASO_REVISION
         ],
-        "asignables": cuentas.asignables(),
+        "asignables": cuentas.asignables(request.user),
         "condiciones_form": formularios_con_error.get("condiciones_form")
         or CondicionesForm(implementacion=implementacion),
         "datos_form": formularios_con_error.get("datos_form") or ImplementacionDatosForm(instance=implementacion),
@@ -608,6 +632,7 @@ def implementacion_detalle(request, pk):
 @staff_member_required(login_url="login")
 def descargar_congelada(request, pk, version):
     """La configuración congelada de una versión, como un único .json (solo el equipo)."""
+    get_object_or_404(implementaciones_visibles(request.user), pk=pk)
     congelada = get_object_or_404(ConfiguracionCongelada, implementacion_id=pk, version=version)
     respuesta = HttpResponse(
         json.dumps(congelada_como_documento(congelada), ensure_ascii=False, indent=2, sort_keys=True),
@@ -619,7 +644,7 @@ def descargar_congelada(request, pk, version):
 
 @staff_member_required(login_url="login")
 def descargar_nomina(request, pk):
-    implementacion = get_object_or_404(Implementacion, pk=pk)
+    implementacion = get_object_or_404(implementaciones_visibles(request.user), pk=pk)
     empleados = implementacion.empleados.select_related("reporta_a", "aprobador").all()
     buffer = generar_nomina_xlsx(empleados)
     nombre_archivo = f"nomina_{implementacion.cliente.nombre}.xlsx".replace(" ", "_")
@@ -631,54 +656,121 @@ def descargar_nomina(request, pk):
 
 @staff_member_required(login_url="login")
 def exportar_implementaciones(request):
-    """Descarga un .xlsx con todas las implementaciones (botón "Exportar" al pie del panel)."""
+    """Descarga un .xlsx con las implementaciones que el usuario ve (botón "Exportar" al pie del panel)."""
     nombre = f"implementaciones_{timezone.localdate():%Y-%m-%d}.xlsx"
     return FileResponse(
-        generar_reporte_implementaciones_xlsx(), as_attachment=True, filename=nombre,
+        generar_reporte_implementaciones_xlsx(implementaciones_visibles(request.user)), as_attachment=True, filename=nombre,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
-# --- Rol Admin: gestión de implementadores -------------------------------------
+# --- Rol Admin: cuentas del equipo y grupos de trabajo -------------------------------
 
 
 @admin_requerido
 def implementadores_lista(request):
-    form = ImplementadorAltaForm(request.POST or None)
+    form = ImplementadorAltaForm(request.POST or None, quien=request.user)
     if request.method == "POST" and form.is_valid():
-        usuario, password = cuentas.crear_implementador(**form.cleaned_data)
+        usuario, password = cuentas.crear_implementador(**form.cleaned_data, por=request.user)
         _avisar_credenciales(request, "Cuenta del equipo creada", usuario.username, password)
         return redirect("dashboard:implementadores")
     return render(
         request, "dashboard/implementadores.html",
-        {"implementadores": cuentas.implementadores(), "form": form},
+        {"implementadores": cuentas.cuentas_del_equipo(), "form": form},
     )
 
 
 @admin_requerido
 def implementador_detalle(request, pk):
-    usuario = get_object_or_404(cuentas.implementadores(), pk=pk)
-    form = ImplementadorEdicionForm(instance=usuario)
+    usuario = get_object_or_404(cuentas.cuentas_del_equipo(), pk=pk)
+    form = ImplementadorEdicionForm(instance=usuario, quien=request.user)
 
     if request.method == "POST":
         accion = request.POST.get("accion")
         if accion == "guardar":
-            form = ImplementadorEdicionForm(request.POST, instance=usuario)
+            form = ImplementadorEdicionForm(request.POST, instance=usuario, quien=request.user)
             if form.is_valid():
-                form.save()
-                messages.success(request, "Datos actualizados.")
-                return redirect("dashboard:implementador_detalle", pk=pk)
+                try:
+                    form.save()
+                except cuentas.CambioNoPermitido as error:
+                    messages.error(request, str(error))
+                else:
+                    messages.success(request, "Datos actualizados.")
+                    if form.sale_del_grupo:
+                        messages.warning(
+                            request,
+                            f"{usuario.username} salió del grupo «{form.sale_del_grupo}»: un supervisor o un admin no "
+                            "integra grupos. Lo que tiene asignado ya no lo ve el supervisor de ese grupo.",
+                        )
+                    return redirect("dashboard:implementador_detalle", pk=pk)
         elif accion == "resetear_password":
-            password = cuentas.resetear_password(usuario)
+            password = cuentas.resetear_password(usuario, por=request.user)
             _avisar_credenciales(request, "Nueva contraseña generada", usuario.username, password)
             return redirect("dashboard:implementador_detalle", pk=pk)
         elif accion == "dar_de_baja":
-            cuentas.dar_de_baja(usuario)
-            messages.info(request, f"{usuario.username} quedó dado de baja: ya no puede ingresar.")
+            try:
+                cuentas.dar_de_baja(usuario, por=request.user)
+            except cuentas.CambioNoPermitido as error:
+                messages.error(request, str(error))
+            else:
+                messages.info(request, f"{usuario.username} quedó dado de baja: ya no puede ingresar.")
             return redirect("dashboard:implementador_detalle", pk=pk)
         elif accion == "reactivar":
-            cuentas.reactivar(usuario)
+            cuentas.reactivar(usuario, por=request.user)
             messages.success(request, f"{usuario.username} volvió a estar activo.")
             return redirect("dashboard:implementador_detalle", pk=pk)
 
     return render(request, "dashboard/implementador_detalle.html", {"usuario": usuario, "form": form})
+
+
+@admin_requerido
+def grupos_lista(request):
+    form = GrupoForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        grupo = cuentas.crear_grupo(
+            form.cleaned_data["nombre"], form.cleaned_data["supervisor"], list(form.cleaned_data["integrantes"]),
+            por=request.user,
+        )
+        messages.success(request, f"Grupo «{grupo.nombre}» creado.")
+        return redirect("dashboard:grupo_detalle", pk=grupo.pk)
+    return render(request, "dashboard/grupos.html", {"grupos": cuentas.grupos(), "form": form})
+
+
+def _avisar_lo_que_deja_de_verse(request, cuenta_o_grupo, cantidad):
+    if cantidad:
+        messages.warning(
+            request,
+            f"{cantidad} implementación(es) dejó(aron) de verse para {cuenta_o_grupo}. Las sigue viendo el Admin, "
+            "que puede reasignarlas.",
+        )
+
+
+@admin_requerido
+def grupo_detalle(request, pk):
+    grupo = get_object_or_404(cuentas.grupos(), pk=pk)
+    form = GrupoForm(grupo=grupo)
+
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "guardar":
+            form = GrupoForm(request.POST, grupo=grupo)
+            if form.is_valid():
+                salen = cuentas.actualizar_grupo(
+                    grupo, form.cleaned_data["nombre"], form.cleaned_data["supervisor"],
+                    list(form.cleaned_data["integrantes"]), por=request.user,
+                )
+                messages.success(request, "Grupo actualizado.")
+                if salen:
+                    nombres = ", ".join(u.get_username() for u in salen)
+                    _avisar_lo_que_deja_de_verse(
+                        request, f"el supervisor del grupo (salieron {nombres})", cuentas.cantidad_asignada_a(salen),
+                    )
+                return redirect("dashboard:grupo_detalle", pk=pk)
+        elif accion == "borrar":
+            nombre = grupo.nombre
+            afectadas = cuentas.borrar_grupo(grupo, por=request.user)
+            messages.info(request, f"Grupo «{nombre}» borrado. Las cuentas se conservan.")
+            _avisar_lo_que_deja_de_verse(request, "el supervisor del grupo", afectadas)
+            return redirect("dashboard:grupos")
+
+    return render(request, "dashboard/grupo_detalle.html", {"grupo": grupo, "form": form})

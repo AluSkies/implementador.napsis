@@ -247,6 +247,11 @@ class Implementacion(models.Model):
         help_text="Cuántas personas puede cargar el cliente en el paso de roles (mínimo 3: uno por rol obligatorio).",
     )
 
+    max_documentos = models.PositiveSmallIntegerField(
+        "Máximo de documentos del legajo", default=0, validators=[MaxValueValidator(99)],
+        help_text="Cuántos tipos de documento puede elegir el cliente en el legajo digital. 0 = sin límite.",
+    )
+
     TIPO_FIRMA_CHOICES = [
         ("electronica", "Electrónica"),
         ("digital", "Digital"),

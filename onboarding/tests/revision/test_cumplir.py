@@ -2,7 +2,6 @@
 
 import tempfile
 
-from django.contrib.auth.models import User
 from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
@@ -13,6 +12,7 @@ from automatizacion.models import EventoImplementacion
 from clients.models import Implementacion
 from onboarding import acciones
 from onboarding.tests.base import EnviadaBase
+from dashboard.tests.base import crear_operador
 
 ANA = Actor.implementador("ana")
 
@@ -49,14 +49,14 @@ class CumplirTests(EnviadaBase):
         self.assertEqual(self.implementacion.estado, Implementacion.ESTADO_CANCELADA)
 
     def test_un_pedido_directo_al_panel_tampoco_la_cumple(self):
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         self.client.post(url, {"accion": "marcar_cumplida"})
         self.implementacion.refresh_from_db()
         self.assertEqual(self.implementacion.estado, Implementacion.ESTADO_PENDIENTE)
 
     def test_la_ficha_ofrece_cumplir_solo_si_esta_validada(self):
-        self.client.force_login(User.objects.create_user("ana", password="x", is_staff=True))
+        self.client.force_login(crear_operador("ana"))
         url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
         self.assertNotContains(self.client.get(url), "Marcar implementación como cumplida")
         acciones.aprobar_para_configurar(ANA, self.implementacion)

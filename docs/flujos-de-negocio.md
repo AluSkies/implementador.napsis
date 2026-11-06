@@ -19,7 +19,7 @@ El resumen general del sistema (capas, apps, modelo de datos, despliegue) está 
 
 | Término | Qué es, en una línea |
 |---|---|
-| **Actor** | `Actor(tipo, ref)` en `automatizacion/actores.py`: quién hace la acción. Los tipos son `cliente`, `implementador`, `admin`, `sistema`, `servicio` y `agente`. `Actor.de_usuario(usuario)` lo deduce de la cuenta: superusuario es admin, cuenta con `is_staff` es implementador, el resto es cliente, y sin sesión actúa el sistema. |
+| **Actor** | `Actor(tipo, ref)` en `automatizacion/actores.py`: quién hace la acción. Los tipos son `cliente`, `implementador`, `supervisor`, `admin`, `sistema`, `servicio` y `agente`. `Actor.de_usuario(usuario)` lo deduce de la cuenta: superusuario es admin, cuenta con `is_staff` es implementador, el resto es cliente, y sin sesión actúa el sistema. |
 | **Resultado y Aviso** | Lo que devuelve una acción (`onboarding/acciones.py`). `Resultado.ok` es verdadero si no hay `errores`; `avisos` es una lista de `Aviso(nivel, texto)`; `ya_existia` marca un alta repetida. `mostrar(request)` pasa los avisos al sistema de mensajes. |
 | **Evento** | Una fila de `EventoImplementacion` (`automatizacion/models.py`): quién, cuándo, qué, y el antes y el después. Solo se agrega: no se modifica ni se borra. Se escribe con `eventos.registrar(...)`. |
 | **Vista (view)** | Función de Django que recibe el pedido web y devuelve una página o una redirección. Las del cliente están en `onboarding/views.py` y las del equipo en `dashboard/views.py`. |
@@ -277,7 +277,7 @@ Detalles que conviene tener presentes:
 | `condiciones` | `guardar_condiciones` | `implementacion.condiciones_actualizadas` |
 | `fecha_implementacion` | `guardar_fecha_implementacion` | `implementacion.fecha_cambiada` |
 | `firma` | `guardar_firma` (en `firma.py`) | `firma.propuesta` o `firma.corregida_por_implementador` |
-| `empleados` | funciones de `nomina.py` | `nomina.importada`, `empleado.agregado`, `empleado.editado`, `empleado.eliminado` |
+| `empleados` | funciones de `nomina.py` | `nomina.importada`, `empleado.agregado`, `empleado.editado`, `empleado.eliminado`, `nomina.vaciada` |
 
 **Dónde está en el código**
 
@@ -457,7 +457,7 @@ flowchart TD
     c7{"¿Hay paso Configuración y no hay ningún tipo de liquidación activo?"}
     m7["Paso 6: elegir al menos un tipo de liquidación"]
     c8{"¿Hay paso Firma y no hay imagen de firma?"}
-    m8["Paso 7: subir la imagen de la firma y ubicarla"]
+    m8["Paso 7: ubicar la firma (la imagen es opcional)"]
     c9{"¿Hay paso Firma y la firma está observada?"}
     m9["Paso 7: ajustar la firma según lo que pidió el equipo"]
     c10{"¿No hay ningún empleado en la nómina?"}
@@ -725,7 +725,7 @@ flowchart TD
 
 ## 8. La firma del recibo
 
-**La regla.** El cliente sube la imagen de la firma del apoderado y ubica sobre su modelo de recibo tres recuadros (firma de la empresa, empleado en conformidad y empleado en disconformidad), en qué página va, y eso queda **propuesto**. El equipo la revisa: la **valida**, la **observa** (con motivos de un catálogo cerrado, y eso la devuelve al cliente) o la **corrige** él mismo (queda validada). Es solo la **intención del cliente**: el portal no la traduce a Napsis. Los recuadros se guardan como fracciones de 0 a 1 de la página, para no depender del tamaño del PDF. Ninguna imagen se pisa: al subir otra, la anterior queda en el disco.
+**La regla.** El cliente ubica sobre su modelo de recibo tres recuadros (firma de la empresa, empleado en conformidad y empleado en disconformidad), en qué página va, y eso queda **propuesto**. Subir la imagen de la firma del apoderado es **opcional**: el recuadro de la empresa es también donde va el certificado de la firma electrónica. El equipo la revisa: la **valida**, la **observa** (con motivos de un catálogo cerrado, y eso la devuelve al cliente) o la **corrige** él mismo (queda validada). Es solo la **intención del cliente**: el portal no la traduce a Napsis. Los recuadros se guardan como fracciones de 0 a 1 de la página, para no depender del tamaño del PDF. Ninguna imagen se pisa: al subir otra, la anterior queda en el disco.
 
 ```mermaid
 stateDiagram-v2
@@ -754,7 +754,7 @@ Qué pasa en cada transición:
 flowchart TD
     s1["El equipo elige motivos y comentario"]
     d1{"¿Hay una firma con imagen?"}
-    e1["Aviso: todavía no hay una firma cargada para observar"]
+    e1["Aviso: todavía no hay una firma ubicada para observar"]
     d2{"¿Queda al menos un motivo válido del catálogo?"}
     e2["Aviso: elegir al menos un motivo de la lista"]
     d3{"¿Está pendiente y enviada?"}
@@ -1077,7 +1077,7 @@ flowchart TD
 
 Importar **no borra** a nadie: los empleados que no están en el archivo se quedan. El principio del registro: se guarda lo que la base pisa o borra, no lo que ya conserva. La excepción son Reporta A y Aprobador: esas relaciones se pisan sin detallar el antes y el después, y por sí solas no cuentan como «actualizado» (el rombo «¿Hubo empleados nuevos o actualizados?» no las mira), así que una importación en la que solo cambiaron ellas no revoca la validación (ver [flujo 9](#9-la-invalidación-de-la-validación)).
 
-**Alta, edición y baja manual.** Cada una guarda la versión de la sección antes de cambiar y registra su evento (`empleado.agregado`, `empleado.editado` con los `cambios`, `empleado.eliminado` con la foto completa de lo borrado). Un CUIL repetido (por ejemplo por un doble clic) vuelve como error del campo, no como error del servidor. Con Recibo Digital la fecha de ingreso es obligatoria.
+**Alta, edición y baja manual.** Cada una guarda la versión de la sección antes de cambiar y registra su evento (`empleado.agregado`, `empleado.editado` con los `cambios`, `empleado.eliminado` con la foto completa de lo borrado). **Borrar todos** vacía la nómina de una vez (por ejemplo, tras un archivo masivo equivocado): guarda la versión completa de la sección antes de borrar, registra `nomina.vaciada` con la cantidad y revoca la validación; las personas con rol quedan sin empleado vinculado. Un CUIL repetido (por ejemplo por un doble clic) vuelve como error del campo, no como error del servidor. Con Recibo Digital la fecha de ingreso es obligatoria.
 
 **Dónde está en el código**
 

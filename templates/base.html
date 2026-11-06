@@ -6,171 +6,7 @@
     <title>{% block title %}Portal de Implementación Napsis{% endblock %}</title>
     <link rel="icon" type="image/svg+xml" href="{% static 'logo-napsis.svg' %}">
     <link rel="stylesheet" href="{% static 'fonts/fuentes.css' %}">
-    <style>
-        :root {
-            --primary: #aa00ff;
-            --primary-dark: #1c1699;
-            --bg: #f2f2f5;
-            --border: #dcdce6;
-            --text: #0a1543;
-            --font-body: 'Montserrat', -apple-system, Segoe UI, Arial, sans-serif;
-            --font-heading: 'Roboto', -apple-system, Segoe UI, Arial, sans-serif;
-        }
-        * { box-sizing: border-box; }
-        body { font-family: var(--font-body); margin: 0; background: var(--bg); color: var(--text); }
-        header.topbar {
-            background: #fff; border-bottom: 1px solid var(--border); color: var(--text);
-            padding: 12px 24px; display: flex; justify-content: space-between; align-items: center;
-        }
-        header.topbar .brand { display: flex; align-items: center; gap: 10px; }
-        header.topbar .brand img { height: 22px; }
-        header.topbar .brand span { font-weight: 600; color: var(--primary-dark); }
-        header.topbar a { color: var(--primary-dark); text-decoration: none; }
-        main { max-width: 900px; margin: 0 auto; padding: 24px 16px 64px; }
-        main.wide { max-width: 1200px; }
-        .card { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 24px; margin-bottom: 20px; }
-        h1, h2 { font-family: var(--font-heading); color: var(--primary-dark); }
-        h1 { font-size: 1.4rem; }
-        h2 { font-size: 1.1rem; margin-top: 0; }
-        label { display: block; font-weight: 600; margin-top: 14px; margin-bottom: 4px; font-size: 0.92rem; }
-        input[type=text], input[type=email], input[type=number], input[type=date], input[type=file], input[type=password], select, textarea {
-            width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.95rem;
-            font-family: inherit; color: var(--text);
-        }
-        .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-        .checkbox-row label { margin: 0; font-weight: 500; }
-        .checkbox-row input[type=checkbox] { width: auto; }
-        .btn { display: inline-block; background: var(--primary); color: #fff; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; font-weight: 500; text-decoration: none; }
-        .btn.secondary { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
-        .btn.danger { background: #d92b6b; }
-        .btn.success { background: #1e9e5a; }
-        .btn.success:hover { background: #178049; }
-        .btn.icono { display: inline-flex; align-items: center; gap: 8px; }
-        .page-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-        .page-header h1 { margin: 0; }
-        dialog.modal { border: none; border-radius: 12px; padding: 0; width: min(760px, 94vw); max-height: 92vh; color: var(--text); box-shadow: 0 20px 60px rgba(10, 21, 67, .35); }
-        dialog.modal::backdrop { background: rgba(14, 12, 48, .6); }
-        .modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; z-index: 1; }
-        .modal-header h2 { margin: 0; }
-        .modal-cerrar { background: none; border: none; font-size: 1.6rem; line-height: 1; cursor: pointer; color: #6b6f8c; padding: 0 4px; }
-        .modal-cerrar:hover { color: var(--text); }
-        .modal-body { padding: 20px 24px; }
-        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border); position: sticky; bottom: 0; background: #fff; }
-        .modal-errores { list-style: none; margin: 0 0 16px; padding: 10px 14px; border-radius: 6px; background: #fbdada; }
-        .actions { margin-top: 24px; display: flex; gap: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
-        th { color: var(--primary-dark); }
-        .steps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; font-size: 0.8rem; }
-        .steps span { padding: 4px 9px; border-radius: 20px; background: var(--bg); }
-        .steps span.current { background: var(--primary); color: #fff; }
-        .messages { list-style: none; padding: 0; margin-bottom: 16px; }
-        .messages li { padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; }
-        .messages li.success { background: #dcf5e3; }
-        .messages li.warning { background: #fdf2d0; }
-        .messages li.info { background: #e3e8ff; }
-        .epigrafe { background: #f6ecff; border-left: 4px solid var(--primary); border-radius: 6px; padding: 12px 16px; margin: 0 0 18px; font-size: 0.92rem; }
-        .epigrafe p { margin: 6px 0; }
-        .epigrafe ul { margin: 6px 0 0; padding-left: 20px; }
-        .epigrafe li { margin: 4px 0; }
-        .selector-de-fecha { position: relative; }
-        .selector-de-fecha-campo { cursor: pointer; background: #fff; }
-        .selector-de-fecha-panel { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: 320px; max-width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(10, 21, 67, .18); padding: 12px; }
-        .selector-de-fecha-panel[hidden] { display: none; }
-        .selector-de-fecha-cabecera { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-        .selector-de-fecha-cabecera button { background: none; border: 1px solid var(--border); border-radius: 6px; width: 32px; height: 32px; font-size: 1.1rem; cursor: pointer; color: var(--primary-dark); }
-        .selector-de-fecha-cabecera button:disabled { opacity: .35; cursor: not-allowed; }
-        .selector-de-fecha-grilla { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
-        .selector-de-fecha-dia-nombre { font-size: .75rem; color: #6b6f8c; padding: 4px 0; }
-        .selector-de-fecha-dia { background: none; border: none; border-radius: 6px; height: 34px; cursor: pointer; font: inherit; color: var(--text); }
-        .selector-de-fecha-dia:hover:not(:disabled) { background: #f6ecff; }
-        .selector-de-fecha-dia.fin-de-semana { color: #8a8fb0; }
-        .selector-de-fecha-dia:disabled { color: #c3c5d6; background: #f4f4f8; cursor: not-allowed; text-decoration: line-through; }
-        .selector-de-fecha-dia.elegido { background: var(--primary); color: #fff; font-weight: 600; }
-        .selector-de-fecha-pie { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; font-size: .8rem; color: #6b6f8c; }
-        .selector-de-fecha-pie button { align-self: flex-start; background: none; border: none; color: var(--primary); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
-        .sucursal-tarjeta { margin: 0 0 16px; }
-        .sucursal-tarjeta[hidden] { display: none; }
-        .sucursal-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0 16px; }
-        .sucursal-campos p { margin: 0 0 4px; }
-        .sucursal-tarjeta .actions { margin-top: 8px; }
-        .messages li.error { background: #fbdada; }
-        .datos-del-cliente { background: #f6ecff; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; }
-        .datos-del-cliente dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 6px 0; }
-        .datos-del-cliente dt { color: #666; }
-        .datos-del-cliente dd { margin: 0; font-weight: 600; }
-        .alcance-liquidador { background: #f6ecff; border-radius: 8px; padding: 10px 14px; margin: 8px 0; }
-        .alcance-fila { display: flex; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
-        .alcance-fila input, .alcance-fila select { flex: 1 1 160px; }
-        .alcance-chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 8px; }
-        .alcance-chip { background: #fff; border: 1px solid #aa00ff; border-radius: 14px; padding: 2px 4px 2px 10px; font-size: 0.9em; }
-        .alcance-quitar { border: 0; background: none; cursor: pointer; font-size: 1.1em; color: #8a1c1c; }
-        .alcance-resumen { font-weight: 600; margin: 6px 0 0; }
-        .solo-lectura form, .solo-lectura .section-edit { display: none; }
-        .archivo-actual { border: 1px solid #e0d4ef; border-radius: 8px; padding: 10px 12px; background: #fff; }
-        .archivo-actual-vista { display: flex; gap: 12px; align-items: center; }
-        .archivo-actual-miniatura { max-width: 160px; max-height: 64px; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
-        .archivo-actual-datos { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; word-break: break-all; }
-        .archivo-por-quitar { opacity: 0.4; text-decoration: line-through; }
-        .archivo-actual-aviso { color: #8a1c1c; font-weight: 600; margin: 6px 0 0; }
-        .archivo-actual-etiqueta { margin-top: 10px; font-weight: 500; }
-        .error-box { display: block; background: #fbdada; color: #8a1c1c; border-left: 4px solid #c62828; border-radius: 6px; padding: 8px 12px; margin: 4px 0 8px; font-weight: 600; }
-        .error-box > span { display: block; }
-        .reglas { display: block; color: #666; font-size: 0.85em; margin-top: 4px; }
-        .reglas ul { margin: 4px 0 0; padding-left: 18px; }
-        .field-error { color: #d92b6b; font-size: 0.85rem; }
-        .filter-form { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-        .filter-row { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; }
-        .filter-row > div { flex: 1; min-width: 200px; }
-        .filter-row label { margin-top: 0; }
-        .date-range { display: flex; align-items: center; gap: 6px; }
-        th .sort-link { color: inherit; text-decoration: none; }
-        th .sort-link:hover { text-decoration: underline; }
-        fieldset { border: 1px solid var(--border); border-radius: 8px; margin-top: 14px; padding: 12px 14px; }
-        .muted { color: #6b6f8c; font-size: 0.85rem; }
-        .dashboard-layout { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
-        .dashboard-listado { flex: 2 1 560px; min-width: 0; }
-        .dashboard-listado table { display: block; overflow-x: auto; }
-        .alta-form { display: flex; flex-direction: column; gap: 4px; }
-        .modulos-grid { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-        .section-readonly dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
-        .section-readonly dt { font-weight: 600; color: var(--primary-dark); }
-        .section-readonly dd { margin: 0; }
-        .topbar-user { display: flex; align-items: center; gap: 8px; }
-        details.menu-usuario { position: relative; }
-        details.menu-usuario summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-        details.menu-usuario summary::-webkit-details-marker { display: none; }
-        .menu-usuario-lista { position: absolute; right: 0; top: calc(100% + 8px); min-width: 160px; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 4px 0; z-index: 20; }
-        .menu-usuario-lista a, .menu-usuario-lista button { display: block; width: 100%; text-align: left; padding: 8px 14px; background: none; border: none; font: inherit; color: var(--primary-dark); cursor: pointer; text-decoration: none; box-sizing: border-box; }
-        .menu-usuario-lista a:hover, .menu-usuario-lista button:hover { background: #f1f4f8; }
-        details.opciones-avanzadas { margin: 16px 0; border: 1px solid #d9dee5; border-radius: 6px; padding: 10px 14px; }
-        details.opciones-avanzadas summary { cursor: pointer; font-weight: 600; }
-        details.opciones-avanzadas[open] summary { margin-bottom: 10px; }
-        details.section-edit { margin-top: 16px; }
-        details.section-edit summary.btn { list-style: none; }
-        details.section-edit summary.btn::-webkit-details-marker { display: none; }
-        details.section-edit summary.btn::marker { content: ""; }
-        details.section-edit[open] summary.btn { margin-bottom: 16px; }
-        .upload-toggle { position: relative; }
-        .upload-toggle input[type=radio] { position: absolute; opacity: 0; width: 0; height: 0; }
-        .upload-choice { display: flex; gap: 12px; margin: 10px 0 16px; }
-        .upload-choice label {
-            flex: 1; margin: 0; font-weight: 500; text-align: center; cursor: pointer;
-            border: 2px solid var(--border); border-radius: 10px; padding: 14px; background: #fff;
-        }
-        .upload-choice label .muted { display: block; font-weight: 400; margin-top: 2px; }
-        .upload-panel { display: none; }
-        #metodo_manual:checked ~ .upload-choice label[for="metodo_manual"],
-        #metodo_archivo:checked ~ .upload-choice label[for="metodo_archivo"] {
-            border-color: var(--primary); background: #f6ecff;
-        }
-        #metodo_manual:checked ~ .panel-manual,
-        #metodo_archivo:checked ~ .panel-archivo { display: block; }
-        .field-tag {
-            display: inline-block; background: #fff; border: 1px solid var(--border); border-radius: 6px;
-            padding: 2px 8px; margin: 2px 4px 2px 0; font-size: 0.8rem;
-        }
-    </style>
+    <link rel="stylesheet" href="{% static 'portal.css' %}">
 </head>
 <body>
 <header class="topbar">
@@ -180,7 +16,6 @@
     </a>
     {% if request.user.is_authenticated %}
         <span class="topbar-user">
-            {% if request.user.is_superuser %}<a href="{% url 'dashboard:implementadores' %}">Implementadores</a> ·{% endif %}
             <details class="menu-usuario">
                 <summary aria-label="Menú de usuario">
                     <span>{{ request.user }}{% if request.user.is_staff %} <span class="muted">({{ request.user|rol_del_equipo }})</span>{% endif %}</span>
@@ -188,6 +23,7 @@
                 </summary>
                 <div class="menu-usuario-lista">
                     <a href="{% url 'perfil' %}">Mi perfil</a>
+                    {% if request.user.is_superuser %}<a href="{% url 'dashboard:implementadores' %}">Equipo</a>{% endif %}
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
                         <button type="submit">Salir</button>
@@ -205,6 +41,7 @@
     {% endif %}
     {% block content %}{% endblock %}
 </main>
+<script src="{% static 'seleccionar_todas.js' %}"></script>
 <script>
 /* Anti doble clic: al enviar un formulario se deshabilitan sus botones, así un segundo clic no
    duplica el alta ni el envío. Se deshabilita en el próximo ciclo (si no, el botón apretado no

@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from clients.models import Implementacion
 from clients.services import con_ultimo_movimiento
+from clients.validators import cuits_sin_guiones
 from clients.xlsx import escribir_celda
 
 COLUMNAS = [
@@ -24,11 +25,13 @@ def _fecha(valor):
     return timezone.localtime(valor).strftime("%d/%m/%Y") if valor else ""
 
 
-def generar_reporte_implementaciones_xlsx():
-    """Un .xlsx con una fila por implementación (todas, sin filtros), de la más nueva a la más
-    vieja. La fecha de implementación es la real si ya está cumplida, o la estimada si no."""
+def generar_reporte_implementaciones_xlsx(queryset=None):
+    """Un .xlsx con una fila por implementación, de la más nueva a la más vieja. `queryset` son las que se
+    exportan (el panel pasa las que ve quien exporta); sin él, todas. La fecha de implementación es la real si
+    ya está cumplida, o la estimada si no."""
     implementaciones = (
-        con_ultimo_movimiento(Implementacion.objects).select_related("cliente", "implementador_asignado", "creado_por")
+        con_ultimo_movimiento(Implementacion.objects.all() if queryset is None else queryset)
+        .select_related("cliente", "implementador_asignado", "creado_por")
         .prefetch_related("modulos__modulo")
         .annotate(
             cant_empleados=Count("empleados", distinct=True), cant_sucursales=Count("sucursales", distinct=True),
@@ -54,7 +57,7 @@ def generar_reporte_implementaciones_xlsx():
         else:
             fecha_impl, tipo_fecha = "", ""
         valores = [
-            imp.cliente.nombre, imp.cliente.razon_social, imp.cliente.cuits,
+            imp.cliente.nombre, imp.cliente.razon_social, ", ".join(cuits_sin_guiones(imp.cliente.cuits)),
             imp.marca_de_devolucion or imp.estado_visual_label,
             imp.paso_actual if imp.estado_visual == Implementacion.VISUAL_A_COMPLETAR else "",
             imp.asignado_nombre, imp.creado_por.get_username() if imp.creado_por else "",

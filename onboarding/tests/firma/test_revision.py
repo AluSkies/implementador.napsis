@@ -40,7 +40,14 @@ class RevisionDelEquipoTests(BaseWizard):
     def test_sin_firma_no_hay_nada_que_validar(self):
         self.implementacion.firmas.all().delete()
         resultado = acciones.validar_firma(ANA, self.implementacion)
-        self.assertEqual(resultado.avisos[0].texto, "Todavía no hay una firma cargada para validar.")
+        self.assertEqual(resultado.avisos[0].texto, "Todavía no hay una firma ubicada para validar.")
+
+    def test_una_firma_ubicada_sin_imagen_se_puede_validar(self):
+        self.firma.imagen.delete(save=False)
+        self.firma.imagen = ""
+        self.firma.save()
+        resultado = acciones.validar_firma(ANA, self.implementacion)
+        self.assertEqual(self.implementacion.firma.estado, "validada", resultado.avisos)
 
     def test_no_se_aprueba_para_configurar_con_la_firma_sin_validar(self):
         resultado = acciones.aprobar_para_configurar(ANA, self.implementacion)

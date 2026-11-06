@@ -2,7 +2,7 @@ from contextlib import contextmanager
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Case, DateField, IntegerField, OuterRef, Subquery, Value, When
+from django.db.models import Case, DateField, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils.crypto import get_random_string
 from django.utils.dateparse import parse_date
@@ -66,9 +66,33 @@ def con_ultimo_movimiento(queryset):
     return queryset.annotate(movimiento_en=Greatest(Coalesce(ultimo_evento, "creado"), "creado"))
 
 
+SIN_ASIGNAR = "sin"
+
+
+def valores_del_filtro(params, clave):
+    """Los valores no vacíos de un filtro. Puede venir repetido (`?estado=a&estado=b`, un `QueryDict`) o suelto
+    (un diccionario con un texto o una lista)."""
+    if hasattr(params, "getlist"):
+        valores = params.getlist(clave)
+    else:
+        valor = params.get(clave)
+        valores = list(valor) if isinstance(valor, (list, tuple)) else [valor]
+    return [v.strip() for v in valores if isinstance(v, str) and v.strip()]
+
+
+def ids_del_filtro(params, clave):
+    """Los valores numéricos de un filtro (ids), sin repetir y en el orden en que llegaron."""
+    return list(dict.fromkeys(int(v) for v in valores_del_filtro(params, clave) if v.isdigit()))
+
+
 def filtrar_y_ordenar_implementaciones(queryset, params):
     """Aplica al listado del panel los filtros y el orden que vengan por querystring
-    (?cliente=&estado=&creado_desde=&creado_hasta=&fecha_impl_desde=&fecha_impl_hasta=&ordenar=&direccion=).
+    (?cliente=&empresa=&implementador=&estado=&creado_desde=&creado_hasta=&fecha_impl_desde=&fecha_impl_hasta=
+    &ordenar=&direccion=).
+
+    `empresa`, `implementador` y `estado` aceptan varios valores (`?estado=a&estado=b`: alcanza con que cumpla uno).
+    `empresa` son ids de `Cliente`; `implementador`, ids de cuenta o `sin` (sin asignar); `cliente` es un texto que
+    tiene que estar en el nombre de la empresa. El panel solo pasa lo que el usuario ve: acá no se controla eso.
     """
     queryset = con_ultimo_movimiento(queryset).annotate(
         estado_orden=Case(
@@ -92,13 +116,29 @@ def filtrar_y_ordenar_implementaciones(queryset, params):
     if cliente_q:
         queryset = queryset.filter(cliente__nombre__icontains=cliente_q)
 
-    estado = params.get("estado", "")
-    if estado in Implementacion.VISUAL_LABELS:
-        queryset = queryset.filter(Implementacion.filtro_visual(estado))
-    elif estado == Implementacion.SIN_MOVIMIENTO:
-        queryset = queryset.filter(
-            estado=Implementacion.ESTADO_PENDIENTE, movimiento_en__lte=Implementacion.limite_sin_movimiento(),
-        )
+    empresas = ids_del_filtro(params, "empresa")
+    if empresas:
+        queryset = queryset.filter(cliente_id__in=empresas)
+
+    valores_implementador = valores_del_filtro(params, "implementador")
+    implementadores = ids_del_filtro(params, "implementador")
+    sin_asignar = SIN_ASIGNAR in valores_implementador
+    if implementadores or sin_asignar:
+        condicion = Q(implementador_asignado_id__in=implementadores)
+        if sin_asignar:
+            condicion |= Q(implementador_asignado__isnull=True)
+        queryset = queryset.filter(condicion)
+
+    condicion_de_estado = Q()
+    for estado in valores_del_filtro(params, "estado"):
+        if estado in Implementacion.VISUAL_LABELS:
+            condicion_de_estado |= Implementacion.filtro_visual(estado)
+        elif estado == Implementacion.SIN_MOVIMIENTO:
+            condicion_de_estado |= Q(
+                estado=Implementacion.ESTADO_PENDIENTE, movimiento_en__lte=Implementacion.limite_sin_movimiento(),
+            )
+    if condicion_de_estado:
+        queryset = queryset.filter(condicion_de_estado)
 
     creado_desde = parse_date(params.get("creado_desde", ""))
     if creado_desde:
@@ -235,6 +275,7 @@ def _snapshot_condiciones(implementacion):
         ),
         "Solo Área única": "No" if implementacion.segmentacion_editable else "Sí",
         "Máximo de personas con rol": implementacion.max_roles,
+        "Máximo de documentos": implementacion.max_documentos or "Sin límite",
     }
 
 

@@ -44,7 +44,7 @@ class SinMovimientoEnElPanelTests(BasePanel):
         pagina = self.client.get(self.home, {"estado": "sin_movimiento"}).content.decode()
         self.assertIn("Quieta S.A.", tabla_del_listado(pagina))
         self.assertNotIn("Activa S.A.", tabla_del_listado(pagina))
-        self.assertIn("Implementación sin movimiento</option>", pagina)
+        self.assertIn('value="sin_movimiento" checked', pagina)  # la opción del filtro queda marcada
 
     def test_la_ficha_avisa_hace_cuanto_y_que_la_saca(self):
         pagina = self.client.get(reverse("dashboard:implementacion_detalle", kwargs={"pk": self.quieta.pk}))

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+{% include "dashboard/_equipo_nav.html" with seccion="grupos" %}
+<div class="equipo-layout">
+    <div class="card equipo-completa">
+        <h1>{{ grupo.nombre }}</h1>
+        <p>
+            <strong>Supervisor:</strong> <a href="{% url 'dashboard:implementador_detalle' pk=grupo.supervisor_id %}">{{ grupo.supervisor.get_full_name|default:grupo.supervisor.username }}</a>
+            &nbsp;·&nbsp; <strong>Integrantes:</strong> {{ grupo.integrantes }}
+            &nbsp;·&nbsp; <strong>Implementaciones de los integrantes:</strong> {{ grupo.implementaciones }}
+        </p>
+    </div>
+
+    <div class="card equipo-principal">
+        <h2>Datos del grupo</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="guardar">
+            {% include "dashboard/_form_grupo.html" %}
+            <p class="muted">Si sacás a alguien del grupo, lo que tiene asignado deja de verlo el supervisor (lo sigue viendo el admin, que puede reasignarlo).</p>
+            <div class="actions"><button class="btn" type="submit">Guardar cambios</button></div>
+        </form>
+    </div>
+
+    <div class="card equipo-lateral">
+        <h2>Borrar el grupo</h2>
+        <p class="muted">Se borra el grupo, no las cuentas. Sus integrantes quedan sin grupo y el supervisor deja de ver sus implementaciones.</p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="borrar">
+            <button class="btn danger" type="submit" onclick="return confirm('¿Borrar el grupo {{ grupo.nombre|escapejs }}? Las cuentas se conservan, pero {{ grupo.supervisor.username|escapejs }} deja de ver las implementaciones de sus {{ grupo.integrantes }} integrante(s).')">Borrar grupo</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

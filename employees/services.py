@@ -233,17 +233,18 @@ def generar_plantilla_xlsx():
 
 def generar_nomina_xlsx(empleados):
     """Genera un .xlsx con la nómina ya cargada de una implementación, para que el
-    equipo de Napsis la descargue (mismas columnas que la plantilla vacía)."""
+    equipo de Napsis la descargue (mismas columnas que la plantilla vacía). Los CUIL salen siempre
+    sin guiones (11 dígitos, como se guardan): es lo que se carga en Napsis."""
     wb, ws = _armar_hoja_con_headers()
     for fila_idx, empleado in enumerate(empleados, start=2):
         for col_idx, (_header, campo, _obligatorio, tipo) in enumerate(COLUMNAS, start=1):
             if campo in ("reporta_a", "aprobador"):
                 relacionado = getattr(empleado, campo)
-                valor = formatear_cuil(relacionado.cuil) if relacionado else ""
+                valor = normalizar_cuil(relacionado.cuil) if relacionado else ""
             else:
                 valor = getattr(empleado, campo)
                 if campo == "cuil":
-                    valor = formatear_cuil(valor)
+                    valor = normalizar_cuil(valor)
                 elif tipo == "booleano":
                     valor = "SI" if valor else "NO"
                 elif tipo == "fecha" and valor:
@@ -460,12 +461,6 @@ def leer_archivo_empleados(django_file, ingreso_obligatorio=False):
             filas_validas.append(datos)
 
     return ResultadoLectura(filas_validas, errores, ignoradas)
-
-
-def parse_archivo_empleados(django_file, ingreso_obligatorio=False):
-    """Versión corta de leer_archivo_empleados: devuelve solo (filas_validas, errores)."""
-    resultado = leer_archivo_empleados(django_file, ingreso_obligatorio)
-    return resultado.filas, resultado.errores
 
 
 def snapshot_empleados(implementacion):

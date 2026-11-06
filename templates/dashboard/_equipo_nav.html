@@ -1,0 +1,5 @@
+<nav class="equipo-nav" aria-label="Equipo">
+    <a class="volver" href="{% url 'dashboard:home' %}">&larr; Volver al panel</a>
+    <a href="{% url 'dashboard:implementadores' %}" class="{% if seccion == 'cuentas' %}activa{% endif %}">Cuentas</a>
+    <a href="{% url 'dashboard:grupos' %}" class="{% if seccion == 'grupos' %}activa{% endif %}">Grupos</a>
+</nav>

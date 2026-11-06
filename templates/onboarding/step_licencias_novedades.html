@@ -3,7 +3,7 @@
 <form method="post">
     {% csrf_token %}
     <h3>Licencias</h3>
-    <table>
+    <table data-seleccionable="todas">
         <thead><tr><th>Activar</th><th>Licencia</th></tr></thead>
         <tbody>
         {% for licencia, campo_activo in licencias_rows %}
@@ -16,7 +16,7 @@
     </table>
 
     <h3>Novedades</h3>
-    <table>
+    <table data-seleccionable="todas">
         <thead><tr><th>Activar</th><th>Novedad</th></tr></thead>
         <tbody>
         {% for novedad, campo_activo in novedades_rows %}

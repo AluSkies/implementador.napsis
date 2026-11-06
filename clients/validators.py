@@ -82,6 +82,12 @@ def _cuit_valido(digitos):
     return _digito_verificador(digitos[:10]) == int(digitos[10])
 
 
+def cuits_sin_guiones(valor):
+    """Los CUIT guardados (NN-NNNNNNNN-N, separados por coma) como lista de 11 dígitos pegados: es como salen
+    en lo que se exporta (el reporte y la configuración congelada). En pantalla se siguen viendo con guiones."""
+    return ["".join(c for c in parte if c.isdigit()) for parte in (valor or "").replace(";", ",").split(",") if parte.strip()]
+
+
 def normalizar_cuits(valor):
     """Valida uno o varios CUIT separados por coma (con o sin guiones) y los devuelve
     formateados como NN-NNNNNNNN-N, separados por coma. Lanza ValidationError si alguno

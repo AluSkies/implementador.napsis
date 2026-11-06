@@ -36,6 +36,7 @@ from onboarding.services.nomina import (
     agregar_empleado,
     editar_empleado,
     eliminar_empleado,
+    eliminar_todos_los_empleados,
     importar_archivo_empleados,
     resumen_importacion,
 )
@@ -99,6 +100,7 @@ __all__ = [
     "contexto_del_editor_de_firma",
     "editar_empleado",
     "eliminar_empleado",
+    "eliminar_todos_los_empleados",
     "estado_actual_documentos",
     "estado_actual_licencias",
     "estado_actual_novedades",

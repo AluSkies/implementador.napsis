@@ -3,7 +3,7 @@
 import json
 import tempfile
 
-from dashboard.tests.base import crear_supervisor
+from dashboard.tests.base import crear_operador
 from django.test import override_settings
 from django.urls import reverse
 
@@ -18,7 +18,7 @@ ANA = Actor.implementador("ana")
 class PanelTests(EnviadaBase):
     def setUp(self):
         super().setUp()
-        self.ana = crear_supervisor("ana")
+        self.ana = crear_operador("ana")
         self.url = reverse("dashboard:implementacion_detalle", kwargs={"pk": self.implementacion.pk})
 
     def test_sin_aprobar_no_hay_seccion(self):

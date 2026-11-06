@@ -1,0 +1,96 @@
+/* Wizard del cliente: panel lateral con los pasos y el contenido en secciones. Todo cuelga de main.wizard,
+   así no toca el resto del portal. Las aclaraciones de cada campo van en un «?» (ver .ayuda). */
+
+main.wizard { max-width: none; margin: 0; padding: 0; background: #fff; min-height: calc(100vh - var(--alto-barra)); }
+main.wizard > .messages { margin: 16px 44px 0; }
+
+.wizard-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: calc(100vh - var(--alto-barra)); }
+
+/* ---- panel lateral */
+.wizard-lateral { background: linear-gradient(180deg, var(--primary-dark), var(--navy)); color: #fff; padding: 28px 22px; }
+.wizard-lateral h2 { color: #fff; font-size: 1.05rem; margin: 0; }
+.wizard-lateral .cliente { color: var(--on-dark-muted); font-size: .85rem; }
+.wizard-avance { height: 5px; background: #ffffff26; border-radius: 5px; margin: 14px 0 22px; overflow: hidden; }
+.wizard-avance i { display: block; height: 100%; background: #e07bff; border-radius: 5px; }
+ol.wizard-pasos { list-style: none; margin: 0; padding: 0; }
+.wizard-paso { display: flex; gap: 12px; align-items: center; padding: 9px 12px; margin: 2px -12px; border-radius: var(--radius); font-size: .84rem; color: #c9c7ff; text-decoration: none; }
+a.wizard-paso:hover { background: #ffffff14; }
+.wizard-paso .num { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid #ffffff55; display: grid; place-items: center; font-weight: 700; font-size: .72rem; }
+.wizard-paso.hecho .num { background: var(--success-on-dark); border-color: var(--success-on-dark); color: #06361d; }
+.wizard-paso.actual { background: #ffffff1f; color: #fff; font-weight: 700; }
+.wizard-paso.actual .num { background: #fff; color: var(--primary-dark); border-color: #fff; }
+.wizard-paso.pendiente:not(a) { opacity: .6; }
+
+/* ---- contenido */
+.wizard-contenido { padding: 36px 44px 64px; max-width: 900px; width: 100%; }
+.wizard-contenido h1 { font-size: 1.5rem; margin: 0 0 4px; }
+.wizard-contenido .volver { margin: 0 0 22px; font-size: .85rem; }
+.wizard-contenido .volver a { color: var(--primary); }
+.wizard-aviso { background: var(--warn-bg); border-radius: var(--radius); padding: 12px 16px; margin: 0 0 18px; }
+
+.seccion { background: var(--surface-soft); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 14px; }
+.seccion > h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; margin: 0 0 12px; position: relative; }
+.seccion > p.muted:first-child { margin-top: 0; }
+.wizard .grilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; }
+.wizard .campo { position: relative; margin: 0 0 4px; }
+.wizard .campo > label, .wizard .campo > .etiqueta { display: flex; align-items: center; gap: 6px; margin: 0 0 5px; font-weight: 600; font-size: .9rem; }
+.wizard .campo.con-error input, .wizard .campo.con-error select, .wizard .campo.con-error textarea { border-color: var(--danger); }
+.wizard .campo ul.errorlist { list-style: none; margin: 4px 0 0; padding: 0; color: var(--danger); font-size: .85rem; }
+.wizard .campo.casilla > label { font-weight: 500; }
+.wizard .campo.casilla input[type=checkbox] { width: auto; }
+.wizard .non-field-errors, .wizard ul.errorlist.nonfield { list-style: none; margin: 0 0 14px; padding: 10px 14px; border-radius: 8px; background: var(--danger-bg); color: var(--danger-text); }
+
+/* ---- «?» con la aclaración al pasar el cursor (o al enfocarlo con el teclado o tocarlo) */
+.ayuda { width: 18px; height: 18px; border-radius: 50%; border: 0; background: var(--tint-strong); color: var(--primary); font: 700 .72rem/18px 'Montserrat', sans-serif; padding: 0; cursor: help; flex: none; }
+.ayuda:hover, .ayuda:focus { background: var(--primary); color: #fff; outline: none; }
+.ayuda::after { content: attr(data-ayuda); position: absolute; left: 0; bottom: calc(100% + 6px); width: max-content; max-width: min(320px, 100%); background: var(--text); color: #fff; font: 500 .78rem/1.4 'Montserrat', sans-serif; text-align: left; padding: 8px 11px; border-radius: 8px; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 20; white-space: normal; }
+.ayuda:hover::after, .ayuda:focus::after { opacity: 1; }
+
+/* ---- liquidaciones y archivos */
+.wizard .bloqueo { background: var(--tint); border-radius: 8px; padding: 10px 14px; margin: 0 0 10px; font-weight: 600; font-size: .9rem; }
+.wizard .liquidaciones div[id] { display: flex; flex-wrap: wrap; gap: 8px; }
+.wizard .liquidaciones label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-weight: 500; background: #fff; margin: 0; }
+.wizard .liquidaciones label:has(input:checked) { border-color: var(--primary); background: var(--tint-soft); }
+.wizard .liquidaciones input[type=checkbox] { width: auto; }
+.wizard .oblig { font: 600 .7rem 'Montserrat', sans-serif; background: var(--warn-bg); color: var(--warn-text); padding: 2px 8px; border-radius: var(--radius); }
+
+/* ---- desplegable de lo opcional */
+.desplegable { margin: 18px 0 14px; border: 1px dashed #c9b3e6; border-radius: 12px; background: #fcf9ff; }
+.desplegable > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; font-weight: 700; color: var(--primary-dark); }
+.desplegable > summary::-webkit-details-marker { display: none; }
+.desplegable > summary::before { content: '▸'; color: var(--primary); margin-right: 8px; transition: transform .15s; display: inline-block; }
+.desplegable[open] > summary::before { transform: rotate(90deg); }
+.desplegable > summary > span:first-child { flex: 1; }
+.desplegable > summary em { font-style: normal; color: #8a5ab0; font-weight: 600; letter-spacing: .02em; }
+.desplegable .resumen { font-weight: 500; color: var(--muted); font-size: .82rem; }
+.desplegable-cuerpo { padding: 4px 16px 16px; display: grid; gap: 12px; }
+
+/* ---- documentos con cupo */
+.cupo { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--tint); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; }
+.cupo strong { display: block; font-size: 1rem; color: var(--primary-dark); }
+.cupo.agotado { background: var(--warn-bg); }
+.cupo.excedido { background: var(--danger-bg); }
+.wizard table.documentos tr.bloqueada td { opacity: .45; }
+.wizard table.documentos tr.bloqueada input { cursor: not-allowed; }
+.wizard table.documentos td input[type=checkbox] { width: auto; }
+
+.nomina-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+.nomina-cabecera h3 { margin: 0; }
+
+/* ---- personas (roles) */
+.wizard fieldset { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 16px; margin: 0 0 12px; position: relative; }
+.wizard fieldset legend { font-weight: 700; color: var(--primary-dark); padding: 0 6px; }
+
+.wizard .actions { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--border); display: flex; gap: 10px; }
+
+@media (max-width: 820px) {
+    .wizard-layout { grid-template-columns: minmax(0, 1fr); }
+    .wizard-lateral { padding: 16px; }
+    .wizard-avance { margin: 10px 0 12px; }
+    ol.wizard-pasos { display: flex; overflow-x: auto; gap: 4px; }
+    .wizard-paso { flex: none; margin: 0; }
+    .wizard-paso .tit { display: none; }
+    .wizard-paso.actual .tit { display: inline; }
+    .wizard-contenido { padding: 20px 16px 48px; }
+    main.wizard > .messages { margin: 12px 16px 0; }
+}

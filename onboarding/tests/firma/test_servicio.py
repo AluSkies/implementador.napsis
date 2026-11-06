@@ -86,7 +86,14 @@ class ServicioTests(BaseWizard):
 
     def test_sin_firma_el_control_de_faltantes_la_pide(self):
         mensajes = [(p["paso"], p["mensaje"]) for p in services.pendientes_de_envio(self.implementacion)]
-        self.assertIn((services.PASO_FIRMA, "Subir la imagen de la firma y ubicarla sobre el recibo."), mensajes)
+        self.assertIn((services.PASO_FIRMA, "Ubicar la firma sobre el recibo."), mensajes)
+
+    def test_sin_imagen_alcanza_con_ubicar_la_firma(self):
+        firma = self.guardar(archivo=None)
+        self.assertFalse(firma.imagen)
+        self.assertEqual(firma.estado, "propuesta")
+        pasos = [p["paso"] for p in services.pendientes_de_envio(self.implementacion)]
+        self.assertNotIn(services.PASO_FIRMA, pasos)
 
     def test_con_la_firma_cargada_deja_de_pedirla(self):
         self.guardar()

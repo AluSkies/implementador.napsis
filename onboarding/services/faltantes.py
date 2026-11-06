@@ -65,10 +65,8 @@ def pendientes_de_envio(implementacion):
 
     if PASO_FIRMA in activos:
         firma = implementacion.firma
-        if firma is None or not firma.imagen:
-            pendientes.append({
-                "paso": PASO_FIRMA, "mensaje": "Subir la imagen de la firma y ubicarla sobre el recibo.",
-            })
+        if firma is None:
+            pendientes.append({"paso": PASO_FIRMA, "mensaje": "Ubicar la firma sobre el recibo."})
         elif firma.estado == UbicacionFirma.ESTADO_OBSERVADA:
             pendientes.append({
                 "paso": PASO_FIRMA, "mensaje": "Ajustar la firma según lo que pidió el equipo de Napsis.",
@@ -94,7 +92,7 @@ def pendientes_de_validacion(implementacion):
     mensajes = [p["mensaje"] for p in pendientes_de_envio(implementacion)]
     firma = implementacion.firma
     if (
-        implementacion.usa_modulo(Modulo.RECIBO_DIGITAL) and firma is not None and firma.imagen
+        implementacion.usa_modulo(Modulo.RECIBO_DIGITAL) and firma is not None
         and firma.estado == UbicacionFirma.ESTADO_PROPUESTA
     ):
         mensajes.append("Falta validar la firma del recibo.")

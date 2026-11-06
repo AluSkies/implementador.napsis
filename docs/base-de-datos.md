@@ -1,6 +1,6 @@
 # Base de datos: diagrama entidad-relación
 
-Esquema real de la base (MySQL 8 en producción, SQLite en desarrollo), sacado de los modelos Django. Son **25 tablas propias** más `auth_user` de Django. El diagrama muestra las claves, los campos que sostienen cada relación y los más importantes de cada tabla; la lista completa de columnas está en los modelos (`*/models.py`).
+Esquema real de la base (MySQL 8 en producción, SQLite en desarrollo), sacado de los modelos Django. Son **28 tablas propias** más `auth_user` de Django. El diagrama muestra las claves, los campos que sostienen cada relación y los más importantes de cada tabla; la lista completa de columnas está en los modelos (`*/models.py`).
 
 **Cómo leerlo.** `||--o{` es «uno a muchos» (un cliente tiene muchas implementaciones); `||--o|` es «uno a cero o uno»; las líneas punteadas son relaciones débiles (referencias que pueden quedar vacías).
 
@@ -19,6 +19,24 @@ erDiagram
     auth_group {
         int id PK
         string name UK "Supervisor"
+    }
+    dashboard_grupodetrabajo {
+        bigint id PK
+        string nombre UK
+        int supervisor_id FK "PROTECT: ve a los integrantes"
+    }
+    dashboard_membresia {
+        bigint id PK
+        int usuario_id FK,UK "un implementador, un solo grupo"
+        bigint grupo_id FK
+    }
+    dashboard_eventodecuenta {
+        bigint id PK
+        datetime momento
+        string actor "usuario, como texto"
+        string sujeto "cuenta o grupo afectado"
+        string accion
+        json datos
     }
 
     clients_cliente {
@@ -212,6 +230,9 @@ erDiagram
 
     auth_user ||--o| clients_cliente : "cuenta de login"
     auth_user }o--o{ auth_group : "pertenece"
+    auth_user ||--o{ dashboard_grupodetrabajo : "supervisa"
+    dashboard_grupodetrabajo ||--o{ dashboard_membresia : "integrantes"
+    auth_user ||--o| dashboard_membresia : "integra un grupo"
     auth_user ||--o{ clients_implementacion : "asignada a"
     auth_user ||--o{ clients_implementacion : "creada por"
     auth_user ||--o{ clients_comentariointerno : "escribe"

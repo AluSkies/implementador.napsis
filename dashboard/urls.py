@@ -13,4 +13,6 @@ urlpatterns = [
     path("exportar/", views.exportar_implementaciones, name="exportar"),
     path("implementadores/", views.implementadores_lista, name="implementadores"),
     path("implementadores/<int:pk>/", views.implementador_detalle, name="implementador_detalle"),
+    path("grupos/", views.grupos_lista, name="grupos"),
+    path("grupos/<int:pk>/", views.grupo_detalle, name="grupo_detalle"),
 ]

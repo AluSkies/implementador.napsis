@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block main_class %}wide{% endblock %}
+{% block content %}
+{% include "dashboard/_equipo_nav.html" with seccion="grupos" %}
+<div class="equipo-layout">
+    <div class="card equipo-principal">
+        <h1>Grupos de trabajo</h1>
+        <p class="muted">
+            Un grupo es una lista de implementadores a cargo de un supervisor. El supervisor ve las implementaciones de todos los integrantes de
+            sus grupos (y las suyas), pero no las de otros supervisores. Cada implementador integra un solo grupo. Los admins ven todo y no integran grupos.
+        </p>
+        <div class="tabla-scroll">
+            <table>
+                <thead><tr><th>Grupo</th><th>Supervisor</th><th class="derecha">Integrantes</th><th class="derecha" title="Implementaciones de los integrantes">Implementaciones</th><th></th></tr></thead>
+                <tbody>
+                {% for g in grupos %}
+                    <tr>
+                        <td><strong>{{ g.nombre }}</strong></td>
+                        <td>{{ g.supervisor.get_full_name|default:g.supervisor.username }}{% if not g.supervisor.is_active %} <span class="muted">(de baja)</span>{% endif %}</td>
+                        <td class="derecha">{{ g.integrantes }}</td>
+                        <td class="derecha">{{ g.implementaciones }}</td>
+                        <td class="derecha"><a href="{% url 'dashboard:grupo_detalle' pk=g.pk %}">Ver</a></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="5" class="muted">Todavía no hay grupos. Hasta que los armes, cada supervisor ve solo las implementaciones que tiene asignadas.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card equipo-lateral">
+        <h2>Nuevo grupo</h2>
+        <form method="post">
+            {% csrf_token %}
+            {% include "dashboard/_form_grupo.html" %}
+            <div class="actions"><button class="btn" type="submit">Crear grupo</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}

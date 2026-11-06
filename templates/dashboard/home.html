@@ -1,8 +1,73 @@
 {% extends "base.html" %}
-{% load pasos %}
+{% load pasos static %}
 {% block main_class %}wide{% endblock %}
 {% block content %}
-<div class="dashboard-layout">
+<link rel="stylesheet" href="{% static 'panel_filtros.css' %}">
+<div class="panel-con-filtros">
+<aside class="filtros-lateral" aria-label="Filtros del listado">
+    <form method="get" class="filtros-form" id="form-filtros">
+        {% if filtros_aplicados.ordenar %}<input type="hidden" name="ordenar" value="{{ filtros_aplicados.ordenar }}">{% endif %}
+        {% if filtros_aplicados.direccion %}<input type="hidden" name="direccion" value="{{ filtros_aplicados.direccion }}">{% endif %}
+        <h2>Filtros {% if filtros.hay_filtros %}<a class="limpiar-todo" href="{% url 'dashboard:home' %}">Limpiar todo</a>{% endif %}</h2>
+
+        {% if filtros.implementadores %}
+        <section class="bloque">
+            <h3>Implementador</h3>
+            <div class="lista">
+                {% with mias=filtros.implementadores.mias %}
+                <label class="opcion"><input type="checkbox" name="implementador" value="{{ mias.valor }}" {% if mias.marcado %}checked{% endif %}><span>{{ mias.nombre }}</span><span class="n">{{ mias.n }}</span></label>
+                {% endwith %}
+                {% for seccion in filtros.implementadores.secciones %}
+                    <label class="grupo-t"><input type="checkbox" data-grupo {% if seccion.todos %}checked{% endif %}><span>{{ seccion.nombre }}</span></label>
+                    {% for p in seccion.personas %}
+                    <label class="opcion sub"><input type="checkbox" name="implementador" value="{{ p.valor }}" data-del-grupo {% if p.marcado %}checked{% endif %}><span>{{ p.nombre }}{% if p.rol %} <em>{{ p.rol }}</em>{% endif %}{% if p.de_baja %} <em>de baja</em>{% endif %}</span><span class="n">{{ p.n }}</span></label>
+                    {% endfor %}
+                {% endfor %}
+                {% with sin=filtros.implementadores.sin_asignar %}
+                {% if sin %}
+                <label class="opcion separada"><input type="checkbox" name="implementador" value="{{ sin.valor }}" {% if sin.marcado %}checked{% endif %}><span>{{ sin.nombre }}</span><span class="n">{{ sin.n }}</span></label>
+                {% endif %}
+                {% endwith %}
+            </div>
+        </section>
+        {% endif %}
+
+        <section class="bloque">
+            <h3>Empresa</h3>
+            <input type="search" name="cliente" id="cliente" value="{{ filtros_aplicados.cliente }}" placeholder="Buscar empresa…" autocomplete="off" data-buscar-empresa>
+            <div class="lista" data-lista-empresas>
+                {% for e in filtros.empresas %}
+                <label class="opcion"><input type="checkbox" name="empresa" value="{{ e.id }}" {% if e.marcado %}checked{% endif %}><span>{{ e.nombre }}</span><span class="n">{{ e.n }}</span></label>
+                {% empty %}
+                <p class="muted">Todavía no hay empresas.</p>
+                {% endfor %}
+                <p class="muted" data-sin-coincidencias hidden>Ninguna empresa coincide.</p>
+            </div>
+        </section>
+
+        <section class="bloque">
+            <h3>Estado</h3>
+            {% for e in filtros.estados %}
+            <label class="opcion"><input type="checkbox" name="estado" value="{{ e.clave }}" {% if e.marcado %}checked{% endif %}><span>{{ e.label }}</span><span class="n">{{ e.n }}</span></label>
+            {% endfor %}
+        </section>
+
+        <section class="bloque">
+            <h3>Fechas</h3>
+            <div class="rango">
+                <label for="creado_desde">Carga, desde y hasta</label>
+                <input type="date" name="creado_desde" id="creado_desde" value="{{ filtros_aplicados.creado_desde }}">
+                <input type="date" name="creado_hasta" value="{{ filtros_aplicados.creado_hasta }}" aria-label="Carga, hasta">
+                <label for="fecha_impl_desde">Implementación, desde y hasta</label>
+                <input type="date" name="fecha_impl_desde" id="fecha_impl_desde" value="{{ filtros_aplicados.fecha_impl_desde }}">
+                <input type="date" name="fecha_impl_hasta" value="{{ filtros_aplicados.fecha_impl_hasta }}" aria-label="Implementación, hasta">
+            </div>
+        </section>
+
+        <button class="btn secondary" type="submit">Aplicar filtros</button>
+    </form>
+</aside>
+
 <div class="card dashboard-listado">
     <div class="page-header">
         <h1>Implementaciones</h1>
@@ -11,46 +76,12 @@
             Nueva implementación
         </button>
     </div>
-
-    <form method="get" class="filter-form">
-        <div class="filter-row">
-            <div>
-                <label for="cliente">Cliente</label>
-                <input type="text" name="cliente" id="cliente" value="{{ filtros_aplicados.cliente }}" placeholder="Buscar por nombre...">
-            </div>
-            <div>
-                <label for="estado">Estado</label>
-                <select name="estado" id="estado">
-                    <option value="">Todos</option>
-                    {% for clave, label in estados_choices %}
-                        <option value="{{ clave }}" {% if filtros_aplicados.estado == clave %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </div>
-        <div class="filter-row">
-            <div>
-                <label>Fecha de carga</label>
-                <div class="date-range">
-                    <input type="date" name="creado_desde" value="{{ filtros_aplicados.creado_desde }}">
-                    <span class="muted">a</span>
-                    <input type="date" name="creado_hasta" value="{{ filtros_aplicados.creado_hasta }}">
-                </div>
-            </div>
-            <div>
-                <label>Fecha de implementación</label>
-                <div class="date-range">
-                    <input type="date" name="fecha_impl_desde" value="{{ filtros_aplicados.fecha_impl_desde }}">
-                    <span class="muted">a</span>
-                    <input type="date" name="fecha_impl_hasta" value="{{ filtros_aplicados.fecha_impl_hasta }}">
-                </div>
-            </div>
-        </div>
-        <div class="actions">
-            <button class="btn secondary" type="submit">Filtrar</button>
-            <a class="btn secondary" href="{% url 'dashboard:home' %}">Limpiar filtros</a>
-        </div>
-    </form>
+    {% if filtros.chips %}
+    <div class="chips">
+        {% for chip in filtros.chips %}<span class="chip"><b>{{ chip.texto }}</b><a href="{{ chip.quitar }}" aria-label="Quitar este filtro" title="Quitar este filtro">×</a></span>{% endfor %}
+    </div>
+    {% endif %}
+    <p class="resumen">Mostrando <strong>{{ mostrando }}</strong> de {{ total_visibles }} implementaciones que podés ver.</p>
 
     <table>
         <thead>
@@ -90,7 +121,7 @@
         </tbody>
     </table>
     <div class="actions">
-        <a class="btn secondary" href="{% url 'dashboard:exportar' %}" title="Todas las implementaciones, sin filtros">Exportar (.xlsx)</a>
+        <a class="btn secondary" href="{% url 'dashboard:exportar' %}" title="Las implementaciones que ves, sin filtros">Exportar (.xlsx)</a>
     </div>
 </div>
 
@@ -115,6 +146,7 @@
                         <option value="{{ c.id }}" {% if alta.valores.cliente_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nombre }}</option>
                     {% endfor %}
                 </select>
+                <p class="muted" id="aviso-ajena" hidden>Esta empresa ya tiene implementaciones a cargo de otro equipo. Podés crearle una nueva, pero no ves ni cambiás sus datos: el contacto lo cargás vos.</p>
             </div>
 
             <p class="muted">Si elegiste un cliente existente, se completan solos con lo que ya hay cargado: podés corregirlos o completar lo que falte. Si es nuevo, escribilos.</p>
@@ -173,10 +205,10 @@
 
             <div class="alta-field">
                 <label>Módulos contratados</label>
-                <div class="modulos-grid">
+                <div class="modulos-grid" data-seleccionable="todos">
                     {% for modulo in modulos %}
                         <div class="checkbox-row">
-                            <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}" {% if modulo.codigo == "recibo_digital" %}checked onclick="return false"{% elif modulo.id|stringformat:"s" in alta.modulos %}checked{% endif %}>
+                            <input type="checkbox" name="modulos" value="{{ modulo.id }}" id="modulo_{{ modulo.id }}" {% if modulo.codigo == "recibo_digital" %}checked data-fijo onclick="return false"{% elif modulo.id|stringformat:"s" in alta.modulos %}checked{% endif %}>
                             <label for="modulo_{{ modulo.id }}">{{ modulo.nombre }}</label>
                         </div>
                     {% endfor %}
@@ -185,7 +217,7 @@
 
             <div class="alta-field">
                 <label>Liquidaciones disponibles para el cliente</label>
-                <div class="modulos-grid">
+                <div class="modulos-grid" data-seleccionable="todas">
                     {% for tipo in liquidaciones %}
                         <div class="checkbox-row">
                             <input type="checkbox" name="liquidaciones" value="{{ tipo.id }}" id="liquidacion_{{ tipo.id }}" {% if tipo.id|stringformat:"s" in alta.liquidaciones %}checked{% endif %}>
@@ -233,13 +265,16 @@
     var selector = document.getElementById("cliente_id");
     var campos = ["nombre", "razon_social", "cuits", "username", "mail_cliente"].map(function (id) { return document.getElementById(id); });
     var soloLectura = { nombre: true, username: true };
+    var aviso = document.getElementById("aviso-ajena");
     function completar() {
         var d = datos[selector.value];
+        var ajena = !!d && !!d.ajena;  // la trabaja otro equipo: sus datos no se tocan
         campos.forEach(function (campo) {
             var clave = { mail_cliente: "mail", username: "usuario" }[campo.id] || campo.id;
             campo.value = d ? (d[clave] || "") : "";
-            campo.readOnly = !!d && !!soloLectura[campo.id];
+            campo.readOnly = !!d && (!!soloLectura[campo.id] || (ajena && (campo.id === "razon_social" || campo.id === "cuits")));
         });
+        if (aviso) { aviso.hidden = !ajena; }
     }
     selector.addEventListener("change", completar);
     if (!dialogo.dataset.abrir) { completar(); }
@@ -247,4 +282,5 @@
     if (dialogo.dataset.abrir === "1") { dialogo.showModal(); }
 })();
 </script>
+<script src="{% static 'panel_filtros.js' %}"></script>
 {% endblock %}

@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from pathlib import Path
 
 from django.conf import settings
@@ -14,6 +15,8 @@ from django.db import connection
 from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.urls import reverse_lazy
+
+from dashboard.permisos import implementaciones_visibles
 
 from .forms import RecuperarClaveForm
 from .security import ip_del_cliente
@@ -102,23 +105,43 @@ class PortalLoginView(LoginView):
         return str(reverse_lazy("onboarding:mis_implementaciones"))
 
 
+def _implementaciones_del_archivo(nombre):
+    """Las implementaciones a las que pertenece un archivo guardado (logo, banner, modelo de recibo, imagen de la
+    firma, planilla importada o copia de una configuración congelada). Un archivo que no es de ninguna da vacío."""
+    condiciones = (
+        Q(banner=nombre) | Q(logo=nombre) | Q(modelo_recibo=nombre) | Q(firmas__imagen=nombre)
+        | Q(import_batches__archivo=nombre)
+    )
+    partes = nombre.split("/")
+    if len(partes) > 1 and partes[0] == "congeladas":  # congeladas/<uuid de la implementación>/v<n>/<campo>
+        try:
+            condiciones |= Q(uuid=uuid.UUID(partes[1]))
+        except ValueError:
+            pass
+    return Implementacion.objects.filter(condiciones)
+
+
 @login_required
 def media_protegida(request, ruta):
     """Sirve los archivos subidos (logo, banner, modelo de recibo, firma, planillas importadas).
 
-    El equipo (staff) accede a cualquiera; un cliente solo al logo, al banner, a la firma y al modelo de
-    recibo de sus propias implementaciones. Cualquier otro caso devuelve 404 (no 403)
-    para no revelar si el archivo existe. Así el proxy reverso no necesita servir
-    /media/ por su cuenta: la app es la única que decide quién ve qué.
+    El admin accede a cualquiera; el resto del equipo, solo a los de las implementaciones que ve (las suyas o las de
+    su equipo); un cliente, solo al logo, al banner, a la firma y al modelo de recibo de sus propias
+    implementaciones. Cualquier otro caso devuelve 404 (no 403) para no revelar si el archivo existe. Así el proxy
+    reverso no necesita servir /media/ por su cuenta: la app es la única que decide quién ve qué.
     """
     base = Path(settings.MEDIA_ROOT).resolve()
     archivo = (base / ruta).resolve()
     if not archivo.is_relative_to(base) or not archivo.is_file():
         raise Http404
 
+    nombre = archivo.relative_to(base).as_posix()
+    if request.user.is_staff and not request.user.is_superuser:
+        propios = implementaciones_visibles(request.user).filter(pk__in=_implementaciones_del_archivo(nombre).values("pk"))
+        if not propios.exists():
+            raise Http404
     if not request.user.is_staff:
         cliente = getattr(request.user, "cliente", None)
-        nombre = archivo.relative_to(base).as_posix()
         propio = cliente is not None and Implementacion.objects.filter(
             Q(banner=nombre) | Q(logo=nombre) | Q(modelo_recibo=nombre) | Q(firmas__imagen=nombre), cliente=cliente
         ).exists()

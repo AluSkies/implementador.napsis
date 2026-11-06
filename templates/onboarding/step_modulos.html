@@ -7,9 +7,13 @@
 {% endif %}
 <form method="post">
     {% csrf_token %}
-    {% for field in form %}
-        <div class="checkbox-row">{{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label></div>
-    {% endfor %}
+    <section class="seccion">
+        <div data-seleccionable="todos">
+        {% for field in form %}
+            <div class="checkbox-row">{{ field }} <label for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+        {% endfor %}
+        </div>
+    </section>
     <div class="actions">
         <button class="btn" type="submit">Continuar</button>
     </div>

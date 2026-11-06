@@ -1,41 +1,54 @@
 {% extends "base.html" %}
+{% load equipo %}
+{% block main_class %}wide{% endblock %}
 {% block content %}
-<div class="card">
-    <p><a href="{% url 'dashboard:home' %}">&larr; Volver al panel</a></p>
-    <h1>Implementadores</h1>
-    <p class="muted">
-        Cuentas del equipo que trabajan el panel. Un <strong>implementador</strong> ve todas las implementaciones pero solo
-        actúa sobre las que tiene asignadas. Un <strong>supervisor</strong> actúa sobre todas y las asigna a los demás.
-        Solo el rol Admin puede crear estas cuentas y cambiarles el rol.
-    </p>
-    <table>
-        <thead><tr><th>Usuario</th><th>Rol</th><th>Nombre</th><th>Mail</th><th>Estado</th><th>Último ingreso</th><th>Implementaciones creadas</th><th></th></tr></thead>
-        <tbody>
-        {% for u in implementadores %}
-            <tr>
-                <td>{{ u.username }}</td>
-                <td>{% if u.es_supervisor %}Supervisor{% else %}Implementador{% endif %}</td>
-                <td>{{ u.get_full_name|default:"—" }}</td>
-                <td>{{ u.email|default:"—" }}</td>
-                <td>{% if u.is_active %}Activo{% else %}<span class="muted">Dado de baja</span>{% endif %}</td>
-                <td>{{ u.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</td>
-                <td>{{ u.creadas }}</td>
-                <td><a href="{% url 'dashboard:implementador_detalle' pk=u.pk %}">Ver</a></td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="8" class="muted">Todavía no hay implementadores. Creá el primero abajo.</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-</div>
+{% include "dashboard/_equipo_nav.html" with seccion="cuentas" %}
+<div class="equipo-layout">
+    <div class="card equipo-principal">
+        <h1>Cuentas del equipo</h1>
+        <p class="muted">
+            Un <strong>implementador</strong> ve y actúa solo sobre las implementaciones que tiene asignadas. Un <strong>supervisor</strong>
+            además ve las de los integrantes de sus <a href="{% url 'dashboard:grupos' %}">grupos</a> y las reparte entre ellos; no ve las de otros
+            supervisores. Un <strong>admin</strong> ve todo y administra las cuentas y los grupos.
+            Solo un admin puede crear estas cuentas y cambiarles el rol.
+        </p>
+        <div class="tabla-scroll">
+            <table>
+                <thead><tr><th>Usuario</th><th>Rol</th><th>Grupo</th><th>Mail</th><th>Estado</th><th class="derecha" title="Implementaciones creadas">Creadas</th><th></th></tr></thead>
+                <tbody>
+                {% for u in implementadores %}
+                    <tr>
+                        <td><strong>{{ u.username }}</strong>{% if u.get_full_name %}<small class="muted">{{ u.get_full_name }}</small>{% endif %}</td>
+                        <td>{{ u|rol_del_equipo }}</td>
+                        <td>
+                            {% if u.membresia %}{{ u.membresia.grupo.nombre }}
+                            {% elif u.grupos_a_cargo.all %}A cargo de {% for g in u.grupos_a_cargo.all %}{{ g.nombre }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                            {% else %}<span class="muted">—</span>{% endif %}
+                        </td>
+                        <td>{{ u.email|default:"—" }}</td>
+                        <td>
+                            {% if u.is_active %}Activo{% else %}<span class="muted">Dado de baja</span>{% endif %}
+                            <small class="muted">{% if u.last_login %}Último ingreso: {{ u.last_login|date:"d/m/Y H:i" }}{% else %}Nunca ingresó{% endif %}</small>
+                        </td>
+                        <td class="derecha">{{ u.creadas }}</td>
+                        <td class="derecha"><a href="{% url 'dashboard:implementador_detalle' pk=u.pk %}">Ver</a></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="muted">Todavía no hay cuentas del equipo. Creá la primera al costado.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-<div class="card">
-    <h2>Nueva cuenta del equipo</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la cuenta.</p>
-        <div class="actions"><button class="btn" type="submit">Crear cuenta</button></div>
-    </form>
+    <div class="card equipo-lateral">
+        <h2>Nueva cuenta del equipo</h2>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <p class="muted">La contraseña se genera sola y se muestra una única vez después de crear la cuenta. Para que un implementador integre un grupo, primero creá la cuenta y después sumala desde <a href="{% url 'dashboard:grupos' %}">Grupos</a>.</p>
+            <div class="actions"><button class="btn" type="submit">Crear cuenta</button></div>
+        </form>
+    </div>
 </div>
 {% endblock %}
