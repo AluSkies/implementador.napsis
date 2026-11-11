@@ -82,6 +82,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "clients.security.SinCacheConSesionMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "axes.middleware.AxesMiddleware",  # siempre al final
@@ -209,6 +210,10 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Los avisos (incluido el de «usuario y contraseña recién generados») se guardan en la sesión, del lado del servidor.
+# Por defecto Django los manda primero en una cookie firmada pero legible: no queremos credenciales ahí.
+MESSAGE_STORAGE = "django.contrib.messages.storage.session.SessionStorage"
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "login"

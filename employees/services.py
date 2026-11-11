@@ -4,6 +4,7 @@ import io
 import numbers
 import re
 import unicodedata
+import zipfile
 from collections import namedtuple
 from datetime import date, datetime, timedelta
 
@@ -329,10 +330,24 @@ def _separador(texto):
     return max((";", ",", "\t"), key=primera.count)
 
 
+# Un .xlsx es un zip: uno de pocos MB puede descomprimirse a gigas y dejar sin memoria al servidor. Se mira lo que
+# ocuparía descomprimido antes de leerlo, y se pone un tope a la cantidad de filas.
+LIMITE_DESCOMPRIMIDO_BYTES = 150 * 1024 * 1024
+LIMITE_DE_FILAS = 50_000
+
+
 def _leer_tabla(django_file):
     """Lee el archivo como tabla de texto/valores crudos. Levanta ArchivoInvalido si no se puede."""
     nombre = django_file.name.lower()
     try:
+        if not nombre.endswith(".csv"):
+            with zipfile.ZipFile(django_file) as comprimido:
+                descomprimido = sum(entrada.file_size for entrada in comprimido.infolist())
+            django_file.seek(0)
+            if descomprimido > LIMITE_DESCOMPRIMIDO_BYTES:
+                raise ArchivoInvalido(
+                    "El archivo es demasiado grande. Probá dividirlo en partes o sacar columnas y filas vacías."
+                )
         if nombre.endswith(".csv"):
             texto = _decodificar(django_file.read())
             tabla = pd.read_csv(
@@ -340,11 +355,15 @@ def _leer_tabla(django_file):
             )
         else:
             tabla = pd.read_excel(django_file, dtype=object, keep_default_na=False)
+    except ArchivoInvalido:
+        raise
     except Exception as error:
         raise ArchivoInvalido(
             "No pudimos leer el archivo. Verificá que sea un .xlsx o .csv válido y que no esté dañado "
             "(lo más seguro es descargar la plantilla y pegar ahí tus datos)."
         ) from error
+    if len(tabla) > LIMITE_DE_FILAS:
+        raise ArchivoInvalido(f"El archivo tiene más de {LIMITE_DE_FILAS:,} filas: dividilo en partes.".replace(",", "."))
     return tabla
 
 

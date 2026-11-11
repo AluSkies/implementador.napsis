@@ -34,6 +34,40 @@ def _csv(texto, codificacion="utf-8", nombre="nomina.csv"):
     return SimpleUploadedFile(nombre, texto.encode(codificacion), content_type="text/csv")
 
 
+class LimitesDelArchivoTests(TestCase):
+    """Seguridad: un .xlsx de pocos MB puede descomprimirse a gigas (un zip armado a propósito) y dejar al servidor sin
+    memoria. Se controla lo que ocuparía y la cantidad de filas antes de leerlo entero."""
+
+    def test_un_xlsx_que_se_descomprime_a_demasiado_se_rechaza_sin_leerlo(self):
+        with patch("employees.services.LIMITE_DESCOMPRIMIDO_BYTES", 500):
+            with patch("employees.services.pd.read_excel") as leer:
+                with self.assertRaisesMessage(ArchivoInvalido, "demasiado grande"):
+                    leer_archivo_empleados(_xlsx([[20111111112, "Juan", "Pérez", None, ""]]))
+        leer.assert_not_called()
+
+    def test_un_xlsx_normal_pasa_el_control(self):
+        resultado = leer_archivo_empleados(_xlsx([[20111111112, "Juan", "Pérez", None, ""]]))
+        self.assertEqual(len(resultado.filas), 1)
+
+    def test_mas_filas_que_el_tope_se_rechaza(self):
+        filas = [[20111111112 + i, "Juan", "Pérez", None, ""] for i in range(3)]
+        with patch("employees.services.LIMITE_DE_FILAS", 2):
+            with self.assertRaisesMessage(ArchivoInvalido, "filas"):
+                leer_archivo_empleados(_xlsx(filas))
+            with self.assertRaisesMessage(ArchivoInvalido, "filas"):
+                leer_archivo_empleados(_csv("CUIL;Nombre;Apellido\n1;a;b\n2;c;d\n3;e;f\n"))
+
+    def test_un_csv_no_se_trata_como_zip(self):
+        resultado = leer_archivo_empleados(_csv("CUIL;Nombre;Apellido\n20111111112;Ana;Gómez\n"))
+        self.assertEqual(len(resultado.filas), 1)
+
+    def test_los_topes_son_razonables(self):
+        from employees import services as empleados_services
+
+        self.assertGreaterEqual(empleados_services.LIMITE_DE_FILAS, 10_000)  # una nómina grande entra
+        self.assertLessEqual(empleados_services.LIMITE_DESCOMPRIMIDO_BYTES, 500 * 1024 * 1024)
+
+
 class LecturaDeFechasTests(TestCase):
     """Un Excel guarda las fechas como fechas reales, no como texto: antes se perdían en silencio."""
 

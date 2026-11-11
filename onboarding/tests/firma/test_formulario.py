@@ -36,6 +36,29 @@ class FormularioTests(SimpleTestCase):
         self.assertFalse(formulario.is_valid())
         self.assertIn("JPG o PNG", formulario.errors["imagen"][0])
 
+    def test_la_extension_sale_del_formato_verificado_y_no_del_nombre(self):
+        """Seguridad: una imagen llamada «firma.html» no puede guardarse con esa extensión: se serviría como página
+        desde nuestro dominio. Pasa lo mismo con cualquier nombre raro o con rutas."""
+        for nombre in ("firma.html", "firma.svg", "firma.exe", "firma", "../../x.php", "FIRMA.HTM"):
+            with self.subTest(nombre=nombre):
+                formulario = self.formulario(imagen(300, 100, nombre))
+                self.assertTrue(formulario.is_valid(), formulario.errors)
+                guardado = formulario.cleaned_data["imagen"].name
+                self.assertTrue(guardado.endswith(".png"), guardado)
+                self.assertNotIn("/", guardado)
+                self.assertNotIn("..", guardado)
+
+    def test_un_jpeg_se_guarda_como_jpg_aunque_se_llame_distinto(self):
+        from io import BytesIO
+
+        from PIL import Image
+
+        buffer = BytesIO()
+        Image.new("RGB", (300, 100), "white").save(buffer, format="JPEG")
+        formulario = self.formulario(SimpleUploadedFile("firma.png", buffer.getvalue(), content_type="image/jpeg"))
+        self.assertTrue(formulario.is_valid(), formulario.errors)
+        self.assertTrue(formulario.cleaned_data["imagen"].name.endswith(".jpg"))
+
     def test_rechaza_un_archivo_que_no_es_una_imagen(self):
         formulario = self.formulario(SimpleUploadedFile("firma.png", b"no soy una imagen"))
         self.assertFalse(formulario.is_valid())

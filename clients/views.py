@@ -121,6 +121,15 @@ def _implementaciones_del_archivo(nombre):
     return Implementacion.objects.filter(condiciones)
 
 
+# Lo único que se muestra en el navegador desde nuestro dominio: imágenes y PDF, con el tipo que corresponde a su extensión
+# (las extensiones las fija la app al guardar, ver `FirmaForm.clean_imagen`). Cualquier otra cosa se descarga como
+# binario: un archivo que el navegador interprete como página tendría acceso a la sesión de quien lo abra.
+TIPOS_DE_ARCHIVO_VISIBLES = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".pdf": "application/pdf",
+}
+
+
 @login_required
 def media_protegida(request, ruta):
     """Sirve los archivos subidos (logo, banner, modelo de recibo, firma, planillas importadas).
@@ -148,7 +157,14 @@ def media_protegida(request, ruta):
         if not propio:
             raise Http404
 
-    return FileResponse(archivo.open("rb"))
+    tipo = TIPOS_DE_ARCHIVO_VISIBLES.get(archivo.suffix.lower())
+    if tipo is None:
+        return FileResponse(archivo.open("rb"), as_attachment=True, filename=archivo.name, content_type="application/octet-stream")
+    respuesta = FileResponse(archivo.open("rb"), content_type=tipo)
+    if tipo.startswith("image/"):
+        # Aunque una imagen fuera otra cosa por dentro, con esto el navegador no ejecuta nada de ella.
+        respuesta["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    return respuesta
 
 
 def salud(request):

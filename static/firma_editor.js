@@ -241,7 +241,8 @@
         if (!url) { this.sinRecibo("Todavía no hay un modelo de recibo cargado."); return; }
         this.avisar("Cargando tu recibo…");
         cargarPdfJs().then(function (lib) {
-            return lib.getDocument(url).promise;
+            // isEvalSupported:false cierra CVE-2024-4367 (PDF armado a propósito que ejecuta código) en pdf.js 3.11.
+            return lib.getDocument({ url: url, isEvalSupported: false }).promise;
         }).then(function (pdf) {
             self.pdf = pdf;
             return self.dibujarPagina();

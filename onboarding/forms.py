@@ -386,6 +386,10 @@ class FirmaForm(forms.Form):
                 f"La imagen es muy chica ({ancho} × {alto} px): tiene que medir al menos {minimo[0]} × {minimo[1]} px "
                 "para que la firma no se vea borrosa."
             )
+        # Seguridad: la extensión sale del formato verificado, no del nombre que mandó quien la subió. Si no, una imagen
+        # llamada «firma.html» se guardaría con esa extensión y se serviría como página desde nuestro propio dominio.
+        raiz = os.path.splitext(os.path.basename(imagen.name))[0] or "firma"
+        imagen.name = f"{raiz}.{'png' if formato == 'PNG' else 'jpg'}"
         return imagen
 
     def clean(self):
